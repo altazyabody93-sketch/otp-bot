@@ -12,16 +12,13 @@ from datetime import datetime
 app = Flask(__name__)
 DB_PATH = "bot.db"
 
-# ========== إعدادات التواصل ==========
 WHATSAPP_GROUP_LINK = "https://chat.whatsapp.com/IeK2gNS64fd8YSnenzt4WR"
 OWNER_PHONE = "967733723953"
 OWNER_LINK = f"https://wa.me/{OWNER_PHONE}"
 
-# ========== إعدادات تليجرام ==========
 TELEGRAM_BOT_TOKEN = "8814038881:AAGyuACUYA4YPKlJQhAyUMkpRNiV0u1gNuU"
 CHANNEL_USERNAME = "@jsjsgsjsvh"
 
-# ========== قاعدة البيانات ==========
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -185,23 +182,10 @@ COUNTRY_DATA = {
     "967": {"n": "اليمن", "f": "🇾🇪"},
 }
 
-# ========== شعارات المنصات من CDN ==========
-PLATFORM_LOGOS = {
-    "whatsapp": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6b/WhatsApp.svg/48px-WhatsApp.svg.png",
-    "telegram": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/82/Telegram_logo.svg/48px-Telegram_logo.svg.png",
-    "tiktok": "https://upload.wikimedia.org/wikipedia/en/thumb/a/a9/TikTok_logo.svg/48px-TikTok_logo.svg.png",
-    "facebook": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Facebook_Logo_%282019%29.png/48px-Facebook_Logo_%282019%29.png",
-    "instagram": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e7/Instagram_logo_2016.svg/48px-Instagram_logo_2016.svg.png",
-    "snapchat": "https://upload.wikimedia.org/wikipedia/en/thumb/c/c4/Snapchat_logo.svg/48px-Snapchat_logo.svg.png",
-    "google": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/Google_%22G%22_Logo.svg/48px-Google_%22G%22_Logo.svg.png",
-    "twitter": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/ce/X_logo_2023.svg/48px-X_logo_2023.svg.png",
-}
-
 def get_country_info(code):
     info = COUNTRY_DATA.get(code)
     return (info["n"], info["f"]) if info else ("أخرى", "🌍")
 
-# ========== دوال الكومبو ==========
 def get_platforms():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -233,284 +217,89 @@ def save_combo(platform, country_code, country_name, country_flag, numbers):
     conn.commit()
     conn.close()
 
-# ========== واجهة المستخدم HTML ==========
+PLATFORM_LOGOS = {
+    "whatsapp": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6b/WhatsApp.svg/48px-WhatsApp.svg.png",
+    "telegram": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/82/Telegram_logo.svg/48px-Telegram_logo.svg.png",
+    "tiktok": "https://upload.wikimedia.org/wikipedia/en/thumb/a/a9/TikTok_logo.svg/48px-TikTok_logo.svg.png",
+    "facebook": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Facebook_Logo_%282019%29.png/48px-Facebook_Logo_%282019%29.png",
+    "instagram": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e7/Instagram_logo_2016.svg/48px-Instagram_logo_2016.svg.png",
+    "snapchat": "https://upload.wikimedia.org/wikipedia/en/thumb/c/c4/Snapchat_logo.svg/48px-Snapchat_logo.svg.png",
+    "google": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/Google_%22G%22_Logo.svg/48px-Google_%22G%22_Logo.svg.png",
+    "twitter": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/ce/X_logo_2023.svg/48px-X_logo_2023.svg.png",
+}
+
+platform_names = {'whatsapp': 'واتساب', 'telegram': 'تيليجرام', 'tiktok': 'تيك توك', 'facebook': 'فيسبوك', 'instagram': 'انستقرام', 'snapchat': 'سناب شات', 'google': 'جوجل', 'twitter': 'تويتر/X'}
+
+# ===== ألوان المنصات (عند النقر) =====
+platform_colors = {
+    "whatsapp": "#25D366",
+    "telegram": "#0088cc",
+    "tiktok": "#000000",
+    "facebook": "#1877f2",
+    "instagram": "#E4405F",
+    "snapchat": "#FFFC00",
+    "google": "#4285F4",
+    "twitter": "#1DA1F2"
+}
+
 main_html = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>صيد الأكواد التلقائي</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    <title>🚀بوت المطري OTP🚀</title>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
     <style>
         * { margin:0; padding:0; box-sizing:border-box; }
-        body { font-family:'Cairo',sans-serif; background:#0b0e17; color:#fff; display:flex; justify-content:center; align-items:center; min-height:100vh; padding: 20px; }
-        .container { background:#111827; padding:30px; border-radius:25px; width:100%; max-width:450px; border:1px solid #1f2937; }
-
-        /* الشريط العلوي */
-        .top-bar {
-            display: flex;
-            justify-content: flex-end;
-            margin-bottom: 15px;
-            position: relative;
-        }
-        .menu-btn {
-            background: #1f2937;
-            border: none;
-            border-radius: 10px;
-            padding: 10px 15px;
-            color: #fff;
-            font-size: 20px;
-            cursor: pointer;
-            transition: 0.2s;
-        }
-        .menu-btn:hover {
-            background: #374151;
-        }
-        .dropdown-menu {
-            display: none;
-            position: absolute;
-            top: 50px;
-            right: 0;
-            background: #1f2937;
-            border: 1px solid #374151;
-            border-radius: 10px;
-            padding: 10px;
-            min-width: 150px;
-            z-index: 100;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
-        }
-        .dropdown-menu a {
-            display: block;
-            color: #fff;
-            text-decoration: none;
-            padding: 8px 10px;
-            border-radius: 8px;
-            transition: 0.2s;
-        }
-        .dropdown-menu a:hover { background: #374151; }
-        .dropdown-menu.show { display: block; }
-
+        body { font-family:'Cairo',sans-serif; background:#0b0e17; color:#fff; display:flex; justify-content:center; align-items:center; min-height:100vh; }
+        .container { background:#111827; padding:30px; border-radius:25px; width:100%; max-width:100%; min-height:100vh; border:1px solid #1f2937; }
+        .top-bar { display:flex; justify-content:flex-end; margin-bottom:15px; position:relative; }
+        .menu-btn { background:#1f2937; border:none; border-radius:10px; padding:10px 15px; color:#fff; font-size:20px; cursor:pointer; }
+        .dropdown-menu { display:none; position:absolute; top:50px; right:0; background:#1f2937; border:1px solid #374151; border-radius:10px; padding:10px; min-width:150px; z-index:100; box-shadow:0 5px 15px rgba(0,0,0,0.5); }
+        .dropdown-menu a { display:block; color:#fff; text-decoration:none; padding:8px 10px; border-radius:8px; }
+        .dropdown-menu a:hover { background:#374151; }
+        .dropdown-menu.show { display:block; }
         .header { text-align:center; margin-bottom:25px; }
-        .header h1 { color:#00d2ff; font-size:24px; }
-        .header p { color: #9ca3af; font-size: 14px; margin-top: 5px; }
-
+        .header h1 { color:#00d2ff; font-size:26px; }
+        .header p { color:#9ca3af; font-size:16px; margin-top:5px; }
         .form-group { margin-bottom:20px; }
-        .form-group label { display:block; margin-bottom:8px; color:#9ca3af; font-weight: 600; }
+        .form-group label { display:block; margin-bottom:8px; color:#9ca3af; font-weight:600; }
         
-        /* قائمة المنصات المخصصة */
-        .platform-selector {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-bottom: 15px;
-        }
+        .platform-selector { display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:10px; margin-bottom:15px; }
         .platform-btn {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            padding: 15px;
-            border: 2px solid #374151;
-            border-radius: 12px;
-            background: #1f2937;
-            color: #fff;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-size: 12px;
-            font-family: 'Cairo', sans-serif;
+            display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px;
+            padding:15px; border:2px solid #374151; border-radius:12px; background:#1f2937; color:#fff;
+            cursor:pointer; transition:all 0.3s ease; font-size:13px; font-family:'Cairo',sans-serif;
         }
-        .platform-btn:hover {
-            border-color: #00ff88;
-            background: #2a3f4f;
-            transform: translateY(-2px);
-        }
+        .platform-btn:hover { border-color:#00ff88; background:#2a3f4f; }
         .platform-btn.active {
             border-color: #00ff88;
-            background: #00ff88;
-            color: #0b0e17;
-            box-shadow: 0 0 15px rgba(0, 255, 136, 0.3);
-        }
-        .platform-btn img {
-            width: 32px;
-            height: 32px;
-            object-fit: contain;
-        }
-
-        /* Select العادي للدول */
-        .form-control { 
-            width:100%; 
-            padding:14px; 
-            border-radius:15px; 
-            border:1px solid #374151; 
-            background:#1f2937; 
-            color:#fff; 
-            outline:none;
-            font-family: 'Cairo', sans-serif;
-            font-size: 14px;
-            transition: 0.2s;
-        }
-        .form-control:focus {
-            border-color: #00ff88;
-            box-shadow: 0 0 10px rgba(0, 255, 136, 0.2);
-        }
-        .form-control:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .btn-primary { 
-            width:100%; 
-            padding:16px; 
-            border:none; 
-            border-radius:15px; 
-            background:#00ff88; 
-            color:#0b0e17; 
-            font-size:18px; 
-            cursor:pointer; 
-            margin-top:10px;
-            font-weight: 700;
-            transition: 0.2s;
-            font-family: 'Cairo', sans-serif;
-        }
-        .btn-primary:hover {
-            background: #00dd77;
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0, 255, 136, 0.3);
-        }
-        .btn-primary:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        
-        .btn-blue { 
-            width:100%; 
-            padding:16px; 
-            border:none; 
-            border-radius:15px; 
-            background:#3b82f6; 
-            color:#fff; 
-            cursor:pointer; 
-            margin-top:10px;
-            font-weight: 700;
-            transition: 0.2s;
-            font-family: 'Cairo', sans-serif;
-        }
-        .btn-blue:hover {
-            background: #2563eb;
-            transform: translateY(-2px);
-        }
-        
-        .number-box {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            background: #000;
-            border: 2px solid #00ff88;
-            border-radius: 15px;
-            padding: 10px 15px;
-            margin: 20px 0;
-        }
-        .number-box .number {
-            font-family: 'Courier New', monospace;
-            font-size: 24px;
-            color: #00ff88;
-            flex-grow: 1;
-            text-align: center;
-        }
-        .copy-number-btn {
-            background: #1f2937;
-            border: none;
-            border-radius: 8px;
-            padding: 8px 12px;
+            background: {{ platform_colors[platform] }} !important;
             color: #fff;
-            cursor: pointer;
-            font-size: 18px;
-            margin-right: 10px;
-            transition: 0.2s;
+            box-shadow: 0 0 20px {{ platform_colors[platform] }}50;
         }
-        .copy-number-btn:hover {
-            background: #374151;
-        }
-
-        .otp-container { 
-            margin-top:20px; 
-            max-height:350px; 
-            overflow-y:auto; 
-            border:1px solid #1f2937; 
-            border-radius:15px; 
-            padding:10px; 
-        }
-        .otp-item { 
-            background:#0f172a; 
-            border:1px solid #00ff88; 
-            border-radius:10px; 
-            padding:12px; 
-            margin-bottom:10px; 
-            font-family:'Courier New'; 
-            font-size:14px; 
-            color:#00ff88; 
-            line-height:1.6; 
-            position:relative; 
-        }
-        .otp-item .copy-btn { 
-            background:#1f2937; 
-            border:none; 
-            border-radius:8px; 
-            padding:4px 10px; 
-            color:#fff; 
-            cursor:pointer; 
-            font-size:12px; 
-            float:left;
-            transition: 0.2s;
-        }
-        .otp-item .copy-btn:hover {
-            background: #374151;
-        }
-        .otp-item .info { 
-            color:#9ca3af; 
-            font-size:12px; 
-            display:block; 
-            margin-top:5px; 
-        }
-        .status { 
-            background:#1f2937; 
-            padding:12px; 
-            border-radius:15px; 
-            text-align:center; 
-            margin-top:20px; 
-            color:#9ca3af;
-            font-size: 14px;
-        }
-        .admin-link { 
-            display:block; 
-            text-align:center; 
-            margin-top:15px; 
-            color:#00d2ff; 
-            text-decoration:none;
-            transition: 0.2s;
-        }
-        .admin-link:hover { 
-            text-decoration:underline;
-            color: #00ff88;
-        }
-
-        /* تحسين التمرير */
-        .otp-container::-webkit-scrollbar {
-            width: 6px;
-        }
-        .otp-container::-webkit-scrollbar-track {
-            background: #1f2937;
-            border-radius: 10px;
-        }
-        .otp-container::-webkit-scrollbar-thumb {
-            background: #00ff88;
-            border-radius: 10px;
-        }
-        .otp-container::-webkit-scrollbar-thumb:hover {
-            background: #00dd77;
-        }
+        .platform-btn img { width:32px; height:32px; object-fit:contain; }
+        
+        .form-control { width:100%; padding:14px; border-radius:15px; border:1px solid #374151; background:#1f2937; color:#fff; outline:none; font-family:'Cairo',sans-serif; font-size:15px; }
+        .form-control:focus { border-color:#00ff88; }
+        .form-control:disabled { opacity:0.5; cursor:not-allowed; }
+        
+        .btn-primary { width:100%; padding:16px; border:none; border-radius:15px; background:#00ff88; color:#0b0e17; font-size:18px; cursor:pointer; margin-top:10px; font-weight:700; font-family:'Cairo',sans-serif; }
+        .btn-primary:hover { background:#00dd77; }
+        .btn-blue { width:100%; padding:16px; border:none; border-radius:15px; background:#3b82f6; color:#fff; cursor:pointer; margin-top:10px; font-weight:700; font-family:'Cairo',sans-serif; }
+        .btn-blue:hover { background:#2563eb; }
+        
+        .number-box { display:flex; align-items:center; justify-content:space-between; background:#000; border:2px solid #00ff88; border-radius:15px; padding:12px 15px; margin:20px 0; }
+        .number-box .number { font-family:'Courier New',monospace; font-size:24px; color:#00ff88; flex-grow:1; text-align:center; }
+        .copy-number-btn { background:#1f2937; border:none; border-radius:8px; padding:8px 12px; color:#fff; cursor:pointer; font-size:18px; margin-right:10px; }
+        
+        .otp-container { margin-top:20px; max-height:400px; overflow-y:auto; border:1px solid #1f2937; border-radius:15px; padding:10px; }
+        .otp-item { background:#0f172a; border:1px solid #00ff88; border-radius:10px; padding:12px; margin-bottom:10px; font-family:'Courier New'; font-size:15px; color:#00ff88; line-height:1.6; }
+        .otp-item .copy-btn { background:#1f2937; border:none; border-radius:8px; padding:4px 10px; color:#fff; cursor:pointer; font-size:12px; float:left; }
+        .otp-item .info { color:#9ca3af; font-size:13px; display:block; margin-top:5px; }
+        .status { background:#1f2937; padding:12px; border-radius:15px; text-align:center; margin-top:20px; color:#9ca3af; font-size:15px; }
+        .admin-link { display:block; text-align:center; margin-top:15px; color:#00d2ff; text-decoration:none; display:none; }
     </style>
 </head>
 <body>
@@ -518,14 +307,14 @@ main_html = """
         <div class="top-bar">
             <button class="menu-btn" onclick="toggleMenu()">☰</button>
             <div class="dropdown-menu" id="contactMenu">
-                <a href="{{ owner_link }}" target="_blank">📞 تواصل مع المطور</a>
+                <a href="{{ owner_link }}" target="_blank">تواصل معي📞</a>
                 <a href="{{ wa_group }}" target="_blank">💬 جروب واتساب</a>
             </div>
         </div>
 
         <div class="header">
-            <h1>⚡ صيد الأكواد التلقائي</h1>
-            <p>سحب فوري ومستمر للأكواد من القناة</p>
+            <h1>🚀موقع المطريOTP🚀</h1>
+            <p>👑ارقام واتساب سحب اكواد تطوير مطري 👑</p>
         </div>
 
         <div class="form-group">
@@ -548,20 +337,24 @@ main_html = """
                 <button class="copy-number-btn" onclick="copyNumber()">📋</button>
                 <div class="number" id="numberDisplay">+</div>
             </div>
-            <button class="btn-primary" onclick="monitorForever()">📡 بدء السحب التلقائي</button>
+            <div style="display:flex; gap:10px; margin-top:10px;">
+                <button class="btn-primary" onclick="startMonitoring()">📡 بدء السحب</button>
+                <button class="btn-blue" onclick="stopMonitoring()" style="background:#ef4444;">⏹️ إيقاف</button>
+            </div>
         </div>
 
         <div class="otp-container" id="otpHistory">
-            <div style="text-align:center; color:#9ca3af; padding:20px;">⏳ انتظر وصول الكود الأول...</div>
+            <div style="text-align:center; color:#9ca3af; padding:20px;">⏳الاكواد المسحوبه📣</div>
         </div>
 
         <div class="status" id="status">⏳ اختر المنصة والدولة للبدء</div>
-        <a href="/admin" class="admin-link" style="display:none;">⚙️ لوحة التحكم</a>
+        <a href="/admin" class="admin-link">⚙️ لوحة التحكم</a>
     </div>
 
     <script>
         const platformLogos = {{ platform_logos | tojson }};
         const platformNames = {{ platform_names | tojson }};
+        const platformColors = {{ platform_colors | tojson }};
 
         function initPlatformSelector() {
             const selector = document.getElementById('platformSelector');
@@ -593,22 +386,27 @@ main_html = """
 
         async function copyNumber() {
             const num = document.getElementById('numberDisplay').textContent;
-            try {
-                await navigator.clipboard.writeText(num);
-                alert('✅ تم نسخ الرقم: ' + num);
-            } catch {
-                alert('❌ فشل النسخ');
-            }
+            await navigator.clipboard.writeText(num);
+            alert('✅ تم نسخ الرقم: ' + num);
         }
 
         let currentPlatform = '';
         let currentNumber = '';
-        let autoInterval = null;
+        let monitorInterval = null;
 
         function selectPlatform(platform) {
             currentPlatform = platform;
-            document.querySelectorAll('.platform-btn').forEach(btn => btn.classList.remove('active'));
-            event.target.closest('.platform-btn').classList.add('active');
+            document.querySelectorAll('.platform-btn').forEach(btn => {
+                btn.classList.remove('active');
+                btn.style.background = '#1f2937';
+                btn.style.borderColor = '#374151';
+                btn.style.boxShadow = 'none';
+            });
+            const btn = event.target.closest('.platform-btn');
+            btn.classList.add('active');
+            btn.style.background = platformColors[platform];
+            btn.style.borderColor = platformColors[platform];
+            btn.style.boxShadow = `0 0 20px ${platformColors[platform]}80`;
             loadCountries();
         }
 
@@ -650,7 +448,7 @@ main_html = """
                 currentNumber = data.number;
                 document.getElementById('numberDisplay').textContent = '+' + data.number;
                 document.getElementById('numberContainer').style.display = 'block';
-                document.getElementById('status').innerHTML = '✅ الرقم جاهز! اضغط "بدء السحب".';
+                document.getElementById('status').innerHTML = '✅ الرقم جاهز!';
             } else {
                 document.getElementById('status').innerHTML = '❌ لا توجد أرقام متاحة.';
             }
@@ -683,46 +481,52 @@ main_html = """
 
         function copyText(text) { navigator.clipboard.writeText(text); alert('✅ تم نسخ الكود!'); }
 
-        function monitorForever() {
+        function startMonitoring() {
             if (!currentNumber) return;
-            document.getElementById('status').innerHTML = '🔄 السحب التلقائي يعمل...';
-            if (autoInterval) clearInterval(autoInterval);
-            autoInterval = setInterval(() => {
+            if (monitorInterval) clearInterval(monitorInterval);
+            document.getElementById('status').innerHTML = '🔄 بدأ السحب التلقائي...';
+
+            monitorInterval = setInterval(() => {
                 fetch('/api/get_otp', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({number:currentNumber}) })
                 .then(res => res.json()).then(data => {
                     if (data.otp) {
                         const now = new Date().toLocaleString('ar-YE', { timeZone: 'Asia/Aden' });
                         addOtpToHistory(currentNumber, data.otp, now);
+                        document.getElementById('status').innerHTML = '✅ تم العثور على كود!';
+                        stopMonitoring();
                     }
                 });
             }, 5000);
         }
 
-        // تهيئة قائمة المنصات عند تحميل الصفحة
+        function stopMonitoring() {
+            if (monitorInterval) {
+                clearInterval(monitorInterval);
+                monitorInterval = null;
+            }
+            document.getElementById('status').innerHTML = '⏹️ تم إيقاف السحب.';
+        }
+
         document.addEventListener('DOMContentLoaded', initPlatformSelector);
     </script>
 </body>
 </html>
 """
 
-# ========== لوحة الأدمن (مخفية) ==========
 admin_html = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>لوحة التحكم</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
-body { font-family:'Cairo',sans-serif; background:#0b0e17; color:#fff; display:flex; justify-content:center; align-items:center; min-height:100vh; padding: 20px; }
+body { font-family:'Cairo',sans-serif; background:#0b0e17; color:#fff; display:flex; justify-content:center; align-items:center; min-height:100vh; }
 .container { background:#111827; padding:30px; border-radius:25px; width:100%; max-width:450px; border:1px solid #1f2937; }
-h1 { text-align:center; color:#00d2ff; margin-bottom: 25px; }
+h1 { text-align:center; color:#00d2ff; }
 .form-group { margin-bottom:15px; }
-.form-group label { display:block; margin-bottom:5px; color:#9ca3af; font-weight: 600; }
-.form-control { width:100%; padding:12px; border-radius:10px; border:1px solid #374151; background:#1f2937; color:#fff; font-family: 'Cairo', sans-serif; }
-.form-control:focus { border-color: #00ff88; outline: none; }
-.btn-primary { width:100%; padding:14px; border:none; border-radius:10px; background:#00ff88; color:#0b0e17; cursor:pointer; margin-top:15px; font-weight: 700; font-family: 'Cairo', sans-serif; transition: 0.2s; }
-.btn-primary:hover { background: #00dd77; }
-.btn-secondary { width:100%; padding:14px; border:none; border-radius:10px; background:#374151; color:#fff; margin-top:15px; cursor:pointer; font-family: 'Cairo', sans-serif; transition: 0.2s; }
-.btn-secondary:hover { background: #4b5563; }
+.form-group label { display:block; margin-bottom:5px; color:#9ca3af; }
+.form-control { width:100%; padding:12px; border-radius:10px; border:1px solid #374151; background:#1f2937; color:#fff; }
+.btn-primary { width:100%; padding:14px; border:none; border-radius:10px; background:#00ff88; color:#0b0e17; cursor:pointer; margin-top:15px; }
+.btn-secondary { width:100%; padding:14px; border:none; border-radius:10px; background:#374151; color:#fff; cursor:pointer; margin-top:15px; }
 </style>
 </head>
 <body>
@@ -745,22 +549,9 @@ h1 { text-align:center; color:#00d2ff; margin-bottom: 25px; }
 </html>
 """
 
-# ========== مسارات Flask ==========
 @app.route('/')
 def home():
-    platforms = get_platforms()
-    platform_logos = PLATFORM_LOGOS
-    platform_names = {
-        'whatsapp': 'واتساب',
-        'telegram': 'تيليجرام',
-        'tiktok': 'تيك توك',
-        'facebook': 'فيسبوك',
-        'instagram': 'انستقرام',
-        'snapchat': 'سناب شات',
-        'google': 'جوجل',
-        'twitter': 'تويتر/X',
-    }
-    return render_template_string(main_html, platforms=platforms, owner_link=OWNER_LINK, wa_group=WHATSAPP_GROUP_LINK, platform_logos=platform_logos, platform_names=platform_names)
+    return render_template_string(main_html, owner_link=OWNER_LINK, wa_group=WHATSAPP_GROUP_LINK, platform_logos=PLATFORM_LOGOS, platform_names=platform_names, platform_colors=platform_colors)
 
 @app.route('/admin', methods=['GET', 'POST'])
 def admin():
@@ -804,7 +595,6 @@ def api_get_otp():
     conn.close()
     return jsonify({'otp': row[0] if row else None})
 
-# ========== مراقبة القناة ==========
 def monitor_channel():
     while True:
         try:
