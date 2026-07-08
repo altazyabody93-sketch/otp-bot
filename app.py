@@ -528,10 +528,9 @@ h1 { text-align:center; color:#00d2ff; margin-bottom:20px; }
 .btn-primary { width:100%; padding:14px; border:none; border-radius:10px; background:#00ff88; color:#0b0e17; cursor:pointer; margin-top:15px; }
 .btn-danger { width:100%; padding:14px; border:none; border-radius:10px; background:#ef4444; color:#fff; cursor:pointer; margin-top:10px; }
 .btn-secondary { width:100%; padding:14px; border:none; border-radius:10px; background:#374151; color:#fff; cursor:pointer; margin-top:15px; }
-.flash { padding:15px; border-radius:10px; margin:10px 0; text-align:center; }
-.flash-success { background:#00ff88; color:#0b0e17; }
-.flash-error { background:#ff4444; color:#fff; }
 hr { border: 1px solid #374151; margin: 20px 0; }
+.combo-item { display:flex; justify-content:space-between; align-items:center; background:#1f2937; padding:10px; border-radius:10px; margin-bottom:10px; border:1px solid #374151; }
+.combo-item span { color:#fff; }
 </style>
 </head>
 <body>
@@ -555,20 +554,22 @@ hr { border: 1px solid #374151; margin: 20px 0; }
     <hr>
 
     <!-- قسم حذف الكومبو -->
-    <h3 style="color:#ef4444;">🗑️ حذف كومبو قديم</h3>
-    <form method="POST">
-        <input type="hidden" name="action" value="delete">
-        <div class="form-group"><label>المنصة (للحذف)</label>
-        <select name="platform" class="form-control" required>
-            <option value="whatsapp">واتساب</option><option value="telegram">تيليجرام</option>
-            <option value="tiktok">تيك توك</option><option value="facebook">فيسبوك</option>
-            <option value="instagram">انستقرام</option><option value="snapchat">سناب شات</option>
-            <option value="google">جوجل</option><option value="twitter">تويتر</option>
-        </select></div>
-        <div class="form-group"><label>كود الدولة (للحذف)</label>
-        <input type="text" name="country_code" class="form-control" placeholder="مثال: 966" required></div>
-        <button type="submit" class="btn-danger">🗑️ حذف</button>
-    </form>
+    <h3 style="color:#ef4444;">🗑️ حذف كومبو</h3>
+    {% if combos %}
+        {% for platform, code, name, flag in combos %}
+        <div class="combo-item">
+            <span>{{ flag }} {{ name }} ({{ platform }})</span>
+            <form method="POST" style="display:inline;">
+                <input type="hidden" name="action" value="delete">
+                <input type="hidden" name="platform" value="{{ platform }}">
+                <input type="hidden" name="country_code" value="{{ code }}">
+                <button type="submit" class="btn-danger" style="padding:8px 15px; font-size:14px;">🗑️ حذف</button>
+            </form>
+        </div>
+        {% endfor %}
+    {% else %}
+        <p style="color:#9ca3af; text-align:center;">لا توجد كومبوهات حالياً.</p>
+    {% endif %}
 
     <hr>
     <a href="/"><button class="btn-secondary">🔙 العودة للصفحة الرئيسية</button></a>
@@ -578,39 +579,61 @@ hr { border: 1px solid #374151; margin: 20px 0; }
 """
 
 @app.route('/')
+# ======================
+# 🔹 استبدل من هنا 👇
+# ======================
+
 def home():
     return render_template_string(main_html, owner_link=OWNER_LINK, wa_group=WHATSAPP_GROUP_LINK, platform_logos=PLATFORM_LOGOS, platform_names=platform_names, platform_colors=platform_colors)
 
+# ========== الحصول على قائمة الكومبوهات للحذف ==========
+def get_all_combos_list():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT platform, country_code, country_name, country_flag FROM combos")
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+# ========== صفحة الأدمن الجديدة ==========
 @app.route('/admin', methods=['GET', 'POST'])
 def admin():
-    # ===== معالجة حذف الكومبو =====
-    if request.method == 'POST' and request.form.get('action') == 'delete':
-        platform = request.form.get('platform')
-        country_code = request.form.get('country_code')
-        if platform and country_code:
-            delete_combo(platform, country_code)
-            return render_template_string(admin_html)
+    if request.method == 'POST':
+        # ===== حذف كومبو =====
+        if request.form.get('action') == 'delete':
+            platform = request.form.get('platform')
+            country_code = request.form.get('country_code')
+            if platform and country_code:
+                conn = sqlite3.connect(DB_PATH)
+                c = conn.cursor()
+                c.execute("DELETE FROM combos WHERE platform=? AND country_code=?", (platform, country_code))
+                conn.commit()
+                conn.close()
+                return redirect(url_for('admin'))
 
-    # ===== معالجة رفع الكومبو =====
-    if request.method == 'POST' and request.form.get('action') != 'delete':
-        platform = request.form.get('platform')
-        file = request.files.get('file')
-        if file and file.filename.endswith('.txt'):
-            content = file.read().decode('utf-8')
-            numbers = [line.strip() for line in content.splitlines() if line.strip()]
-            if numbers:
-                first = numbers[0]
-                codes = sorted(COUNTRY_DATA.keys(), key=len, reverse=True)
-                cc = None
-                for c in codes:
-                    if first.startswith(c):
-                        cc = c
-                        break
-                if cc:
-                    name, flag = get_country_info(cc)
-                    save_combo(platform, cc, name, flag, numbers)
-                    return redirect(url_for('home'))
-    return render_template_string(admin_html)
+        # ===== رفع كومبو =====
+        else:
+            platform = request.form.get('platform')
+            file = request.files.get('file')
+            if file and file.filename.endswith('.txt'):
+                content = file.read().decode('utf-8')
+                numbers = [line.strip() for line in content.splitlines() if line.strip()]
+                if numbers:
+                    first = numbers[0]
+                    codes = sorted(COUNTRY_DATA.keys(), key=len, reverse=True)
+                    cc = None
+                    for c in codes:
+                        if first.startswith(c):
+                            cc = c
+                            break
+                    if cc:
+                        name, flag = get_country_info(cc)
+                        save_combo(platform, cc, name, flag, numbers)
+                        return redirect(url_for('home'))
+    
+    # جلب قائمة الكومبوهات الحالية
+    combos = get_all_combos_list()
+    return render_template_string(admin_html, combos=combos)
 
 @app.route('/api/countries', methods=['POST'])
 def api_countries():
