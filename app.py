@@ -521,17 +521,25 @@ admin_html = """
 * { margin:0; padding:0; box-sizing:border-box; }
 body { font-family:'Cairo',sans-serif; background:#0b0e17; color:#fff; display:flex; justify-content:center; align-items:center; min-height:100vh; }
 .container { background:#111827; padding:30px; border-radius:25px; width:100%; max-width:450px; border:1px solid #1f2937; }
-h1 { text-align:center; color:#00d2ff; }
+h1 { text-align:center; color:#00d2ff; margin-bottom:20px; }
 .form-group { margin-bottom:15px; }
 .form-group label { display:block; margin-bottom:5px; color:#9ca3af; }
 .form-control { width:100%; padding:12px; border-radius:10px; border:1px solid #374151; background:#1f2937; color:#fff; }
 .btn-primary { width:100%; padding:14px; border:none; border-radius:10px; background:#00ff88; color:#0b0e17; cursor:pointer; margin-top:15px; }
+.btn-danger { width:100%; padding:14px; border:none; border-radius:10px; background:#ef4444; color:#fff; cursor:pointer; margin-top:10px; }
 .btn-secondary { width:100%; padding:14px; border:none; border-radius:10px; background:#374151; color:#fff; cursor:pointer; margin-top:15px; }
+.flash { padding:15px; border-radius:10px; margin:10px 0; text-align:center; }
+.flash-success { background:#00ff88; color:#0b0e17; }
+.flash-error { background:#ff4444; color:#fff; }
+hr { border: 1px solid #374151; margin: 20px 0; }
 </style>
 </head>
 <body>
 <div class="container">
-    <h1>⚙️ إضافة كومبو</h1>
+    <h1>⚙️ لوحة التحكم</h1>
+
+    <!-- قسم رفع الكومبو -->
+    <h3 style="color:#9ca3af;">📤 رفع ملف جديد</h3>
     <form method="POST" enctype="multipart/form-data">
         <div class="form-group"><label>المنصة</label>
         <select name="platform" class="form-control" required>
@@ -543,7 +551,27 @@ h1 { text-align:center; color:#00d2ff; }
         <div class="form-group"><label>ارفع ملف الأرقام (.txt)</label><input type="file" name="file" accept=".txt" class="form-control" required></div>
         <button type="submit" class="btn-primary">📤 رفع الكومبو</button>
     </form>
-    <a href="/"><button class="btn-secondary">🔙 العودة</button></a>
+
+    <hr>
+
+    <!-- قسم حذف الكومبو -->
+    <h3 style="color:#ef4444;">🗑️ حذف كومبو قديم</h3>
+    <form method="POST">
+        <input type="hidden" name="action" value="delete">
+        <div class="form-group"><label>المنصة (للحذف)</label>
+        <select name="platform" class="form-control" required>
+            <option value="whatsapp">واتساب</option><option value="telegram">تيليجرام</option>
+            <option value="tiktok">تيك توك</option><option value="facebook">فيسبوك</option>
+            <option value="instagram">انستقرام</option><option value="snapchat">سناب شات</option>
+            <option value="google">جوجل</option><option value="twitter">تويتر</option>
+        </select></div>
+        <div class="form-group"><label>كود الدولة (للحذف)</label>
+        <input type="text" name="country_code" class="form-control" placeholder="مثال: 966" required></div>
+        <button type="submit" class="btn-danger">🗑️ حذف</button>
+    </form>
+
+    <hr>
+    <a href="/"><button class="btn-secondary">🔙 العودة للصفحة الرئيسية</button></a>
 </div>
 </body>
 </html>
@@ -555,7 +583,16 @@ def home():
 
 @app.route('/admin', methods=['GET', 'POST'])
 def admin():
-    if request.method == 'POST':
+    # ===== معالجة حذف الكومبو =====
+    if request.method == 'POST' and request.form.get('action') == 'delete':
+        platform = request.form.get('platform')
+        country_code = request.form.get('country_code')
+        if platform and country_code:
+            delete_combo(platform, country_code)
+            return render_template_string(admin_html)
+
+    # ===== معالجة رفع الكومبو =====
+    if request.method == 'POST' and request.form.get('action') != 'delete':
         platform = request.form.get('platform')
         file = request.files.get('file')
         if file and file.filename.endswith('.txt'):
