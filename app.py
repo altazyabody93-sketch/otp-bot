@@ -162,29 +162,19 @@ def save_combo(platform, country_code, country_name, country_flag, numbers):
     conn.commit()
     conn.close()
 
-# ============= الأيقونات الحقيقية الملونة للتطبيقات =============
+# ============= شعارات SVG داخلية ملونة (ما تحتاج نت وما تنحجب) =============
 PLATFORM_LOGOS = {
-    "whatsapp": "https://cdn-icons-png.flaticon.com/128/733/733585.png",
-    "facebook": "https://cdn-icons-png.flaticon.com/128/733/733547.png",
-    "snapchat": "https://cdn-icons-png.flaticon.com/128/14036/14036944.png",
-    "instagram": "https://cdn-icons-png.flaticon.com/128/2111/2111463.png",
-    "telegram": "https://cdn-icons-png.flaticon.com/128/2111/2111646.png",
-    "tiktok": "https://cdn-icons-png.flaticon.com/128/3046/3046121.png",
-    "google": "https://cdn-icons-png.flaticon.com/128/300/300221.png",
-    "twitter": "https://cdn-icons-png.flaticon.com/128/5969/5969020.png",
+    "whatsapp": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%2325D366'/><path fill='%23fff' d='M50 18c-17.6 0-32 14.4-32 32 0 6 1.7 11.8 4.8 16.8L18 82l15.6-4.7C38.6 80.1 44.2 82 50 82c17.6 0 32-14.4 32-32S67.6 18 50 18zm18.6 45.6c-.8 2.2-4.6 4.2-6.4 4.5-1.6.3-3.7.4-5.9-.4-1.4-.5-3.1-1.1-5.4-2.2-9.5-4.1-15.7-13.7-16.2-14.3-.5-.7-3.9-5.1-3.9-9.7s2.4-6.9 3.3-7.9c.9-.9 1.9-1.2 2.6-1.2.6 0 1.2 0 1.7 0 .6 0 1.3-.2 2 .1 1.6.7 2.6 3 2.9 3.9.3.9.5 1.5 0 2.4-.4.9-1.5 2.4-2.2 3.4 0 0 .7.7 1.4 1.5 2.4 2.7 5.3 5.5 9.6 7.1 1.5.5 2.3.6 3-.4.6-1 2.5-3 3.2-4 .7-1 1.4-.8 2.3-.5.9.3 5.8 2.7 6.8 3.2 1 .5 1.6.7 1.8 1.1.2.5.2 2.5-.6 4.7z'/></svg>",
+    "facebook": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%231877F2'/><path fill='%23fff' d='M58 84V52h10l1-12H58v-7c0-3 1-5 5-5h6V17h-9c-10 0-15 6-15 14v9H36v12h9v32h13z'/></svg>",
+    "snapchat": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%23FFFC00'/><path fill='%23000' d='M50 16c-13 0-23 9-23 21 0 6 1 11 2 16-2 1-4 2-7 2-1 0-2 1-2 2 0 4 8 5 11 7 1 1 1 4 2 6 1 3 4 5 8 5 3 0 5-1 7-1 3 0 6 6 13 6 7 0 10-6 13-6 2 0 4 1 7 1 4 0 7-2 8-5 1-2 1-5 2-6 3-2 11-3 11-7 0-1-1-2-2-2-3 0-5-1-7-2 1-5 2-10 2-16 0-12-10-21-23-21-3 0-6 1-8 2-2-1-5-2-8-2z'/></svg>",
+    "instagram": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><defs><radialGradient id='ig' cx='30%25' cy='30%25' r='80%25'><stop offset='0%25' stop-color='%23FEDA75'/><stop offset='50%25' stop-color='%23FA7E1E'/><stop offset='100%25' stop-color='%23D62976'/></radialGradient></defs><rect width='100' height='100' rx='22' fill='url(%23ig)'/><rect x='22' y='22' width='56' height='56' rx='14' fill='none' stroke='%23fff' stroke-width='5'/><circle cx='50' cy='50' r='13' fill='none' stroke='%23fff' stroke-width='5'/><circle cx='72' cy='28' r='4' fill='%23fff'/></svg>",
+    "telegram": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%2326A5E4'/><path fill='%23fff' d='M22 50l50-22-7 48-18-8-7 12-3-17 31-26-37 24-9-4z'/></svg>",
+    "tiktok": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%23000'/><path fill='%2325F4EE' d='M62 22c2 8 8 14 16 15v9c-6 0-12-2-16-5v22c0 12-9 20-20 20s-20-8-20-20 9-21 20-21v9c-6 0-11 5-11 12s5 12 11 12 12-6 12-12V22h8z'/><path fill='%23FE2C55' d='M70 22c2 8 8 14 16 15v9c-6 0-12-2-16-5v22c0 12-9 20-20 20v-9c6 0 12-6 12-12V22h8z'/></svg>",
+    "google": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%23fff'/><path fill='%234285F4' d='M58 50c0-1-.1-2-.2-3H50v6h5.5c-.5 2-2 4-4.5 5l4 3c3-2 5-6 5-10 0-1 0-1-.5-1z'/><path fill='%2334A853' d='M40 56c1 4 4 7 9 7 3 0 5-1 7-3l-4-3c-1 1-2 1-4 1-3 0-5-2-6-4l-4 2z'/><path fill='%23FBBC04' d='M40 44l-4 2c-1 1-1 3-1 4s0 3 1 4l4-2c-.5-1-.5-2-.5-3s0-4 0-4z'/><path fill='%23EA4335' d='M50 36c3 0 5 1 6 2l-3 3c-1-1-2-1-4-1-5 0-9 4-9 4l-4-2c0-3 4-6 14-6z'/></svg>",
+    "twitter": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%23000'/><path fill='%23fff' d='M70 35c-2 1-4 1-6 1 2-1 4-3 5-5-2 1-4 2-7 2-2-2-5-3-8-3-6 0-11 5-11 11 0 1 0 2 .3 3-9 0-17-5-22-12-1 2-1 4-1 6 0 4 2 7 5 9-2 0-4-1-5-2v.1c0 5 4 10 9 11-1 0-3 .5-4 .5-1 0-2 0-3-.1 2 4 6 7 11 7-4 3-9 5-15 5-1 0-2 0-3-.1 5 3 11 5 18 5 21 0 33-18 33-33v-1c2-2 4-3 6-6z'/></svg>",
 }
 
-# أيقونات أصغر للأزرار (مدمجة وجميلة)
-PLATFORM_LOGOS_SMALL = {
-    "whatsapp": "https://cdn-icons-png.flaticon.com/128/15025/15025058.png",
-    "facebook": "https://cdn-icons-png.flaticon.com/128/2175/2175193.png",
-    "snapchat": "https://cdn-icons-png.flaticon.com/128/3652/3652191.png",
-    "instagram": "https://cdn-icons-png.flaticon.com/128/1384/1384063.png",
-    "telegram": "https://cdn-icons-png.flaticon.com/128/2111/2111646.png",
-    "tiktok": "https://cdn-icons-png.flaticon.com/128/3938/3938105.png",
-    "google": "https://cdn-icons-png.flaticon.com/128/2991/2991148.png",
-    "twitter": "https://cdn-icons-png.flaticon.com/128/5968/5968950.png",
-}
+PLATFORM_LOGOS_SMALL = PLATFORM_LOGOS  # نفس الأيقونات (ما نحتاج نسخة ثانية)
 
 # ألوان مضيئة قوية للتطبيقات (عند اختيار التطبيق)
 PLATFORM_GRADIENTS = {
@@ -318,13 +308,15 @@ main_html = """
         }
         .platform-btn.active::before { opacity:1; }
         .platform-btn img { 
-            width:38px; height:38px; object-fit:contain; 
-            border-radius:10px; padding:4px; background:#fff;
+            width:42px; height:42px; object-fit:contain; 
+            border-radius:12px;
             position:relative; z-index:1;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            box-shadow: 0 4px 14px rgba(0,0,0,0.4);
             transition:transform 0.4s;
+            background: rgba(255,255,255,0.95);
+            padding: 3px;
         }
-        .platform-btn.active img { transform: rotate(360deg) scale(1.1); }
+        .platform-btn.active img { transform: rotate(360deg) scale(1.15); }
         .platform-btn span { position:relative; z-index:1; }
         
         /* قوائم منسدلة مضيئة */
