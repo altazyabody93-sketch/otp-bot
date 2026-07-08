@@ -28,7 +28,6 @@ def init_db():
     conn.close()
 init_db()
 
-# ========== جميع دول العالم (أكثر من 195 دولة) ==========
 COUNTRY_DATA = {
     "966": {"n": "السعودية", "f": "🇸🇦"},
     "971": {"n": "الإمارات", "f": "🇦🇪"},
@@ -88,12 +87,11 @@ COUNTRY_DATA = {
     "36": {"n": "المجر", "f": "🇭🇺"},
     "420": {"n": "التشيك", "f": "🇨🇿"},
     "421": {"n": "سلوفاكيا", "f": "🇸🇰"},
-    "380": {"n": "أوكرانिया", "f": "🇺🇦"},
+    "380": {"n": "أوكرانيا", "f": "🇺🇦"},
     "381": {"n": "صربيا", "f": "🇷🇸"},
     "385": {"n": "كرواتيا", "f": "🇭🇷"},
     "386": {"n": "سلوفينيا", "f": "🇸🇮"},
     "387": {"n": "البوسنة", "f": "🇧🇦"},
-    "389": {"n": "مقدونيا", "f": "🇲🇰"},
     "375": {"n": "بيلاروس", "f": "🇧🇾"},
     "370": {"n": "ليتوانيا", "f": "🇱🇹"},
     "371": {"n": "لاتفيا", "f": "🇱🇻"},
@@ -124,62 +122,9 @@ COUNTRY_DATA = {
     "356": {"n": "مالطا", "f": "🇲🇹"},
     "357": {"n": "قبرص", "f": "🇨🇾"},
     "358": {"n": "فنلندا", "f": "🇫🇮"},
-    "359": {"n": "بلغارיה", "f": "🇧🇬"},
-    "350": {"n": "جبل طارق", "f": "🇬🇮"},
-    "352": {"n": "لوكسمبورغ", "f": "🇱🇺"},
-    "423": {"n": "ليختنشتاين", "f": "🇱🇮"},
-    "377": {"n": "موناكو", "f": "🇲🇨"},
-    "378": {"n": "سان مارينو", "f": "🇸🇲"},
-    "379": {"n": "الفاتيكان", "f": "🇻🇦"},
-    "500": {"n": "جزر فوكلاند", "f": "🇫🇰"},
-    "501": {"n": "بليز", "f": "🇧🇿"},
-    "502": {"n": "غواتيمالا", "f": "🇬🇹"},
-    "503": {"n": "السلفادور", "f": "🇸🇻"},
-    "504": {"n": "هندوراس", "f": "🇭🇳"},
-    "505": {"n": "نيكاراغوا", "f": "🇳🇮"},
-    "506": {"n": "كوستاريكا", "f": "🇨🇷"},
-    "507": {"n": "بنما", "f": "🇵🇦"},
-    "509": {"n": "هايتي", "f": "🇭🇹"},
-    "590": {"n": "غوادلوب", "f": "🇬🇵"},
-    "591": {"n": "بوليفيا", "f": "🇧🇴"},
-    "592": {"n": "غيانا", "f": "🇬🇾"},
-    "593": {"n": "الإكوادور", "f": "🇪🇨"},
-    "594": {"n": "غويانا الفرنسية", "f": "🇬🇫"},
-    "595": {"n": "باراغواي", "f": "🇵🇾"},
-    "596": {"n": "مارتينيك", "f": "🇲🇶"},
-    "597": {"n": "سورينام", "f": "🇸🇷"},
-    "598": {"n": "أوروغواي", "f": "🇺🇾"},
-    "670": {"n": "تيمور الشرقية", "f": "🇹🇱"},
-    "673": {"n": "بروناي", "f": "🇧🇳"},
-    "674": {"n": "ناورو", "f": "🇳🇷"},
-    "675": {"n": "بابوا غينيا الجديدة", "f": "🇵🇬"},
-    "676": {"n": "تونغا", "f": "🇹🇴"},
-    "677": {"n": "جزر سليمان", "f": "🇸🇧"},
-    "678": {"n": "فانواتو", "f": "🇻🇺"},
-    "679": {"n": "فيجي", "f": "🇫🇯"},
-    "680": {"n": "بالاو", "f": "🇵🇼"},
-    "682": {"n": "جزر كوك", "f": "🇨🇰"},
-    "685": {"n": "ساموا", "f": "🇼🇸"},
-    "686": {"n": "كيريباتي", "f": "🇰🇮"},
-    "687": {"n": "كاليدونيا الجديدة", "f": "🇳🇨"},
-    "688": {"n": "توفالو", "f": "🇹🇻"},
-    "689": {"n": "بولينيزيا الفرنسية", "f": "🇵🇫"},
-    "691": {"n": "ولايات ميكرونيسيا", "f": "🇫🇲"},
-    "692": {"n": "جزر مارشال", "f": "🇲🇭"},
-    "850": {"n": "كوريا الشمالية", "f": "🇰🇵"},
-    "852": {"n": "هونغ كونغ", "f": "🇭🇰"},
-    "853": {"n": "ماكاو", "f": "🇲🇴"},
-    "855": {"n": "كمبوديا", "f": "🇰🇭"},
-    "856": {"n": "لاوس", "f": "🇱🇦"},
+    "359": {"n": "بلغاريا", "f": "🇧🇬"},
     "880": {"n": "بنغلاديش", "f": "🇧🇩"},
     "886": {"n": "تايوان", "f": "🇹🇼"},
-    "960": {"n": "جزر المالديف", "f": "🇲🇻"},
-    "961": {"n": "لبنان", "f": "🇱🇧"},
-    "962": {"n": "الأردن", "f": "🇯🇴"},
-    "963": {"n": "سوريا", "f": "🇸🇾"},
-    "964": {"n": "العراق", "f": "🇮🇶"},
-    "965": {"n": "الكويت", "f": "🇰🇼"},
-    "967": {"n": "اليمن", "f": "🇾🇪"},
 }
 
 def get_country_info(code):
@@ -217,29 +162,51 @@ def save_combo(platform, country_code, country_name, country_flag, numbers):
     conn.commit()
     conn.close()
 
+# ============= الأيقونات الحقيقية الملونة للتطبيقات =============
 PLATFORM_LOGOS = {
-    "whatsapp": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6b/WhatsApp.svg/48px-WhatsApp.svg.png",
-    "telegram": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/82/Telegram_logo.svg/48px-Telegram_logo.svg.png",
-    "tiktok": "https://upload.wikimedia.org/wikipedia/en/thumb/a/a9/TikTok_logo.svg/48px-TikTok_logo.svg.png",
-    "facebook": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Facebook_Logo_%282019%29.png/48px-Facebook_Logo_%282019%29.png",
-    "instagram": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e7/Instagram_logo_2016.svg/48px-Instagram_logo_2016.svg.png",
-    "snapchat": "https://upload.wikimedia.org/wikipedia/en/thumb/c/c4/Snapchat_logo.svg/48px-Snapchat_logo.svg.png",
-    "google": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/Google_%22G%22_Logo.svg/48px-Google_%22G%22_Logo.svg.png",
-    "twitter": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/ce/X_logo_2023.svg/48px-X_logo_2023.svg.png",
+    "whatsapp": "https://cdn-icons-png.flaticon.com/128/733/733585.png",
+    "facebook": "https://cdn-icons-png.flaticon.com/128/733/733547.png",
+    "snapchat": "https://cdn-icons-png.flaticon.com/128/14036/14036944.png",
+    "instagram": "https://cdn-icons-png.flaticon.com/128/2111/2111463.png",
+    "telegram": "https://cdn-icons-png.flaticon.com/128/2111/2111646.png",
+    "tiktok": "https://cdn-icons-png.flaticon.com/128/3046/3046121.png",
+    "google": "https://cdn-icons-png.flaticon.com/128/300/300221.png",
+    "twitter": "https://cdn-icons-png.flaticon.com/128/5969/5969020.png",
 }
 
-platform_names = {'whatsapp': 'واتساب', 'telegram': 'تيليجرام', 'tiktok': 'تيك توك', 'facebook': 'فيسبوك', 'instagram': 'انستقرام', 'snapchat': 'سناب شات', 'google': 'جوجل', 'twitter': 'تويتر/X'}
+# أيقونات أصغر للأزرار (مدمجة وجميلة)
+PLATFORM_LOGOS_SMALL = {
+    "whatsapp": "https://cdn-icons-png.flaticon.com/128/15025/15025058.png",
+    "facebook": "https://cdn-icons-png.flaticon.com/128/2175/2175193.png",
+    "snapchat": "https://cdn-icons-png.flaticon.com/128/3652/3652191.png",
+    "instagram": "https://cdn-icons-png.flaticon.com/128/1384/1384063.png",
+    "telegram": "https://cdn-icons-png.flaticon.com/128/2111/2111646.png",
+    "tiktok": "https://cdn-icons-png.flaticon.com/128/3938/3938105.png",
+    "google": "https://cdn-icons-png.flaticon.com/128/2991/2991148.png",
+    "twitter": "https://cdn-icons-png.flaticon.com/128/5968/5968950.png",
+}
 
-# ===== ألوان المنصات (عند النقر) =====
-platform_colors = {
-    "whatsapp": "#25D366",
-    "telegram": "#0088cc",
-    "tiktok": "#000000",
-    "facebook": "#1877f2",
-    "instagram": "#E4405F",
-    "snapchat": "#FFFC00",
-    "google": "#4285F4",
-    "twitter": "#1DA1F2"
+# ألوان مضيئة قوية للتطبيقات (عند اختيار التطبيق)
+PLATFORM_GRADIENTS = {
+    "whatsapp": "linear-gradient(135deg, #25D366, #128C7E, #075E54)",
+    "facebook": "linear-gradient(135deg, #1877F2, #0a4cb8, #003580)",
+    "snapchat": "linear-gradient(135deg, #FFFC00, #FFD700, #FFA500)",
+    "instagram": "linear-gradient(135deg, #F58529, #DD2A7B, #8134AF, #515BD4)",
+    "telegram": "linear-gradient(135deg, #0088cc, #005f8c, #003d5c)",
+    "tiktok": "linear-gradient(135deg, #FE2C55, #000000, #25F4EE)",
+    "google": "linear-gradient(135deg, #4285F4, #34A853, #FBBC04, #EA4335)",
+    "twitter": "linear-gradient(135deg, #000000, #1a1a1a, #333333)"
+}
+
+platform_names = {
+    'whatsapp': 'واتساب',
+    'telegram': 'تيليجرام',
+    'tiktok': 'تيك توك',
+    'facebook': 'فيسبوك',
+    'instagram': 'انستقرام',
+    'snapchat': 'سناب شات',
+    'google': 'جوجل',
+    'twitter': 'تويتر/X'
 }
 
 main_html = """
@@ -248,114 +215,361 @@ main_html = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
-    <title>🚀بوت المطري OTP🚀</title>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
+    <title>🚀 موقع المطري OTP 🚀</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
-        * { margin:0; padding:0; box-sizing:border-box; }
-        body { font-family:'Cairo',sans-serif; background:#0b0e17; color:#fff; display:flex; justify-content:center; align-items:center; min-height:100vh; }
-        .container { background:#111827; padding:30px; border-radius:25px; width:100%; max-width:100%; min-height:100vh; border:1px solid #1f2937; }
+        * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+        html, body { font-family:'Cairo',sans-serif; background:#0a0e1a; color:#fff; overflow-x:hidden; }
+        
+        /* خلفية متحركة مضيئة */
+        body::before {
+            content:''; position:fixed; inset:0; z-index:-2;
+            background: radial-gradient(circle at 20% 20%, rgba(0, 255, 200, 0.15), transparent 40%),
+                        radial-gradient(circle at 80% 70%, rgba(139, 92, 246, 0.15), transparent 40%),
+                        radial-gradient(circle at 50% 50%, rgba(236, 72, 153, 0.1), transparent 50%);
+            animation: bgShift 12s ease-in-out infinite alternate;
+        }
+        @keyframes bgShift {
+            0% { transform: scale(1) rotate(0deg); }
+            100% { transform: scale(1.1) rotate(5deg); }
+        }
+        
+        /* نجوم متلألئة بالخلفية */
+        .stars { position:fixed; inset:0; z-index:-1; pointer-events:none; }
+        .star { position:absolute; background:#fff; border-radius:50%; animation: twinkle 3s infinite; box-shadow: 0 0 8px #fff; }
+        @keyframes twinkle { 0%,100%{ opacity:0; transform:scale(0);} 50%{ opacity:1; transform:scale(1);} }
+        
+        .container { background:rgba(17, 24, 39, 0.85); backdrop-filter:blur(20px); padding:25px 18px 40px; width:100%; min-height:100vh; border-inline:1px solid rgba(139, 92, 246, 0.3); }
+        
+        /* شريط علوي */
         .top-bar { display:flex; justify-content:flex-end; margin-bottom:15px; position:relative; }
-        .menu-btn { background:#1f2937; border:none; border-radius:10px; padding:10px 15px; color:#fff; font-size:20px; cursor:pointer; }
-        .dropdown-menu { display:none; position:absolute; top:50px; right:0; background:#1f2937; border:1px solid #374151; border-radius:10px; padding:10px; min-width:150px; z-index:100; box-shadow:0 5px 15px rgba(0,0,0,0.5); }
-        .dropdown-menu a { display:block; color:#fff; text-decoration:none; padding:8px 10px; border-radius:8px; }
-        .dropdown-menu a:hover { background:#374151; }
-        .dropdown-menu.show { display:block; }
-        .header { text-align:center; margin-bottom:25px; }
-        .header h1 { color:#00d2ff; font-size:26px; }
-        .header p { color:#9ca3af; font-size:16px; margin-top:5px; }
-        .form-group { margin-bottom:20px; }
-        .form-group label { display:block; margin-bottom:8px; color:#9ca3af; font-weight:600; }
+        .menu-btn { 
+            background:linear-gradient(135deg, #1f2937, #374151); border:1px solid rgba(0,255,200,0.4);
+            border-radius:12px; padding:10px 16px; color:#00ffc8; font-size:20px; cursor:pointer;
+            box-shadow: 0 0 15px rgba(0,255,200,0.3);
+            transition:all 0.3s;
+        }
+        .menu-btn:hover { box-shadow: 0 0 25px rgba(0,255,200,0.6); transform:translateY(-2px); }
+        .dropdown-menu { 
+            display:none; position:absolute; top:55px; right:0; 
+            background:rgba(17, 24, 39, 0.95); backdrop-filter:blur(15px);
+            border:1px solid rgba(0,255,200,0.3); border-radius:14px; padding:8px; 
+            min-width:180px; z-index:100; box-shadow:0 5px 25px rgba(0,255,200,0.3); 
+        }
+        .dropdown-menu a { 
+            display:flex; align-items:center; gap:10px; color:#fff; text-decoration:none; 
+            padding:10px 14px; border-radius:10px; font-weight:600; transition:all 0.3s; 
+        }
+        .dropdown-menu a:hover { background:rgba(0,255,200,0.15); color:#00ffc8; transform:translateX(-5px); }
+        .dropdown-menu.show { display:block; animation: slideDown 0.3s ease; }
+        @keyframes slideDown { from{ opacity:0; transform:translateY(-10px);} to{ opacity:1; transform:translateY(0);} }
         
-        .platform-selector { display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:10px; margin-bottom:15px; }
+        /* العنوان المضئ */
+        .header { text-align:center; margin:20px 0 30px; position:relative; }
+        .header h1 { 
+            font-size:30px; font-weight:900; 
+            background: linear-gradient(90deg, #00ffc8, #8b5cf6, #ec4899, #00ffc8);
+            background-size: 300% 300%;
+            -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+            animation: glow 4s ease infinite;
+            text-shadow: 0 0 30px rgba(0,255,200,0.5);
+            margin-bottom:8px;
+        }
+        @keyframes glow { 0%,100%{ background-position:0% 50%; } 50%{ background-position:100% 50%; } }
+        .header p { color:#cbd5e1; font-size:15px; font-weight:600; }
+        .header p .crown { display:inline-block; animation: bounce 1.5s infinite; }
+        @keyframes bounce { 0%,100%{ transform:translateY(0);} 50%{ transform:translateY(-5px);} }
+        
+        /* عناوين الأقسام */
+        .section-title { 
+            display:flex; align-items:center; gap:10px; margin:25px 0 15px; 
+            color:#00ffc8; font-size:17px; font-weight:700;
+        }
+        .section-title .emoji { font-size:22px; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%,100%{ transform:scale(1);} 50%{ transform:scale(1.2);} }
+        .section-title::after { content:''; flex:1; height:2px; background:linear-gradient(90deg, #00ffc8, transparent); border-radius:2px; }
+        
+        /* شبكة المنصات مع الأيقونات الحقيقية */
+        .platform-selector { display:grid; grid-template-columns:repeat(2, 1fr); gap:12px; margin-bottom:10px; }
         .platform-btn {
-            display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px;
-            padding:15px; border:2px solid #374151; border-radius:12px; background:#1f2937; color:#fff;
-            cursor:pointer; transition:all 0.3s ease; font-size:13px; font-family:'Cairo',sans-serif;
+            display:flex; align-items:center; gap:12px; padding:14px 12px;
+            border:2px solid rgba(255,255,255,0.1); border-radius:16px;
+            background:rgba(31, 41, 55, 0.7); color:#fff;
+            cursor:pointer; transition:all 0.4s cubic-bezier(0.4, 0, 0.2, 1); 
+            font-size:14px; font-weight:700; font-family:'Cairo',sans-serif;
+            position:relative; overflow:hidden;
         }
-        .platform-btn:hover { border-color:#00ff88; background:#2a3f4f; }
-        .platform-btn.active {
-            border-color: #00ff88;
-            background: {{ platform_colors[platform] }} !important;
-            color: #fff;
-            box-shadow: 0 0 20px {{ platform_colors[platform] }}50;
+        .platform-btn::before {
+            content:''; position:absolute; inset:0; opacity:0; transition:opacity 0.4s;
+            background:var(--bg-gradient);
+            z-index:0;
         }
-        .platform-btn img { width:32px; height:32px; object-fit:contain; }
+        .platform-btn:hover { 
+            transform:translateY(-3px) scale(1.02); 
+            border-color:transparent;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.5);
+        }
+        .platform-btn:hover::before { opacity:1; }
+        .platform-btn.active { 
+            border-color:transparent;
+            box-shadow: 0 0 25px var(--glow-color), 0 0 50px var(--glow-color);
+            transform:translateY(-2px);
+        }
+        .platform-btn.active::before { opacity:1; }
+        .platform-btn img { 
+            width:38px; height:38px; object-fit:contain; 
+            border-radius:10px; padding:4px; background:#fff;
+            position:relative; z-index:1;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            transition:transform 0.4s;
+        }
+        .platform-btn.active img { transform: rotate(360deg) scale(1.1); }
+        .platform-btn span { position:relative; z-index:1; }
         
-        .form-control { width:100%; padding:14px; border-radius:15px; border:1px solid #374151; background:#1f2937; color:#fff; outline:none; font-family:'Cairo',sans-serif; font-size:15px; }
-        .form-control:focus { border-color:#00ff88; }
-        .form-control:disabled { opacity:0.5; cursor:not-allowed; }
+        /* قوائم منسدلة مضيئة */
+        .form-group { margin-bottom:18px; }
+        .form-group label { display:flex; align-items:center; gap:8px; margin-bottom:10px; color:#cbd5e1; font-weight:700; font-size:14px; }
+        .form-control { 
+            width:100%; padding:14px 16px; border-radius:14px; 
+            border:2px solid rgba(255,255,255,0.1); 
+            background:rgba(31, 41, 55, 0.7); color:#fff; 
+            outline:none; font-family:'Cairo',sans-serif; font-size:15px; font-weight:600;
+            transition:all 0.3s;
+        }
+        .form-control:focus { 
+            border-color:#00ffc8; 
+            box-shadow: 0 0 20px rgba(0,255,200,0.3);
+            background:rgba(31, 41, 55, 0.9);
+        }
+        .form-control:disabled { opacity:0.4; cursor:not-allowed; }
         
-        .btn-primary { width:100%; padding:16px; border:none; border-radius:15px; background:#00ff88; color:#0b0e17; font-size:18px; cursor:pointer; margin-top:10px; font-weight:700; font-family:'Cairo',sans-serif; }
-        .btn-primary:hover { background:#00dd77; }
-        .btn-blue { width:100%; padding:16px; border:none; border-radius:15px; background:#3b82f6; color:#fff; cursor:pointer; margin-top:10px; font-weight:700; font-family:'Cairo',sans-serif; }
-        .btn-blue:hover { background:#2563eb; }
+        /* أزرار مضيئة كبيرة */
+        .btn-primary { 
+            width:100%; padding:16px; border:none; border-radius:16px; 
+            background: linear-gradient(135deg, #00ff88, #00d2ff);
+            color:#0a0e1a; font-size:18px; font-weight:900;
+            cursor:pointer; margin-top:12px; 
+            font-family:'Cairo',sans-serif;
+            box-shadow: 0 0 25px rgba(0, 255, 136, 0.5);
+            transition:all 0.3s;
+            position:relative; overflow:hidden;
+        }
+        .btn-primary::before {
+            content:''; position:absolute; top:0; left:-100%;
+            width:100%; height:100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+            transition:left 0.6s;
+        }
+        .btn-primary:hover::before { left:100%; }
+        .btn-primary:hover { transform:translateY(-3px); box-shadow: 0 5px 35px rgba(0, 255, 136, 0.7); }
+        .btn-primary:disabled { opacity:0.4; cursor:not-allowed; box-shadow:none; transform:none; }
         
-        .number-box { display:flex; align-items:center; justify-content:space-between; background:#000; border:2px solid #00ff88; border-radius:15px; padding:12px 15px; margin:20px 0; }
-        .number-box .number { font-family:'Courier New',monospace; font-size:24px; color:#00ff88; flex-grow:1; text-align:center; }
-        .copy-number-btn { background:#1f2937; border:none; border-radius:8px; padding:8px 12px; color:#fff; cursor:pointer; font-size:18px; margin-right:10px; }
+        .btn-blue { 
+            width:100%; padding:16px; border:none; border-radius:16px; 
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            color:#fff; font-size:16px; font-weight:800;
+            cursor:pointer; margin-top:10px; 
+            font-family:'Cairo',sans-serif;
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+            transition:all 0.3s;
+            display:flex; align-items:center; justify-content:center; gap:8px;
+        }
+        .btn-blue:hover { transform:translateY(-3px); box-shadow: 0 5px 30px rgba(59, 130, 246, 0.7); }
+        .btn-blue:disabled { opacity:0.4; cursor:not-allowed; }
         
-        .otp-container { margin-top:20px; max-height:400px; overflow-y:auto; border:1px solid #1f2937; border-radius:15px; padding:10px; }
-        .otp-item { background:#0f172a; border:1px solid #00ff88; border-radius:10px; padding:12px; margin-bottom:10px; font-family:'Courier New'; font-size:15px; color:#00ff88; line-height:1.6; }
-        .otp-item .copy-btn { background:#1f2937; border:none; border-radius:8px; padding:4px 10px; color:#fff; cursor:pointer; font-size:12px; float:left; }
-        .otp-item .info { color:#9ca3af; font-size:13px; display:block; margin-top:5px; }
-        .status { background:#1f2937; padding:12px; border-radius:15px; text-align:center; margin-top:20px; color:#9ca3af; font-size:15px; }
-        .admin-link { display:block; text-align:center; margin-top:15px; color:#00d2ff; text-decoration:none; display:none; }
+        .btn-danger { 
+            background: linear-gradient(135deg, #ef4444, #b91c1c) !important;
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.5) !important;
+        }
+        .btn-danger:hover { box-shadow: 0 5px 30px rgba(239, 68, 68, 0.7) !important; }
+        
+        /* مربع الرقم */
+        .number-box { 
+            display:flex; align-items:center; justify-content:space-between; 
+            background: linear-gradient(135deg, #000, #0f172a);
+            border:2px solid #00ff88; border-radius:16px; padding:16px; margin:18px 0;
+            box-shadow: 0 0 30px rgba(0, 255, 136, 0.4), inset 0 0 20px rgba(0, 255, 136, 0.1);
+            animation: glowPulse 2s infinite;
+        }
+        @keyframes glowPulse { 0%,100%{ box-shadow: 0 0 30px rgba(0, 255, 136, 0.4), inset 0 0 20px rgba(0, 255, 136, 0.1);} 50%{ box-shadow: 0 0 40px rgba(0, 255, 136, 0.7), inset 0 0 30px rgba(0, 255, 136, 0.2);} }
+        .number-box .number { 
+            font-family:'Courier New',monospace; font-size:22px; 
+            color:#00ff88; flex-grow:1; text-align:center; font-weight:bold;
+            text-shadow: 0 0 10px #00ff88;
+            letter-spacing:1px;
+        }
+        .copy-number-btn { 
+            background:rgba(0, 255, 136, 0.15); border:1px solid #00ff88;
+            border-radius:10px; padding:8px 12px; color:#00ff88; 
+            cursor:pointer; font-size:18px; margin-right:10px;
+            transition:all 0.3s;
+        }
+        .copy-number-btn:hover { background:#00ff88; color:#000; transform:rotate(15deg); }
+        
+        /* كروت الأكواد */
+        .otp-container { 
+            margin-top:20px; max-height:380px; overflow-y:auto; 
+            border:1px solid rgba(139, 92, 246, 0.3); border-radius:16px; padding:12px; 
+            background:rgba(15, 23, 42, 0.5);
+        }
+        .otp-container::-webkit-scrollbar { width:6px; }
+        .otp-container::-webkit-scrollbar-track { background:rgba(255,255,255,0.05); border-radius:10px; }
+        .otp-container::-webkit-scrollbar-thumb { background:linear-gradient(180deg, #00ffc8, #8b5cf6); border-radius:10px; }
+        .otp-item { 
+            background: linear-gradient(135deg, #0f172a, #1e293b);
+            border:1px solid #00ff88; border-radius:14px; 
+            padding:14px; margin-bottom:12px; 
+            font-family:'Courier New'; font-size:15px; 
+            color:#00ff88; line-height:1.7;
+            box-shadow: 0 0 15px rgba(0, 255, 136, 0.2);
+            animation: slideIn 0.4s ease;
+            position:relative;
+        }
+        @keyframes slideIn { from{opacity:0; transform:translateX(20px);} to{opacity:1; transform:translateX(0);} }
+        .otp-item .copy-btn { 
+            background:rgba(0, 255, 136, 0.2); border:1px solid #00ff88;
+            border-radius:8px; padding:5px 12px; color:#00ff88; 
+            cursor:pointer; font-size:12px; font-weight:bold;
+            transition:all 0.3s;
+        }
+        .otp-item .copy-btn:hover { background:#00ff88; color:#000; }
+        .otp-item .info { color:#94a3b8; font-size:12px; display:block; margin-top:6px; }
+        
+        /* شريط الحالة */
+        .status { 
+            background: linear-gradient(135deg, rgba(31, 41, 55, 0.7), rgba(15, 23, 42, 0.7));
+            padding:14px; border-radius:14px; text-align:center; 
+            margin-top:20px; color:#cbd5e1; font-size:14px; font-weight:600;
+            border:1px solid rgba(255,255,255,0.1);
+        }
+        .status .icon { font-size:18px; margin-left:8px; }
+        
+        /* إيموجيات نابضة */
+        .pulse-emoji { display:inline-block; animation: pulse 1.5s infinite; }
+        .spin-emoji { display:inline-block; animation: spin 3s linear infinite; }
+        @keyframes spin { from{transform:rotate(0);} to{transform:rotate(360deg);} }
+        
+        /* التجاوب */
+        @media (min-width: 768px) {
+            .container { max-width:480px; margin:0 auto; min-height:100vh; }
+            .platform-selector { grid-template-columns:repeat(2, 1fr); }
+        }
+        @media (max-width: 380px) {
+            .header h1 { font-size:24px; }
+            .platform-btn img { width:32px; height:32px; }
+            .platform-btn span { font-size:12px; }
+        }
     </style>
 </head>
 <body>
+    <!-- النجوم -->
+    <div class="stars" id="stars"></div>
+    
     <div class="container">
+        <!-- الشريط العلوي -->
         <div class="top-bar">
             <button class="menu-btn" onclick="toggleMenu()">☰</button>
             <div class="dropdown-menu" id="contactMenu">
-                <a href="{{ owner_link }}" target="_blank">تواصل معي📞</a>
+                <a href="{{ owner_link }}" target="_blank">📞 تواصل معي</a>
                 <a href="{{ wa_group }}" target="_blank">💬 جروب واتساب</a>
             </div>
         </div>
 
+        <!-- العنوان -->
         <div class="header">
-            <h1>🚀موقع المطريOTP🚀</h1>
-            <p>👑ارقام واتساب سحب اكواد تطوير مطري 👑</p>
+            <h1>🚀 موقع المطري OTP 🚀</h1>
+            <p><span class="crown">👑</span> أرقام واتساب سحب أكواد تطوير مطري <span class="crown">👑</span></p>
         </div>
 
+        <!-- قسم اختيار المنصة -->
+        <div class="section-title">
+            <span class="emoji">🎯</span>
+            <span>اختر المنصة</span>
+        </div>
         <div class="form-group">
-            <label>اختر المنصة:</label>
             <div class="platform-selector" id="platformSelector"></div>
         </div>
 
+        <!-- قسم اختيار الدولة -->
+        <div class="section-title">
+            <span class="emoji">🌍</span>
+            <span>اختر الدولة</span>
+        </div>
         <div class="form-group">
-            <label>اختر الدولة:</label>
             <select id="country" class="form-control" disabled>
-                <option value="">-- اختر المنصة أولاً --</option>
+                <option value="">🚀 -- اختر المنصة أولاً -- 🚀</option>
             </select>
         </div>
 
-        <button class="btn-primary" id="getNumberBtn" onclick="getNumber()" disabled>🚀 جلب رقم</button>
-        <button class="btn-blue" id="refreshBtn" onclick="refreshNumber()" disabled>🔄 تبديل</button>
+        <!-- الأزرار -->
+        <button class="btn-primary" id="getNumberBtn" onclick="getNumber()" disabled>
+            🚀 جلب رقم
+        </button>
+        <button class="btn-blue" id="refreshBtn" onclick="refreshNumber()" disabled>
+            🔄 تبديل
+        </button>
 
+        <!-- مكان عرض الرقم -->
         <div id="numberContainer" style="display:none;">
             <div class="number-box">
-                <button class="copy-number-btn" onclick="copyNumber()">📋</button>
+                <button class="copy-number-btn" onclick="copyNumber()" title="نسخ">📋</button>
                 <div class="number" id="numberDisplay">+</div>
             </div>
-            <div style="display:flex; gap:10px; margin-top:10px;">
+            <div style="display:flex; gap:10px; margin-top:12px;">
                 <button class="btn-primary" onclick="startMonitoring()">📡 بدء السحب</button>
-                <button class="btn-blue" onclick="stopMonitoring()" style="background:#ef4444;">⏹️ إيقاف</button>
+                <button class="btn-blue btn-danger" onclick="stopMonitoring()">⏹️ إيقاف</button>
             </div>
         </div>
 
+        <!-- سجل الأكواد -->
+        <div class="section-title">
+            <span class="emoji">📜</span>
+            <span>الأكواد المسحوبة</span>
+        </div>
         <div class="otp-container" id="otpHistory">
-            <div style="text-align:center; color:#9ca3af; padding:20px;">⏳الاكواد المسحوبه📣</div>
+            <div style="text-align:center; color:#64748b; padding:25px;">
+                <div style="font-size:40px; margin-bottom:10px;">⏳</div>
+                <div>في انتظار الأكواد...</div>
+            </div>
         </div>
 
-        <div class="status" id="status">⏳ اختر المنصة والدولة للبدء</div>
-        <a href="/admin" class="admin-link">⚙️ لوحة التحكم</a>
+        <!-- شريط الحالة -->
+        <div class="status" id="status">
+            <span class="icon">⚡</span>
+            اختر المنصة والدولة للبدء
+        </div>
+
+        <div style="text-align:center; margin-top:25px; color:#64748b; font-size:13px;">
+            <span class="pulse-emoji">💎</span> صُنع بحب <span class="spin-emoji">⚡</span> بواسطة المطري
+        </div>
     </div>
 
     <script>
         const platformLogos = {{ platform_logos | tojson }};
+        const platformLogosSmall = {{ platform_logos_small | tojson }};
         const platformNames = {{ platform_names | tojson }};
-        const platformColors = {{ platform_colors | tojson }};
+        const platformGradients = {{ platform_gradients | tojson }};
 
+        // إنشاء النجوم بالخلفية
+        function createStars() {
+            const stars = document.getElementById('stars');
+            for(let i=0; i<30; i++) {
+                const star = document.createElement('div');
+                star.className = 'star';
+                const size = Math.random() * 3 + 1;
+                star.style.width = size + 'px';
+                star.style.height = size + 'px';
+                star.style.left = Math.random() * 100 + '%';
+                star.style.top = Math.random() * 100 + '%';
+                star.style.animationDelay = Math.random() * 3 + 's';
+                star.style.opacity = Math.random() * 0.7 + 0.3;
+                stars.appendChild(star);
+            }
+        }
+        createStars();
+
+        // بناء شبكة المنصات
         function initPlatformSelector() {
             const selector = document.getElementById('platformSelector');
             selector.innerHTML = '';
@@ -363,18 +577,26 @@ main_html = """
                 const btn = document.createElement('button');
                 btn.type = 'button';
                 btn.className = 'platform-btn';
-                btn.onclick = () => selectPlatform(platform);
+                btn.onclick = (e) => selectPlatform(platform, e);
+                
+                // إعداد الألوان المتدرجة لكل منصة
+                const gradient = platformGradients[platform];
+                const colorMatch = gradient.match(/#[0-9A-F]{6}/gi);
+                const glowColor = colorMatch ? colorMatch[0] : '#00ffc8';
+                
+                btn.style.setProperty('--bg-gradient', gradient);
+                btn.style.setProperty('--glow-color', glowColor + '80');
+                
                 btn.innerHTML = `
-                    <img src="${platformLogos[platform]}" alt="${platformNames[platform]}" onerror="this.style.display='none'">
-                    <span>${platformNames[platform]}</span>
+                    <img src="${platformLogos[platform]}" alt="${platformNames[platform]}" onerror="this.src='${platformLogosSmall[platform]}'">
+                    <span>${platformNames[platform]} ✨</span>
                 `;
                 selector.appendChild(btn);
             });
         }
 
         function toggleMenu() {
-            const menu = document.getElementById('contactMenu');
-            menu.classList.toggle('show');
+            document.getElementById('contactMenu').classList.toggle('show');
         }
         document.addEventListener('click', function(event) {
             const menu = document.getElementById('contactMenu');
@@ -387,26 +609,28 @@ main_html = """
         async function copyNumber() {
             const num = document.getElementById('numberDisplay').textContent;
             await navigator.clipboard.writeText(num);
-            alert('✅ تم نسخ الرقم: ' + num);
+            showToast('✅ تم نسخ الرقم! ' + num);
+        }
+
+        function showToast(msg) {
+            const t = document.createElement('div');
+            t.textContent = msg;
+            t.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#00ff88,#00d2ff);color:#000;padding:14px 28px;border-radius:14px;font-weight:bold;z-index:9999;box-shadow:0 0 30px rgba(0,255,136,0.6);animation:slideIn 0.4s;';
+            document.body.appendChild(t);
+            setTimeout(() => t.remove(), 2500);
         }
 
         let currentPlatform = '';
         let currentNumber = '';
         let monitorInterval = null;
 
-        function selectPlatform(platform) {
+        function selectPlatform(platform, event) {
             currentPlatform = platform;
             document.querySelectorAll('.platform-btn').forEach(btn => {
                 btn.classList.remove('active');
-                btn.style.background = '#1f2937';
-                btn.style.borderColor = '#374151';
-                btn.style.boxShadow = 'none';
             });
-            const btn = event.target.closest('.platform-btn');
+            const btn = event.currentTarget || event.target.closest('.platform-btn');
             btn.classList.add('active');
-            btn.style.background = platformColors[platform];
-            btn.style.borderColor = platformColors[platform];
-            btn.style.boxShadow = `0 0 20px ${platformColors[platform]}80`;
             loadCountries();
         }
 
@@ -414,7 +638,7 @@ main_html = """
             const platform = currentPlatform;
             const countrySelect = document.getElementById('country');
             if (!platform) {
-                countrySelect.innerHTML = '<option value="">-- اختر المنصة أولاً --</option>';
+                countrySelect.innerHTML = '<option value="">🚀 -- اختر المنصة أولاً -- 🚀</option>';
                 countrySelect.disabled = true;
                 document.getElementById('numberContainer').style.display = 'none';
                 document.getElementById('getNumberBtn').disabled = true;
@@ -422,10 +646,10 @@ main_html = """
                 return;
             }
             countrySelect.disabled = true;
-            countrySelect.innerHTML = '<option value="">جاري التحميل...</option>';
-            const res = await fetch('/api/countries', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform}) });
+            countrySelect.innerHTML = '<option value="">⏳ جاري التحميل...</option>';
+            const res = await fetch('/api/countries', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform})});
             const data = await res.json();
-            let options = '<option value="">-- اختر الدولة --</option>';
+            let options = '<option value="">🌍 -- اختر الدولة -- 🌍</option>';
             data.forEach(c => { options += `<option value="${c.code}">${c.flag} ${c.name}</option>`; });
             countrySelect.innerHTML = options;
             countrySelect.disabled = false;
@@ -440,17 +664,21 @@ main_html = """
         async function getNumber() {
             const platform = currentPlatform;
             const country = document.getElementById('country').value;
-            if (!platform || !country) { document.getElementById('status').innerHTML = '⚠️ يرجى اختيار المنصة والدولة'; return; }
-            document.getElementById('status').innerHTML = '⏳ جاري جلب رقم...';
-            const res = await fetch('/api/get_number', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform, country}) });
+            if (!platform || !country) {
+                document.getElementById('status').innerHTML = '<span class="icon">⚠️</span>يرجى اختيار المنصة والدولة';
+                return;
+            }
+            document.getElementById('status').innerHTML = '<span class="icon">⏳</span>جاري جلب رقم...';
+            const res = await fetch('/api/get_number', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform, country})});
             const data = await res.json();
             if (data.number) {
                 currentNumber = data.number;
                 document.getElementById('numberDisplay').textContent = '+' + data.number;
                 document.getElementById('numberContainer').style.display = 'block';
-                document.getElementById('status').innerHTML = '✅ الرقم جاهز!';
+                document.getElementById('status').innerHTML = '<span class="icon">✅</span>الرقم جاهز!';
+                showToast('🎉 تم جلب رقم جديد!');
             } else {
-                document.getElementById('status').innerHTML = '❌ لا توجد أرقام متاحة.';
+                document.getElementById('status').innerHTML = '<span class="icon">❌</span>لا توجد أرقام متاحة.';
             }
         }
 
@@ -458,45 +686,58 @@ main_html = """
             const platform = currentPlatform;
             const country = document.getElementById('country').value;
             if (!platform || !country) return;
-            document.getElementById('status').innerHTML = '⏳ جاري تبديل الرقم...';
-            const res = await fetch('/api/get_number', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform, country}) });
+            document.getElementById('status').innerHTML = '<span class="icon">⏳</span>جاري تبديل الرقم...';
+            const res = await fetch('/api/get_number', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform, country})});
             const data = await res.json();
             if (data.number && data.number !== currentNumber) {
                 currentNumber = data.number;
                 document.getElementById('numberDisplay').textContent = '+' + data.number;
-                document.getElementById('status').innerHTML = '🔄 تم تبديل الرقم!';
+                document.getElementById('status').innerHTML = '<span class="icon">🔄</span>تم تبديل الرقم!';
+                showToast('🔄 تم التبديل!');
             }
         }
 
         function addOtpToHistory(number, otp, timestamp) {
             const container = document.getElementById('otpHistory');
-            const msg = `🔑 ${otp}`;
-            const info = `📞 الرقم: +${number}  •  🕒 ${timestamp}`;
+            if (container.children.length === 1 && container.textContent.includes('في انتظار')) {
+                container.innerHTML = '';
+            }
             const div = document.createElement('div');
             div.className = 'otp-item';
-            div.innerHTML = `<span style="float:left;"><button class="copy-btn" onclick="copyText(\`${otp}\`)">📋 نسخ الكود</button></span><br>${msg}<span class="info">${info}</span>`;
+            div.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <strong style="color:#00ffc8;">🔑 ${otp}</strong>
+                    <button class="copy-btn" onclick="copyText('${otp}')">📋 نسخ</button>
+                </div>
+                <span class="info">📞 +${number}  •  🕒 ${timestamp}</span>
+            `;
             container.prepend(div);
-            if (container.children.length > 20) container.removeChild(container.lastChild);
+            if (container.children.length > 25) container.removeChild(container.lastChild);
+            showToast('🎉 كود جديد: ' + otp);
         }
 
-        function copyText(text) { navigator.clipboard.writeText(text); alert('✅ تم نسخ الكود!'); }
+        function copyText(text) { 
+            navigator.clipboard.writeText(text); 
+            showToast('✅ تم نسخ الكود!');
+        }
 
         function startMonitoring() {
             if (!currentNumber) return;
             if (monitorInterval) clearInterval(monitorInterval);
-            document.getElementById('status').innerHTML = '🔄 بدأ السحب التلقائي...';
+            document.getElementById('status').innerHTML = '<span class="icon">🔄</span>بدأ السحب التلقائي...';
 
             monitorInterval = setInterval(() => {
-                fetch('/api/get_otp', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({number:currentNumber}) })
+                fetch('/api/get_otp', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({number:currentNumber})})
                 .then(res => res.json()).then(data => {
                     if (data.otp) {
-                        const now = new Date().toLocaleString('ar-YE', { timeZone: 'Asia/Aden' });
+                        const now = new Date().toLocaleString('ar-YE', {timeZone: 'Asia/Aden'});
                         addOtpToHistory(currentNumber, data.otp, now);
-                        document.getElementById('status').innerHTML = '✅ تم العثور على كود!';
+                        document.getElementById('status').innerHTML = '<span class="icon">✅</span>تم العثور على كود!';
                         stopMonitoring();
                     }
                 });
             }, 5000);
+            showToast('📡 بدأ المراقبة!');
         }
 
         function stopMonitoring() {
@@ -504,7 +745,7 @@ main_html = """
                 clearInterval(monitorInterval);
                 monitorInterval = null;
             }
-            document.getElementById('status').innerHTML = '⏹️ تم إيقاف السحب.';
+            document.getElementById('status').innerHTML = '<span class="icon">⏹️</span>تم إيقاف السحب.';
         }
 
         document.addEventListener('DOMContentLoaded', initPlatformSelector);
@@ -516,45 +757,103 @@ main_html = """
 admin_html = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>لوحة التحكم</title>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>⚙️ لوحة التحكم</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
-body { font-family:'Cairo',sans-serif; background:#0b0e17; color:#fff; display:flex; justify-content:center; align-items:center; min-height:100vh; }
-.container { background:#111827; padding:30px; border-radius:25px; width:100%; max-width:450px; border:1px solid #1f2937; }
-h1 { text-align:center; color:#00d2ff; margin-bottom:20px; }
+body { 
+    font-family:'Cairo',sans-serif; 
+    background: linear-gradient(135deg, #0a0e1a, #1a1f2e);
+    color:#fff; min-height:100vh; display:flex; justify-content:center; align-items:center;
+    padding:20px;
+}
+.container { 
+    background:rgba(17, 24, 39, 0.85); backdrop-filter:blur(20px);
+    padding:30px; border-radius:25px; width:100%; max-width:480px; 
+    border:1px solid rgba(139, 92, 246, 0.3);
+    box-shadow: 0 0 50px rgba(139, 92, 246, 0.3);
+}
+h1 { 
+    text-align:center; 
+    background: linear-gradient(90deg, #00ffc8, #8b5cf6);
+    -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+    margin-bottom:25px; font-size:28px; font-weight:900;
+}
+h3 { color:#cbd5e1; margin-bottom:12px; margin-top:18px; }
 .form-group { margin-bottom:15px; }
-.form-group label { display:block; margin-bottom:5px; color:#9ca3af; }
-.form-control { width:100%; padding:12px; border-radius:10px; border:1px solid #374151; background:#1f2937; color:#fff; }
-.btn-primary { width:100%; padding:14px; border:none; border-radius:10px; background:#00ff88; color:#0b0e17; cursor:pointer; margin-top:15px; }
-.btn-danger { width:100%; padding:14px; border:none; border-radius:10px; background:#ef4444; color:#fff; cursor:pointer; margin-top:10px; }
-.btn-secondary { width:100%; padding:14px; border:none; border-radius:10px; background:#374151; color:#fff; cursor:pointer; margin-top:15px; }
-hr { border: 1px solid #374151; margin: 20px 0; }
-.combo-item { display:flex; justify-content:space-between; align-items:center; background:#1f2937; padding:10px; border-radius:10px; margin-bottom:10px; border:1px solid #374151; }
-.combo-item span { color:#fff; }
+.form-group label { display:block; margin-bottom:6px; color:#cbd5e1; font-weight:700; }
+.form-control { 
+    width:100%; padding:12px; border-radius:12px; 
+    border:2px solid rgba(255,255,255,0.1); 
+    background:rgba(31, 41, 55, 0.7); color:#fff; 
+    font-family:'Cairo',sans-serif;
+    transition:all 0.3s;
+}
+.form-control:focus { border-color:#00ffc8; box-shadow: 0 0 20px rgba(0,255,200,0.3); }
+.btn-primary { 
+    width:100%; padding:14px; border:none; border-radius:12px; 
+    background: linear-gradient(135deg, #00ff88, #00d2ff);
+    color:#0a0e1a; cursor:pointer; margin-top:15px; 
+    font-weight:900; font-size:16px; font-family:'Cairo',sans-serif;
+    box-shadow: 0 0 20px rgba(0,255,136,0.4);
+    transition:all 0.3s;
+}
+.btn-primary:hover { transform:translateY(-2px); box-shadow: 0 5px 30px rgba(0,255,136,0.6); }
+.btn-danger { 
+    width:100%; padding:14px; border:none; border-radius:12px; 
+    background: linear-gradient(135deg, #ef4444, #b91c1c);
+    color:#fff; cursor:pointer; margin-top:10px; 
+    font-weight:800; font-size:15px; font-family:'Cairo',sans-serif';
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
+    transition:all 0.3s;
+}
+.btn-danger:hover { transform:translateY(-2px); }
+.btn-secondary { 
+    width:100%; padding:14px; border:none; border-radius:12px; 
+    background: linear-gradient(135deg, #374151, #4b5563);
+    color:#fff; cursor:pointer; margin-top:10px; 
+    font-weight:800; font-size:15px; font-family:'Cairo',sans-serif;
+    transition:all 0.3s;
+}
+.btn-secondary:hover { transform:translateY(-2px); }
+hr { border: 1px solid rgba(255,255,255,0.1); margin: 20px 0; }
+.combo-item { 
+    display:flex; justify-content:space-between; align-items:center; 
+    background:rgba(31, 41, 55, 0.7); padding:12px; border-radius:12px; 
+    margin-bottom:10px; border:1px solid rgba(139, 92, 246, 0.3);
+}
+.combo-item span { color:#fff; font-weight:600; }
+.combo-item button { padding:6px 14px; font-size:13px; margin-top:0 !important; }
 </style>
 </head>
 <body>
 <div class="container">
-    <h1>⚙️ لوحة التحكم</h1>
+    <h1>⚙️ لوحة التحكم ⚙️</h1>
 
-    <!-- قسم رفع الكومبو -->
-    <h3 style="color:#9ca3af;">📤 رفع ملف جديد</h3>
+    <h3>📤 رفع ملف جديد</h3>
     <form method="POST" enctype="multipart/form-data">
-        <div class="form-group"><label>المنصة</label>
+        <div class="form-group"><label>📱 المنصة</label>
         <select name="platform" class="form-control" required>
-            <option value="whatsapp">واتساب</option><option value="telegram">تيليجرام</option>
-            <option value="tiktok">تيك توك</option><option value="facebook">فيسبوك</option>
-            <option value="instagram">انستقرام</option><option value="snapchat">سناب شات</option>
-            <option value="google">جوجل</option><option value="twitter">تويتر</option>
+            <option value="whatsapp">📱 واتساب</option>
+            <option value="telegram">✈️ تيليجرام</option>
+            <option value="tiktok">🎵 تيك توك</option>
+            <option value="facebook">📘 فيسبوك</option>
+            <option value="instagram">📸 انستقرام</option>
+            <option value="snapchat">👻 سناب شات</option>
+            <option value="google">🔍 جوجل</option>
+            <option value="twitter">🐦 تويتر/X</option>
         </select></div>
-        <div class="form-group"><label>ارفع ملف الأرقام (.txt)</label><input type="file" name="file" accept=".txt" class="form-control" required></div>
+        <div class="form-group"><label>📁 ارفع ملف الأرقام (.txt)</label>
+        <input type="file" name="file" accept=".txt" class="form-control" required></div>
         <button type="submit" class="btn-primary">📤 رفع الكومبو</button>
     </form>
 
     <hr>
 
-    <!-- قسم حذف الكومبو -->
-    <h3 style="color:#ef4444;">🗑️ حذف كومبو</h3>
+    <h3>🗑️ حذف كومبو</h3>
     {% if combos %}
         {% for platform, code, name, flag in combos %}
         <div class="combo-item">
@@ -563,12 +862,12 @@ hr { border: 1px solid #374151; margin: 20px 0; }
                 <input type="hidden" name="action" value="delete">
                 <input type="hidden" name="platform" value="{{ platform }}">
                 <input type="hidden" name="country_code" value="{{ code }}">
-                <button type="submit" class="btn-danger" style="padding:8px 15px; font-size:14px;">🗑️ حذف</button>
+                <button type="submit" class="btn-danger">🗑️ حذف</button>
             </form>
         </div>
         {% endfor %}
     {% else %}
-        <p style="color:#9ca3af; text-align:center;">لا توجد كومبوهات حالياً.</p>
+        <p style="color:#64748b; text-align:center; padding:20px;">🤷‍♂️ لا توجد كومبوهات حالياً</p>
     {% endif %}
 
     <hr>
@@ -578,15 +877,6 @@ hr { border: 1px solid #374151; margin: 20px 0; }
 </html>
 """
 
-@app.route('/')
-# ======================
-# 🔹 استبدل من هنا 👇
-# ======================
-
-def home():
-    return render_template_string(main_html, owner_link=OWNER_LINK, wa_group=WHATSAPP_GROUP_LINK, platform_logos=PLATFORM_LOGOS, platform_names=platform_names, platform_colors=platform_colors)
-
-# ========== الحصول على قائمة الكومبوهات للحذف ==========
 def get_all_combos_list():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -595,11 +885,19 @@ def get_all_combos_list():
     conn.close()
     return rows
 
-# ========== صفحة الأدمن الجديدة ==========
+@app.route('/')
+def home():
+    return render_template_string(main_html,
+        owner_link=OWNER_LINK,
+        wa_group=WHATSAPP_GROUP_LINK,
+        platform_logos=PLATFORM_LOGOS,
+        platform_logos_small=PLATFORM_LOGOS_SMALL,
+        platform_names=platform_names,
+        platform_gradients=PLATFORM_GRADIENTS)
+
 @app.route('/admin', methods=['GET', 'POST'])
 def admin():
     if request.method == 'POST':
-        # ===== حذف كومبو =====
         if request.form.get('action') == 'delete':
             platform = request.form.get('platform')
             country_code = request.form.get('country_code')
@@ -610,8 +908,6 @@ def admin():
                 conn.commit()
                 conn.close()
                 return redirect(url_for('admin'))
-
-        # ===== رفع كومبو =====
         else:
             platform = request.form.get('platform')
             file = request.files.get('file')
@@ -631,7 +927,6 @@ def admin():
                         save_combo(platform, cc, name, flag, numbers)
                         return redirect(url_for('home'))
     
-    # جلب قائمة الكومبوهات الحالية
     combos = get_all_combos_list()
     return render_template_string(admin_html, combos=combos)
 
