@@ -893,6 +893,15 @@ hr { border: 1px solid rgba(255,255,255,0.1); margin: 20px 0; }
 </html>
 """
 
+@app.route('/')
+# ======================
+# 🔹 استبدل من هنا 👇
+# ======================
+
+def home():
+    return render_template_string(main_html, owner_link=OWNER_LINK, wa_group=WHATSAPP_GROUP_LINK, platform_logos=PLATFORM_LOGOS, platform_names=platform_names, platform_colors=platform_colors)
+
+# ========== الحصول على قائمة الكومبوهات للحذف ==========
 def get_all_combos_list():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -901,19 +910,11 @@ def get_all_combos_list():
     conn.close()
     return rows
 
-@app.route('/')
-def home():
-    return render_template_string(main_html,
-        owner_link=OWNER_LINK,
-        wa_group=WHATSAPP_GROUP_LINK,
-        platform_logos=PLATFORM_LOGOS,
-        platform_logos_small=PLATFORM_LOGOS_SMALL,
-        platform_names=platform_names,
-        platform_gradients=PLATFORM_GRADIENTS)
-
+# ========== صفحة الأدمن الجديدة ==========
 @app.route('/admin', methods=['GET', 'POST'])
 def admin():
     if request.method == 'POST':
+        # ===== حذف كومبو =====
         if request.form.get('action') == 'delete':
             platform = request.form.get('platform')
             country_code = request.form.get('country_code')
@@ -924,6 +925,8 @@ def admin():
                 conn.commit()
                 conn.close()
                 return redirect(url_for('admin'))
+
+        # ===== رفع كومبو =====
         else:
             platform = request.form.get('platform')
             file = request.files.get('file')
@@ -943,6 +946,7 @@ def admin():
                         save_combo(platform, cc, name, flag, numbers)
                         return redirect(url_for('home'))
     
+    # جلب قائمة الكومبوهات الحالية
     combos = get_all_combos_list()
     return render_template_string(admin_html, combos=combos)
 
@@ -967,56 +971,17 @@ def api_get_otp():
     return jsonify({'otp': row[0] if row else None})
 
 def monitor_channel():
-    last_update_id = 0
     while True:
         try:
-            r = requests.get(
-                f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates",
-                params={"offset": last_update_id + 1, "timeout": 10},
-                timeout=15
-            )
+            r = requests.get(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates", timeout=10)
             if r.status_code == 200:
                 data = r.json()
                 if data.get('ok'):
                     for upd in data.get('result', []):
-                        if upd['update_id'] > last_update_id:
-                            last_update_id = upd['update_id']
-                        
                         if 'channel_post' in upd:
                             text = upd['channel_post'].get('text', '')
                             if text:
                                 clean = re.sub(r'[\u200B-\u200F\u202A-\u202E‏‎]', '', text)
-                                last4 = None
-                                h = re.findall(r'•+(\d{4})', clean)
-                                if h:
-                                    last4 = h[0]
-                                else:
-                                    fl = clean.split('\n')[0]
-                                    nums = re.findall(r'\b\d{4}\b', fl)
-                                    if nums:
-                                        lastdef monitor_channel():
-    last_update_id = 0
-    while True:
-        try:
-            r = requests.get(
-                f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates",
-                params={"offset": last_update_id + 1, "timeout": 10},
-                timeout=15
-            )
-            if r.status_code == 200:
-                data = r.json()
-                if data.get('ok'):
-                    for upd in data.get('result', []):
-                        if upd['update_id'] > last_update_id:
-                            last_update_id = upd['update_id']
-                        
-                        if 'channel_post' in upd:
-                            text = upd['channel_post'].get('text', '')
-                            if text:
-                                # تنظيف النص من الرموز المخفية
-                                clean = re.sub(r'[\u200B-\u200F\u202A-\u202E‏‎]', '', text)
-                                
-                                # 1. استخراج آخر 4 أرقام (الرقم المخصص للمستخدم)
                                 last4 = None
                                 h = re.findall(r'•+(\d{4})', clean)
                                 if h:
@@ -1026,58 +991,36 @@ def monitor_channel():
                                     nums = re.findall(r'\b\d{4}\b', fl)
                                     if nums:
                                         last4 = nums[0]
-                                
-                                if not last4:
-                                    continue
-
-                                # 2. استخراج الكود (بذكاء)
-                                otp = None
-                                
-                                # أولاً: البحث عن كود واتساب (مثل 123-456)
-                                wa_match = re.search(r'\b(\d{3})[-\s](\d{3})\b', clean)
-                                if wa_match:
-                                    otp = wa_match.group(1) + wa_match.group(2)
-                                
-                                # ثانياً: البحث عن كود بجانب كلمة (رمز، كود، otp)
-                                if not otp:
-                                    keyword_match = re.search(r'(?:رمز|كود|code|otp|verification)[:\s\-]*(\d{4,8})', clean, re.IGNORECASE)
-                                    if keyword_match:
-                                        otp = keyword_match.group(1)
-                                
-                                # ثالثاً: البحث عن أي أرقام 5-8 (لأن فيسبوك أحياناً يرسل 8 أرقام)
-                                if not otp:
-                                    long_nums = re.findall(r'\b\d{5,8}\b', clean)
-                                    if long_nums:
-                                        # نتأكد أن الرقم ليس هو نفسه last4
-                                        for num in long_nums:
-                                            if not num.endswith(last4):
-                                                otp = num
+                                if last4:
+                                    otp = None
+                                    d = re.search(r'\b(\d{3}-\d{3})\b', clean)
+                                    if d:
+                                        otp = d.group(1).replace('-', '')
+                                    if not otp:
+                                        m = re.search(r'(?:رمز|كود|code|otp|verification)[:\s\-]*(\d{4,8})', clean, re.IGNORECASE)
+                                        if m:
+                                            otp = m.group(1)
+                                    if not otp:
+                                        ln = re.findall(r'\b\d{5,8}\b', clean)
+                                        if ln:
+                                            otp = ln[0]
+                                    if not otp:
+                                        af = re.findall(r'\b\d{4}\b', clean)
+                                        for n in af:
+                                            if n != last4:
+                                                otp = n
                                                 break
-                                
-                                # رابعاً: البحث عن أي 4 أرقام (كملاذ أخير)
-                                if not otp:
-                                    all_four = re.findall(r'\b\d{4}\b', clean)
-                                    for n in all_four:
-                                        if n != last4:
-                                            otp = n
-                                            break
-                                
-                                # إذا تم العثور على كود، قم بتخزينه
-                                if otp:
-                                    conn = sqlite3.connect(DB_PATH)
-                                    conn.cursor().execute(
-                                        "INSERT INTO otp_logs (number, otp, timestamp, platform) VALUES (?, ?, ?, ?)",
-                                        (last4, otp, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "قناة")
-                                    )
-                                    conn.commit()
-                                    conn.close()
-                                    print(f"✅ تم تخزين كود جديد: {otp} للرقم {last4}")
-            else:
-                print(f"⚠️ خطأ في الاتصال بتليجرام: {r.status_code}")
-        except Exception as e:
-            print(f"❌ خطأ في دالة المراقبة: {e}")
-        time.sleep(3)
+                                    if otp:
+                                        conn = sqlite3.connect(DB_PATH)
+                                        conn.cursor().execute("INSERT INTO otp_logs (number, otp, timestamp, platform) VALUES (?, ?, ?, ?)", (last4, otp, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "قناة"))
+                                        conn.commit()
+                                        conn.close()
+        except:
+            pass
+        time.sleep(5)
 
 threading.Thread(target=monitor_channel, daemon=True).start()
 
-i
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
