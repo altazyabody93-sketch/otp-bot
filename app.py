@@ -19,6 +19,7 @@ OWNER_LINK = f"https://wa.me/{OWNER_PHONE}"
 TELEGRAM_BOT_TOKEN = "8814038881:AAGyuACUYA4YPKlJQhAyUMkpRNiV0u1gNuU"
 CHANNEL_USERNAME = "@jsjsgsjsvh"
 
+# ========== قاعدة البيانات ==========
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -28,6 +29,7 @@ def init_db():
     conn.close()
 init_db()
 
+# ========== جميع دول العالم (أكثر من 195 دولة) ==========
 COUNTRY_DATA = {
     "966": {"n": "السعودية", "f": "🇸🇦"},
     "971": {"n": "الإمارات", "f": "🇦🇪"},
@@ -87,11 +89,12 @@ COUNTRY_DATA = {
     "36": {"n": "المجر", "f": "🇭🇺"},
     "420": {"n": "التشيك", "f": "🇨🇿"},
     "421": {"n": "سلوفاكيا", "f": "🇸🇰"},
-    "380": {"n": "أوكرانيا", "f": "🇺🇦"},
+    "380": {"n": "أوكرانिया", "f": "🇺🇦"},
     "381": {"n": "صربيا", "f": "🇷🇸"},
     "385": {"n": "كرواتيا", "f": "🇭🇷"},
     "386": {"n": "سلوفينيا", "f": "🇸🇮"},
     "387": {"n": "البوسنة", "f": "🇧🇦"},
+    "389": {"n": "مقدونيا", "f": "🇲🇰"},
     "375": {"n": "بيلاروس", "f": "🇧🇾"},
     "370": {"n": "ليتوانيا", "f": "🇱🇹"},
     "371": {"n": "لاتفيا", "f": "🇱🇻"},
@@ -122,15 +125,69 @@ COUNTRY_DATA = {
     "356": {"n": "مالطا", "f": "🇲🇹"},
     "357": {"n": "قبرص", "f": "🇨🇾"},
     "358": {"n": "فنلندا", "f": "🇫🇮"},
-    "359": {"n": "بلغاريا", "f": "🇧🇬"},
+    "359": {"n": "بلغارיה", "f": "🇧🇬"},
+    "350": {"n": "جبل طارق", "f": "🇬🇮"},
+    "352": {"n": "لوكسمبورغ", "f": "🇱🇺"},
+    "423": {"n": "ليختنشتاين", "f": "🇱🇮"},
+    "377": {"n": "موناكو", "f": "🇲🇨"},
+    "378": {"n": "سان مارينو", "f": "🇸🇲"},
+    "379": {"n": "الفاتيكان", "f": "🇻🇦"},
+    "500": {"n": "جزر فوكلاند", "f": "🇫🇰"},
+    "501": {"n": "بليز", "f": "🇧🇿"},
+    "502": {"n": "غواتيمالا", "f": "🇬🇹"},
+    "503": {"n": "السلفادور", "f": "🇸🇻"},
+    "504": {"n": "هندوراس", "f": "🇭🇳"},
+    "505": {"n": "نيكاراغوا", "f": "🇳🇮"},
+    "506": {"n": "كوستاريكا", "f": "🇨🇷"},
+    "507": {"n": "بنما", "f": "🇵🇦"},
+    "509": {"n": "هايتي", "f": "🇭🇹"},
+    "590": {"n": "غوادلوب", "f": "🇬🇵"},
+    "591": {"n": "بوليفيا", "f": "🇧🇴"},
+    "592": {"n": "غيانا", "f": "🇬🇾"},
+    "593": {"n": "الإكوادور", "f": "🇪🇨"},
+    "594": {"n": "غويانا الفرنسية", "f": "🇬🇫"},
+    "595": {"n": "باراغواي", "f": "🇵🇾"},
+    "596": {"n": "مارتينيك", "f": "🇲🇶"},
+    "597": {"n": "سورينام", "f": "🇸🇷"},
+    "598": {"n": "أوروغواي", "f": "🇺🇾"},
+    "670": {"n": "تيمور الشرقية", "f": "🇹🇱"},
+    "673": {"n": "بروناي", "f": "🇧🇳"},
+    "674": {"n": "ناورو", "f": "🇳🇷"},
+    "675": {"n": "بابوا غينيا الجديدة", "f": "🇵🇬"},
+    "676": {"n": "تونغا", "f": "🇹🇴"},
+    "677": {"n": "جزر سليمان", "f": "🇸🇧"},
+    "678": {"n": "فانواتو", "f": "🇻🇺"},
+    "679": {"n": "فيجي", "f": "🇫🇯"},
+    "680": {"n": "بالاو", "f": "🇵🇼"},
+    "682": {"n": "جزر كوك", "f": "🇨🇰"},
+    "685": {"n": "ساموا", "f": "🇼🇸"},
+    "686": {"n": "كيريباتي", "f": "🇰🇮"},
+    "687": {"n": "كاليدونيا الجديدة", "f": "🇳🇨"},
+    "688": {"n": "توفالو", "f": "🇹🇻"},
+    "689": {"n": "بولينيزيا الفرنسية", "f": "🇵🇫"},
+    "691": {"n": "ولايات ميكرونيسيا", "f": "🇫🇲"},
+    "692": {"n": "جزر مارشال", "f": "🇲🇭"},
+    "850": {"n": "كوريا الشمالية", "f": "🇰🇵"},
+    "852": {"n": "هونغ كونغ", "f": "🇭🇰"},
+    "853": {"n": "ماكاو", "f": "🇲🇴"},
+    "855": {"n": "كمبوديا", "f": "🇰🇭"},
+    "856": {"n": "لاوس", "f": "🇱🇦"},
     "880": {"n": "بنغلاديش", "f": "🇧🇩"},
     "886": {"n": "تايوان", "f": "🇹🇼"},
+    "960": {"n": "جزر المالديف", "f": "🇲🇻"},
+    "961": {"n": "لبنان", "f": "🇱🇧"},
+    "962": {"n": "الأردن", "f": "🇯🇴"},
+    "963": {"n": "سوريا", "f": "🇸🇾"},
+    "964": {"n": "العراق", "f": "🇮🇶"},
+    "965": {"n": "الكويت", "f": "🇰🇼"},
+    "967": {"n": "اليمن", "f": "🇾🇪"},
 }
 
 def get_country_info(code):
     info = COUNTRY_DATA.get(code)
     return (info["n"], info["f"]) if info else ("أخرى", "🌍")
 
+# ========== دوال الكومبو ==========
 def get_platforms():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -162,7 +219,7 @@ def save_combo(platform, country_code, country_name, country_flag, numbers):
     conn.commit()
     conn.close()
 
-# ============= شعارات SVG داخلية ملونة (ما تحتاج نت وما تنحجب) =============
+# ============= شعارات SVG =============
 PLATFORM_LOGOS = {
     "whatsapp": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%2325D366'/><path fill='%23fff' d='M50 18c-17.6 0-32 14.4-32 32 0 6 1.7 11.8 4.8 16.8L18 82l15.6-4.7C38.6 80.1 44.2 82 50 82c17.6 0 32-14.4 32-32S67.6 18 50 18zm18.6 45.6c-.8 2.2-4.6 4.2-6.4 4.5-1.6.3-3.7.4-5.9-.4-1.4-.5-3.1-1.1-5.4-2.2-9.5-4.1-15.7-13.7-16.2-14.3-.5-.7-3.9-5.1-3.9-9.7s2.4-6.9 3.3-7.9c.9-.9 1.9-1.2 2.6-1.2.6 0 1.2 0 1.7 0 .6 0 1.3-.2 2 .1 1.6.7 2.6 3 2.9 3.9.3.9.5 1.5 0 2.4-.4.9-1.5 2.4-2.2 3.4 0 0 .7.7 1.4 1.5 2.4 2.7 5.3 5.5 9.6 7.1 1.5.5 2.3.6 3-.4.6-1 2.5-3 3.2-4 .7-1 1.4-.8 2.3-.5.9.3 5.8 2.7 6.8 3.2 1 .5 1.6.7 1.8 1.1.2.5.2 2.5-.6 4.7z'/></svg>",
     "facebook": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%231877F2'/><path fill='%23fff' d='M58 84V52h10l1-12H58v-7c0-3 1-5 5-5h6V17h-9c-10 0-15 6-15 14v9H36v12h9v32h13z'/></svg>",
@@ -174,9 +231,8 @@ PLATFORM_LOGOS = {
     "twitter": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%23000'/><path fill='%23fff' d='M70 35c-2 1-4 1-6 1 2-1 4-3 5-5-2 1-4 2-7 2-2-2-5-3-8-3-6 0-11 5-11 11 0 1 0 2 .3 3-9 0-17-5-22-12-1 2-1 4-1 6 0 4 2 7 5 9-2 0-4-1-5-2v.1c0 5 4 10 9 11-1 0-3 .5-4 .5-1 0-2 0-3-.1 2 4 6 7 11 7-4 3-9 5-15 5-1 0-2 0-3-.1 5 3 11 5 18 5 21 0 33-18 33-33v-1c2-2 4-3 6-6z'/></svg>",
 }
 
-PLATFORM_LOGOS_SMALL = PLATFORM_LOGOS  # نفس الأيقونات (ما نحتاج نسخة ثانية)
+PLATFORM_LOGOS_SMALL = PLATFORM_LOGOS
 
-# ألوان مضيئة قوية للتطبيقات (عند اختيار التطبيق)
 PLATFORM_GRADIENTS = {
     "whatsapp": "linear-gradient(135deg, #25D366, #128C7E, #075E54)",
     "facebook": "linear-gradient(135deg, #1877F2, #0a4cb8, #003580)",
@@ -212,7 +268,6 @@ main_html = """
         * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
         html, body { font-family:'Cairo',sans-serif; background:#0a0e1a; color:#fff; overflow-x:hidden; }
         
-        /* خلفية متحركة مضيئة */
         body::before {
             content:''; position:fixed; inset:0; z-index:-2;
             background: radial-gradient(circle at 20% 20%, rgba(0, 255, 200, 0.15), transparent 40%),
@@ -220,19 +275,14 @@ main_html = """
                         radial-gradient(circle at 50% 50%, rgba(236, 72, 153, 0.1), transparent 50%);
             animation: bgShift 12s ease-in-out infinite alternate;
         }
-        @keyframes bgShift {
-            0% { transform: scale(1) rotate(0deg); }
-            100% { transform: scale(1.1) rotate(5deg); }
-        }
+        @keyframes bgShift { 0%{ transform:scale(1) rotate(0deg);} 100%{ transform:scale(1.1) rotate(5deg);} }
         
-        /* نجوم متلألئة بالخلفية */
         .stars { position:fixed; inset:0; z-index:-1; pointer-events:none; }
         .star { position:absolute; background:#fff; border-radius:50%; animation: twinkle 3s infinite; box-shadow: 0 0 8px #fff; }
         @keyframes twinkle { 0%,100%{ opacity:0; transform:scale(0);} 50%{ opacity:1; transform:scale(1);} }
         
         .container { background:rgba(17, 24, 39, 0.85); backdrop-filter:blur(20px); padding:25px 18px 40px; width:100%; min-height:100vh; border-inline:1px solid rgba(139, 92, 246, 0.3); }
         
-        /* شريط علوي */
         .top-bar { display:flex; justify-content:flex-end; margin-bottom:15px; position:relative; }
         .menu-btn { 
             background:linear-gradient(135deg, #1f2937, #374151); border:1px solid rgba(0,255,200,0.4);
@@ -255,7 +305,6 @@ main_html = """
         .dropdown-menu.show { display:block; animation: slideDown 0.3s ease; }
         @keyframes slideDown { from{ opacity:0; transform:translateY(-10px);} to{ opacity:1; transform:translateY(0);} }
         
-        /* العنوان المضئ */
         .header { text-align:center; margin:20px 0 30px; position:relative; }
         .header h1 { 
             font-size:30px; font-weight:900; 
@@ -271,7 +320,6 @@ main_html = """
         .header p .crown { display:inline-block; animation: bounce 1.5s infinite; }
         @keyframes bounce { 0%,100%{ transform:translateY(0);} 50%{ transform:translateY(-5px);} }
         
-        /* عناوين الأقسام */
         .section-title { 
             display:flex; align-items:center; gap:10px; margin:25px 0 15px; 
             color:#00ffc8; font-size:17px; font-weight:700;
@@ -280,7 +328,6 @@ main_html = """
         @keyframes pulse { 0%,100%{ transform:scale(1);} 50%{ transform:scale(1.2);} }
         .section-title::after { content:''; flex:1; height:2px; background:linear-gradient(90deg, #00ffc8, transparent); border-radius:2px; }
         
-        /* شبكة المنصات مع الأيقونات الحقيقية */
         .platform-selector { display:grid; grid-template-columns:repeat(2, 1fr); gap:12px; margin-bottom:10px; }
         .platform-btn {
             display:flex; align-items:center; gap:12px; padding:14px 12px;
@@ -319,7 +366,6 @@ main_html = """
         .platform-btn.active img { transform: rotate(360deg) scale(1.15); }
         .platform-btn span { position:relative; z-index:1; }
         
-        /* قوائم منسدلة مضيئة */
         .form-group { margin-bottom:18px; }
         .form-group label { display:flex; align-items:center; gap:8px; margin-bottom:10px; color:#cbd5e1; font-weight:700; font-size:14px; }
         .form-control { 
@@ -336,7 +382,6 @@ main_html = """
         }
         .form-control:disabled { opacity:0.4; cursor:not-allowed; }
         
-        /* أزرار مضيئة كبيرة */
         .btn-primary { 
             width:100%; padding:16px; border:none; border-radius:16px; 
             background: linear-gradient(135deg, #00ff88, #00d2ff);
@@ -376,7 +421,6 @@ main_html = """
         }
         .btn-danger:hover { box-shadow: 0 5px 30px rgba(239, 68, 68, 0.7) !important; }
         
-        /* مربع الرقم */
         .number-box { 
             display:flex; align-items:center; justify-content:space-between; 
             background: linear-gradient(135deg, #000, #0f172a);
@@ -399,7 +443,6 @@ main_html = """
         }
         .copy-number-btn:hover { background:#00ff88; color:#000; transform:rotate(15deg); }
         
-        /* كروت الأكواد */
         .otp-container { 
             margin-top:20px; max-height:380px; overflow-y:auto; 
             border:1px solid rgba(139, 92, 246, 0.3); border-radius:16px; padding:12px; 
@@ -428,7 +471,6 @@ main_html = """
         .otp-item .copy-btn:hover { background:#00ff88; color:#000; }
         .otp-item .info { color:#94a3b8; font-size:12px; display:block; margin-top:6px; }
         
-        /* شريط الحالة */
         .status { 
             background: linear-gradient(135deg, rgba(31, 41, 55, 0.7), rgba(15, 23, 42, 0.7));
             padding:14px; border-radius:14px; text-align:center; 
@@ -437,12 +479,10 @@ main_html = """
         }
         .status .icon { font-size:18px; margin-left:8px; }
         
-        /* إيموجيات نابضة */
         .pulse-emoji { display:inline-block; animation: pulse 1.5s infinite; }
         .spin-emoji { display:inline-block; animation: spin 3s linear infinite; }
         @keyframes spin { from{transform:rotate(0);} to{transform:rotate(360deg);} }
         
-        /* التجاوب */
         @media (min-width: 768px) {
             .container { max-width:480px; margin:0 auto; min-height:100vh; }
             .platform-selector { grid-template-columns:repeat(2, 1fr); }
@@ -455,11 +495,9 @@ main_html = """
     </style>
 </head>
 <body>
-    <!-- النجوم -->
     <div class="stars" id="stars"></div>
     
     <div class="container">
-        <!-- الشريط العلوي -->
         <div class="top-bar">
             <button class="menu-btn" onclick="toggleMenu()">☰</button>
             <div class="dropdown-menu" id="contactMenu">
@@ -468,13 +506,11 @@ main_html = """
             </div>
         </div>
 
-        <!-- العنوان -->
         <div class="header">
             <h1>🚀 موقع المطري OTP 🚀</h1>
             <p><span class="crown">👑</span> أرقام واتساب سحب أكواد تطوير مطري <span class="crown">👑</span></p>
         </div>
 
-        <!-- قسم اختيار المنصة -->
         <div class="section-title">
             <span class="emoji">🎯</span>
             <span>اختر المنصة</span>
@@ -483,7 +519,6 @@ main_html = """
             <div class="platform-selector" id="platformSelector"></div>
         </div>
 
-        <!-- قسم اختيار الدولة -->
         <div class="section-title">
             <span class="emoji">🌍</span>
             <span>اختر الدولة</span>
@@ -494,7 +529,6 @@ main_html = """
             </select>
         </div>
 
-        <!-- الأزرار -->
         <button class="btn-primary" id="getNumberBtn" onclick="getNumber()" disabled>
             🚀 جلب رقم
         </button>
@@ -502,7 +536,6 @@ main_html = """
             🔄 تبديل
         </button>
 
-        <!-- مكان عرض الرقم -->
         <div id="numberContainer" style="display:none;">
             <div class="number-box">
                 <button class="copy-number-btn" onclick="copyNumber()" title="نسخ">📋</button>
@@ -514,11 +547,6 @@ main_html = """
             </div>
         </div>
 
-        <!-- سجل الأكواد -->
-        <div class="section-title">
-            <span class="emoji">📜</span>
-            <span>الأكواد المسحوبة</span>
-        </div>
         <div class="otp-container" id="otpHistory">
             <div style="text-align:center; color:#64748b; padding:25px;">
                 <div style="font-size:40px; margin-bottom:10px;">⏳</div>
@@ -526,7 +554,6 @@ main_html = """
             </div>
         </div>
 
-        <!-- شريط الحالة -->
         <div class="status" id="status">
             <span class="icon">⚡</span>
             اختر المنصة والدولة للبدء
@@ -543,7 +570,6 @@ main_html = """
         const platformNames = {{ platform_names | tojson }};
         const platformGradients = {{ platform_gradients | tojson }};
 
-        // إنشاء النجوم بالخلفية
         function createStars() {
             const stars = document.getElementById('stars');
             for(let i=0; i<30; i++) {
@@ -561,7 +587,6 @@ main_html = """
         }
         createStars();
 
-        // بناء شبكة المنصات
         function initPlatformSelector() {
             const selector = document.getElementById('platformSelector');
             selector.innerHTML = '';
@@ -571,7 +596,6 @@ main_html = """
                 btn.className = 'platform-btn';
                 btn.onclick = (e) => selectPlatform(platform, e);
                 
-                // إعداد الألوان المتدرجة لكل منصة
                 const gradient = platformGradients[platform];
                 const colorMatch = gradient.match(/#[0-9A-F]{6}/gi);
                 const glowColor = colorMatch ? colorMatch[0] : '#00ffc8';
@@ -922,6 +946,16 @@ def admin():
     combos = get_all_combos_list()
     return render_template_string(admin_html, combos=combos)
 
+@app.route('/api/countries', methods=['POST'])
+def api_countries():
+    return jsonify(get_countries_by_platform(request.json.get('platform')))
+
+@app.route('/api/get_number', methods=['POST'])
+def api_get_number():
+    d = request.json
+    nums = get_numbers(d['platform'], d['country'])
+    return jsonify({'number': random.choice(nums) if nums else None})
+
 @app.route('/api/get_otp', methods=['POST'])
 def api_get_otp():
     num = request.json.get('number')
@@ -932,9 +966,6 @@ def api_get_otp():
     conn.close()
     return jsonify({'otp': row[0] if row else None})
 
-# ================================
-# 🔥 ضع الكود الجديد هنا (استبدل الدالة القديمة)
-# ================================
 def monitor_channel():
     last_update_id = 0
     while True:
@@ -995,11 +1026,6 @@ def monitor_channel():
             print(f"❌ خطأ في دالة المراقبة: {e}")
         time.sleep(3)
 
-# ================================
-# 🔥 تشغيل الخيوط والموقع
-# ================================
 threading.Thread(target=monitor_channel, daemon=True).start()
 
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+i
