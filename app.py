@@ -922,16 +922,6 @@ def admin():
     combos = get_all_combos_list()
     return render_template_string(admin_html, combos=combos)
 
-@app.route('/api/countries', methods=['POST'])
-def api_countries():
-    return jsonify(get_countries_by_platform(request.json.get('platform')))
-
-@app.route('/api/get_number', methods=['POST'])
-def api_get_number():
-    d = request.json
-    nums = get_numbers(d['platform'], d['country'])
-    return jsonify({'number': random.choice(nums) if nums else None})
-
 @app.route('/api/get_otp', methods=['POST'])
 def api_get_otp():
     num = request.json.get('number')
@@ -942,14 +932,25 @@ def api_get_otp():
     conn.close()
     return jsonify({'otp': row[0] if row else None})
 
+# ================================
+# 🔥 ضع الكود الجديد هنا (استبدل الدالة القديمة)
+# ================================
 def monitor_channel():
+    last_update_id = 0
     while True:
         try:
-            r = requests.get(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates", timeout=10)
+            r = requests.get(
+                f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates",
+                params={"offset": last_update_id + 1, "timeout": 10},
+                timeout=15
+            )
             if r.status_code == 200:
                 data = r.json()
                 if data.get('ok'):
                     for upd in data.get('result', []):
+                        if upd['update_id'] > last_update_id:
+                            last_update_id = upd['update_id']
+                        
                         if 'channel_post' in upd:
                             text = upd['channel_post'].get('text', '')
                             if text:
@@ -987,10 +988,16 @@ def monitor_channel():
                                         conn.cursor().execute("INSERT INTO otp_logs (number, otp, timestamp, platform) VALUES (?, ?, ?, ?)", (last4, otp, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "قناة"))
                                         conn.commit()
                                         conn.close()
-        except:
-            pass
-        time.sleep(5)
+                                        print(f"✅ تم تخزين كود جديد: {otp} للرقم {last4}")
+            else:
+                print(f"⚠️ خطأ في الاتصال بتليجرام: {r.status_code}")
+        except Exception as e:
+            print(f"❌ خطأ في دالة المراقبة: {e}")
+        time.sleep(3)
 
+# ================================
+# 🔥 تشغيل الخيوط والموقع
+# ================================
 threading.Thread(target=monitor_channel, daemon=True).start()
 
 if __name__ == '__main__':
