@@ -983,106 +983,91 @@ def monitor_channel():
                             if text:
                                 clean = re.sub(r'[\u200B-\u200F\u202A-\u202E‏‎]', '', text)
                                 
-                                # استخراج آخر 4 أرقام (للتعرف على المستخدم)
-                                last4 = None
-                                h = re.findall(r'•+(\d{4})', clean)
-                                if h:
-                                    last4 = h[0]
-                                else:
-                                    fl = clean.split('\n')[0]
-                                    nums = re.findall(r'\b\d{4}\b', fl)
-                                    if nums:
-                                        last4 = nums[0]
+                                # ====== 1. استخراج الرقم المستخدم ======
+                                # البحث عن رقم مكون من 10-15 رقم
+                                all_numbers = re.findall(r'(\d{10,15})', clean)
+                                user_number = None
                                 
-                                if last4:
+                                if all_numbers:
+                                    user_number = all_numbers[0]
+                                else:
+                                    # البحث عن رقم بصيغة 966•••••0038
+                                    hidden = re.findall(r'(\d{3})[••]{2,6}(\d{3,4})', clean)
+                                    if hidden:
+                                        user_number = hidden[0][0] + hidden[0][1]
+                                    else:
+                                        # البحث عن أي رقم طويل (8-12 رقم)
+                                        fallback = re.findall(r'\b\d{8,12}\b', clean)
+                                        if fallback:
+                                            user_number = fallback[0]
+                                
+                                if user_number:
+                                    # استخدام آخر 4 أرقام للبحث في قاعدة البيانات
+                                    last_digits = user_number[-4:]
+                                    
+                                    # ====== 2. استخراج الكود ======
                                     otp = None
-                                    platform = "غير معروف"
                                     
-                                    # ===== الأنماط المختلفة للأكواد =====
-                                    # 1️⃣ كود واتساب (عادة 6 أرقام)
-                                    d = re.search(r'\b(\d{3}-\d{3})\b', clean)
-                                    if d:
-                                        otp = d.group(1).replace('-', '')
-                                        platform = "واتساب"
+                                    # البحث عن كود بصيغة 303-441
+                                    dash_code = re.search(r'\b(\d{3})-(\d{3})\b', clean)
+                                    if dash_code:
+                                        otp = dash_code.group(1) + dash_code.group(2)
                                     
-                                    # 2️⃣ كود فيسبوك (6 أرقام)
+                                    # البحث عن كود مكون من 4-8 أرقام
                                     if not otp:
-                                        m = re.search(r'(?:رمز|كود|code|otp|verification|Facebook|فيسبوك)[:\s\-]*(\d{4,8})', clean, re.IGNORECASE)
-                                        if m:
-                                            otp = m.group(1)
-                                            if "facebook" in clean.lower() or "فيسبوك" in clean:
-                                                platform = "فيسبوك"
+                                        all_codes = re.findall(r'\b(\d{4,8})\b', clean)
+                                        if all_codes:
+                                            # تجاهل الأرقام التي تشبه الرقم المستخدم
+                                            for c in all_codes:
+                                                if c != user_number[-8:] and len(c) >= 4:
+                                                    otp = c
+                                                    break
                                     
-                                    # 3️⃣ كود تيليجرام (5 أرقام)
+                                    # البحث عن كود بصيغة #كود أو كود: أو رمز:
                                     if not otp:
-                                        m = re.search(r'(?:telegram|تيليجرام|تلي)[:\s\-]*(\d{5,6})', clean, re.IGNORECASE)
-                                        if m:
-                                            otp = m.group(1)
-                                            platform = "تيليجرام"
-                                    
-                                    # 4️⃣ كود تيك توك (6 أرقام)
-                                    if not otp:
-                                        m = re.search(r'(?:tiktok|تيك توك|تيك)[:\s\-]*(\d{6,8})', clean, re.IGNORECASE)
-                                        if m:
-                                            otp = m.group(1)
-                                            platform = "تيك توك"
-                                    
-                                    # 5️⃣ كود انستقرام (6 أرقام)
-                                    if not otp:
-                                        m = re.search(r'(?:instagram|انستقرام|انستا)[:\s\-]*(\d{6,7})', clean, re.IGNORECASE)
-                                        if m:
-                                            otp = m.group(1)
-                                            platform = "انستقرام"
-                                    
-                                    # 6️⃣ كود سناب شات (4 أرقام)
-                                    if not otp:
-                                        m = re.search(r'(?:snapchat|سناب)[:\s\-]*(\d{4,6})', clean, re.IGNORECASE)
-                                        if m:
-                                            otp = m.group(1)
-                                            platform = "سناب شات"
-                                    
-                                    # 7️⃣ كود جوجل (6 أرقام)
-                                    if not otp:
-                                        m = re.search(r'(?:google|جوجل|gmail|جميل)[:\s\-]*(\d{6,7})', clean, re.IGNORECASE)
-                                        if m:
-                                            otp = m.group(1)
-                                            platform = "جوجل"
-                                    
-                                    # 8️⃣ كود تويتر/X (6 أرقام)
-                                    if not otp:
-                                        m = re.search(r'(?:twitter|تويتر|x\.com)[:\s\-]*(\d{6,7})', clean, re.IGNORECASE)
-                                        if m:
-                                            otp = m.group(1)
-                                            platform = "تويتر"
-                                    
-                                    # 9️⃣ أي كود طويل (5-8 أرقام)
-                                    if not otp:
-                                        ln = re.findall(r'\b\d{5,8}\b', clean)
-                                        if ln:
-                                            otp = ln[0]
-                                            platform = "عام"
-                                    
-                                    # 🔟 آخر 4 أرقام غير المكررين (للحالات الخاصة)
-                                    if not otp:
-                                        af = re.findall(r'\b\d{4}\b', clean)
-                                        for n in af:
-                                            if n != last4:
-                                                otp = n
-                                                platform = "عام"
+                                        code_patterns = [
+                                            r'(?:كود|رمز|code|otp|verification)[:\s\-]*[‎]?(\d{3,8})',
+                                            r'#(\d{3,8})',
+                                            r'(\d{3,4})-(\d{3,4})'
+                                        ]
+                                        for pattern in code_patterns:
+                                            match = re.search(pattern, clean, re.IGNORECASE)
+                                            if match:
+                                                if len(match.groups()) > 1:
+                                                    otp = ''.join(match.groups())
+                                                else:
+                                                    otp = match.group(1)
                                                 break
                                     
-                                    # إذا تم العثور على كود
+                                    # ====== 3. تحديد المنصة ======
+                                    platform = "غير معروف"
+                                    if "WA" in clean or "whatsapp" in clean.lower() or "واتساب" in clean:
+                                        platform = "واتساب"
+                                    elif "FB" in clean or "facebook" in clean.lower() or "فيسبوك" in clean:
+                                        platform = "فيسبوك"
+                                    elif "TG" in clean or "telegram" in clean.lower() or "تيليجرام" in clean:
+                                        platform = "تيليجرام"
+                                    elif "TT" in clean or "tiktok" in clean.lower() or "تيك توك" in clean:
+                                        platform = "تيك توك"
+                                    elif "IG" in clean or "instagram" in clean.lower() or "انستقرام" in clean:
+                                        platform = "انستقرام"
+                                    elif "SC" in clean or "snapchat" in clean.lower() or "سناب" in clean:
+                                        platform = "سناب شات"
+                                    elif "GG" in clean or "google" in clean.lower() or "جوجل" in clean:
+                                        platform = "جوجل"
+                                    elif "TW" in clean or "twitter" in clean.lower() or "تويتر" in clean:
+                                        platform = "تويتر"
+                                    
+                                    # ====== 4. حفظ الكود ======
                                     if otp:
                                         conn = sqlite3.connect(DB_PATH)
-                                        conn.cursor().execute("""
-                                            INSERT INTO otp_logs (number, otp, timestamp, platform) 
-                                            VALUES (?, ?, ?, ?)
-                                        """, (last4, otp, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), platform))
+                                        conn.cursor().execute(
+                                            "INSERT INTO otp_logs (number, otp, timestamp, platform) VALUES (?, ?, ?, ?)",
+                                            (last_digits, otp, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), platform)
+                                        )
                                         conn.commit()
                                         conn.close()
-                                        
-                                        # 🔔 إشعار في الطرفية
-                                        print(f"✅ [{platform}] {otp} | الرقم: {last4}")
+                                        print(f"✅ [{platform}] {otp} | الرقم: {last_digits}")
         except Exception as e:
             print(f"❌ خطأ: {e}")
         time.sleep(5)
