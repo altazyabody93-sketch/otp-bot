@@ -982,6 +982,8 @@ def monitor_channel():
                             text = upd['channel_post'].get('text', '')
                             if text:
                                 clean = re.sub(r'[\u200B-\u200F\u202A-\u202E‏‎]', '', text)
+                                
+                                # استخراج آخر 4 أرقام (للتعرف على المستخدم)
                                 last4 = None
                                 h = re.findall(r'•+(\d{4})', clean)
                                 if h:
@@ -991,32 +993,98 @@ def monitor_channel():
                                     nums = re.findall(r'\b\d{4}\b', fl)
                                     if nums:
                                         last4 = nums[0]
+                                
                                 if last4:
                                     otp = None
+                                    platform = "غير معروف"
+                                    
+                                    # ===== الأنماط المختلفة للأكواد =====
+                                    # 1️⃣ كود واتساب (عادة 6 أرقام)
                                     d = re.search(r'\b(\d{3}-\d{3})\b', clean)
                                     if d:
                                         otp = d.group(1).replace('-', '')
+                                        platform = "واتساب"
+                                    
+                                    # 2️⃣ كود فيسبوك (6 أرقام)
                                     if not otp:
-                                        m = re.search(r'(?:رمز|كود|code|otp|verification)[:\s\-]*(\d{4,8})', clean, re.IGNORECASE)
+                                        m = re.search(r'(?:رمز|كود|code|otp|verification|Facebook|فيسبوك)[:\s\-]*(\d{4,8})', clean, re.IGNORECASE)
                                         if m:
                                             otp = m.group(1)
+                                            if "facebook" in clean.lower() or "فيسبوك" in clean:
+                                                platform = "فيسبوك"
+                                    
+                                    # 3️⃣ كود تيليجرام (5 أرقام)
+                                    if not otp:
+                                        m = re.search(r'(?:telegram|تيليجرام|تلي)[:\s\-]*(\d{5,6})', clean, re.IGNORECASE)
+                                        if m:
+                                            otp = m.group(1)
+                                            platform = "تيليجرام"
+                                    
+                                    # 4️⃣ كود تيك توك (6 أرقام)
+                                    if not otp:
+                                        m = re.search(r'(?:tiktok|تيك توك|تيك)[:\s\-]*(\d{6,8})', clean, re.IGNORECASE)
+                                        if m:
+                                            otp = m.group(1)
+                                            platform = "تيك توك"
+                                    
+                                    # 5️⃣ كود انستقرام (6 أرقام)
+                                    if not otp:
+                                        m = re.search(r'(?:instagram|انستقرام|انستا)[:\s\-]*(\d{6,7})', clean, re.IGNORECASE)
+                                        if m:
+                                            otp = m.group(1)
+                                            platform = "انستقرام"
+                                    
+                                    # 6️⃣ كود سناب شات (4 أرقام)
+                                    if not otp:
+                                        m = re.search(r'(?:snapchat|سناب)[:\s\-]*(\d{4,6})', clean, re.IGNORECASE)
+                                        if m:
+                                            otp = m.group(1)
+                                            platform = "سناب شات"
+                                    
+                                    # 7️⃣ كود جوجل (6 أرقام)
+                                    if not otp:
+                                        m = re.search(r'(?:google|جوجل|gmail|جميل)[:\s\-]*(\d{6,7})', clean, re.IGNORECASE)
+                                        if m:
+                                            otp = m.group(1)
+                                            platform = "جوجل"
+                                    
+                                    # 8️⃣ كود تويتر/X (6 أرقام)
+                                    if not otp:
+                                        m = re.search(r'(?:twitter|تويتر|x\.com)[:\s\-]*(\d{6,7})', clean, re.IGNORECASE)
+                                        if m:
+                                            otp = m.group(1)
+                                            platform = "تويتر"
+                                    
+                                    # 9️⃣ أي كود طويل (5-8 أرقام)
                                     if not otp:
                                         ln = re.findall(r'\b\d{5,8}\b', clean)
                                         if ln:
                                             otp = ln[0]
+                                            platform = "عام"
+                                    
+                                    # 🔟 آخر 4 أرقام غير المكررين (للحالات الخاصة)
                                     if not otp:
                                         af = re.findall(r'\b\d{4}\b', clean)
                                         for n in af:
                                             if n != last4:
                                                 otp = n
+                                                platform = "عام"
                                                 break
+                                    
+                                    # إذا تم العثور على كود
                                     if otp:
                                         conn = sqlite3.connect(DB_PATH)
-                                        conn.cursor().execute("INSERT INTO otp_logs (number, otp, timestamp, platform) VALUES (?, ?, ?, ?)", (last4, otp, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "قناة"))
+                                        conn.cursor().execute("""
+                                            INSERT INTO otp_logs (number, otp, timestamp, platform) 
+                                            VALUES (?, ?, ?, ?)
+                                        """, (last4, otp, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), platform))
                                         conn.commit()
                                         conn.close()
-        except:
-            pass
+                                        
+                                        # 🔔 إشعار في الطرفية
+                                        print(f"✅ [{platform}] {otp} | الرقم: {last4}")
+        except Exception as e:
+            print(f"❌ خطأ: {e}")
         time.sleep(5)
 
 threading.Thread(target=monitor_channel, daemon=True).start()
