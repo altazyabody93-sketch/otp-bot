@@ -255,6 +255,18 @@ platform_names = {
     'twitter': 'تويتر/X'
 }
 
+# ألوان المنصات (hex) لاستخدامها في CSS/JavaScript
+platform_colors = {
+    'whatsapp': '#25D366',
+    'telegram': '#0088cc',
+    'tiktok': '#000000',
+    'facebook': '#1877f2',
+    'instagram': '#E4405F',
+    'snapchat': '#FFFC00',
+    'google': '#4285F4',
+    'twitter': '#1DA1F2'
+}
+
 main_html = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
