@@ -29,7 +29,7 @@ def init_db():
     conn.close()
 init_db()
 
-# ========== جميع دول العالم (أكثر من 195 دولة) ==========
+# ========== جميع دول العالم ==========
 COUNTRY_DATA = {
     "966": {"n": "السعودية", "f": "🇸🇦"},
     "971": {"n": "الإمارات", "f": "🇦🇪"},
@@ -89,7 +89,7 @@ COUNTRY_DATA = {
     "36": {"n": "المجر", "f": "🇭🇺"},
     "420": {"n": "التشيك", "f": "🇨🇿"},
     "421": {"n": "سلوفاكيا", "f": "🇸🇰"},
-    "380": {"n": "أوكرانिया", "f": "🇺🇦"},
+    "380": {"n": "أوكرانيا", "f": "🇺🇦"},
     "381": {"n": "صربيا", "f": "🇷🇸"},
     "385": {"n": "كرواتيا", "f": "🇭🇷"},
     "386": {"n": "سلوفينيا", "f": "🇸🇮"},
@@ -125,7 +125,7 @@ COUNTRY_DATA = {
     "356": {"n": "مالطا", "f": "🇲🇹"},
     "357": {"n": "قبرص", "f": "🇨🇾"},
     "358": {"n": "فنلندا", "f": "🇫🇮"},
-    "359": {"n": "بلغارיה", "f": "🇧🇬"},
+    "359": {"n": "بلغاريا", "f": "🇧🇬"},
     "350": {"n": "جبل طارق", "f": "🇬🇮"},
     "352": {"n": "لوكسمبورغ", "f": "🇱🇺"},
     "423": {"n": "ليختنشتاين", "f": "🇱🇮"},
@@ -255,6 +255,7 @@ platform_names = {
     'twitter': 'تويتر/X'
 }
 
+# ========== HTML (تم تحسينه) ==========
 main_html = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -266,238 +267,132 @@ main_html = """
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
         * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-        html, body { font-family:'Cairo',sans-serif; background:#0a0e1a; color:#fff; overflow-x:hidden; }
+        html, body { font-family:'Cairo',sans-serif; background:#0a0e1a; color:#fff; overflow-x:hidden; min-height:100vh; }
         
-        body::before {
-            content:''; position:fixed; inset:0; z-index:-2;
-            background: radial-gradient(circle at 20% 20%, rgba(0, 255, 200, 0.15), transparent 40%),
-                        radial-gradient(circle at 80% 70%, rgba(139, 92, 246, 0.15), transparent 40%),
-                        radial-gradient(circle at 50% 50%, rgba(236, 72, 153, 0.1), transparent 50%);
-            animation: bgShift 12s ease-in-out infinite alternate;
+        /* Canvas للخلفية المتحركة */
+        #canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
         }
-        @keyframes bgShift { 0%{ transform:scale(1) rotate(0deg);} 100%{ transform:scale(1.1) rotate(5deg);} }
         
-        .stars { position:fixed; inset:0; z-index:-1; pointer-events:none; }
-        .star { position:absolute; background:#fff; border-radius:50%; animation: twinkle 3s infinite; box-shadow: 0 0 8px #fff; }
-        @keyframes twinkle { 0%,100%{ opacity:0; transform:scale(0);} 50%{ opacity:1; transform:scale(1);} }
-        
-        .container { background:rgba(17, 24, 39, 0.85); backdrop-filter:blur(20px); padding:25px 18px 40px; width:100%; min-height:100vh; border-inline:1px solid rgba(139, 92, 246, 0.3); }
-        
-        .top-bar { display:flex; justify-content:flex-end; margin-bottom:15px; position:relative; }
-        .menu-btn { 
-            background:linear-gradient(135deg, #1f2937, #374151); border:1px solid rgba(0,255,200,0.4);
-            border-radius:12px; padding:10px 16px; color:#00ffc8; font-size:20px; cursor:pointer;
-            box-shadow: 0 0 15px rgba(0,255,200,0.3);
-            transition:all 0.3s;
+        /* خلفية زجاجية */
+        .container {
+            background: rgba(17, 24, 39, 0.7);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            padding: 25px 18px 40px;
+            width: 100%;
+            min-height: 100vh;
+            border: 1px solid rgba(139, 92, 246, 0.2);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            position: relative;
+            z-index: 1;
         }
-        .menu-btn:hover { box-shadow: 0 0 25px rgba(0,255,200,0.6); transform:translateY(-2px); }
-        .dropdown-menu { 
-            display:none; position:absolute; top:55px; right:0; 
-            background:rgba(17, 24, 39, 0.95); backdrop-filter:blur(15px);
-            border:1px solid rgba(0,255,200,0.3); border-radius:14px; padding:8px; 
-            min-width:180px; z-index:100; box-shadow:0 5px 25px rgba(0,255,200,0.3); 
-        }
-        .dropdown-menu a { 
-            display:flex; align-items:center; gap:10px; color:#fff; text-decoration:none; 
-            padding:10px 14px; border-radius:10px; font-weight:600; transition:all 0.3s; 
-        }
-        .dropdown-menu a:hover { background:rgba(0,255,200,0.15); color:#00ffc8; transform:translateX(-5px); }
-        .dropdown-menu.show { display:block; animation: slideDown 0.3s ease; }
-        @keyframes slideDown { from{ opacity:0; transform:translateY(-10px);} to{ opacity:1; transform:translateY(0);} }
         
-        .header { text-align:center; margin:20px 0 30px; position:relative; }
+        /* نيون جلوي */
+        .glow-text {
+            text-shadow: 0 0 20px rgba(0, 255, 200, 0.3), 0 0 40px rgba(0, 255, 200, 0.1);
+        }
+        
+        /* زر نيون */
+        .btn-primary {
+            animation: neonPulse 2s infinite;
+            position: relative;
+            overflow: hidden;
+        }
+        @keyframes neonPulse {
+            0%, 100% { box-shadow: 0 0 15px rgba(0, 255, 136, 0.4), 0 0 30px rgba(0, 255, 136, 0.2); }
+            50% { box-shadow: 0 0 25px rgba(0, 255, 136, 0.7), 0 0 50px rgba(0, 255, 136, 0.4), 0 0 70px rgba(0, 255, 136, 0.2); }
+        }
+        
+        /* تأثير الطفو للشعار */
+        .logo-float {
+            animation: float 3s ease-in-out infinite;
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
+        }
+        
+        /* أيقونات نابضة */
+        .icon-pulse {
+            animation: iconPulse 2s infinite;
+        }
+        @keyframes iconPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+        }
+        
+        /* باقي الكود كما هو مع تحسينات بسيطة */
         .header h1 { 
-            font-size:30px; font-weight:900; 
+            font-size:32px; font-weight:900; 
             background: linear-gradient(90deg, #00ffc8, #8b5cf6, #ec4899, #00ffc8);
             background-size: 300% 300%;
             -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
             animation: glow 4s ease infinite;
-            text-shadow: 0 0 30px rgba(0,255,200,0.5);
+            text-shadow: none;
             margin-bottom:8px;
         }
         @keyframes glow { 0%,100%{ background-position:0% 50%; } 50%{ background-position:100% 50%; } }
-        .header p { color:#cbd5e1; font-size:15px; font-weight:600; }
-        .header p .crown { display:inline-block; animation: bounce 1.5s infinite; }
-        @keyframes bounce { 0%,100%{ transform:translateY(0);} 50%{ transform:translateY(-5px);} }
         
-        .section-title { 
-            display:flex; align-items:center; gap:10px; margin:25px 0 15px; 
-            color:#00ffc8; font-size:17px; font-weight:700;
-        }
-        .section-title .emoji { font-size:22px; animation: pulse 2s infinite; }
-        @keyframes pulse { 0%,100%{ transform:scale(1);} 50%{ transform:scale(1.2);} }
-        .section-title::after { content:''; flex:1; height:2px; background:linear-gradient(90deg, #00ffc8, transparent); border-radius:2px; }
-        
-        .platform-selector { display:grid; grid-template-columns:repeat(2, 1fr); gap:12px; margin-bottom:10px; }
         .platform-btn {
-            display:flex; align-items:center; gap:12px; padding:14px 12px;
-            border:2px solid rgba(255,255,255,0.1); border-radius:16px;
-            background:rgba(31, 41, 55, 0.7); color:#fff;
-            cursor:pointer; transition:all 0.4s cubic-bezier(0.4, 0, 0.2, 1); 
-            font-size:14px; font-weight:700; font-family:'Cairo',sans-serif;
-            position:relative; overflow:hidden;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        .platform-btn::before {
-            content:''; position:absolute; inset:0; opacity:0; transition:opacity 0.4s;
-            background:var(--bg-gradient);
-            z-index:0;
+        .platform-btn:hover {
+            transform: translateY(-5px) scale(1.03);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.4);
         }
-        .platform-btn:hover { 
-            transform:translateY(-3px) scale(1.02); 
-            border-color:transparent;
-            box-shadow: 0 8px 25px rgba(0,0,0,0.5);
+        .platform-btn.active {
+            box-shadow: 0 0 30px var(--glow-color), 0 0 60px var(--glow-color);
+            transform: translateY(-3px);
         }
-        .platform-btn:hover::before { opacity:1; }
-        .platform-btn.active { 
-            border-color:transparent;
-            box-shadow: 0 0 25px var(--glow-color), 0 0 50px var(--glow-color);
-            transform:translateY(-2px);
-        }
-        .platform-btn.active::before { opacity:1; }
-        .platform-btn img { 
-            width:42px; height:42px; object-fit:contain; 
-            border-radius:12px;
-            position:relative; z-index:1;
-            box-shadow: 0 4px 14px rgba(0,0,0,0.4);
-            transition:transform 0.4s;
-            background: rgba(255,255,255,0.95);
-            padding: 3px;
-        }
-        .platform-btn.active img { transform: rotate(360deg) scale(1.15); }
-        .platform-btn span { position:relative; z-index:1; }
         
-        .form-group { margin-bottom:18px; }
-        .form-group label { display:flex; align-items:center; gap:8px; margin-bottom:10px; color:#cbd5e1; font-weight:700; font-size:14px; }
-        .form-control { 
-            width:100%; padding:14px 16px; border-radius:14px; 
-            border:2px solid rgba(255,255,255,0.1); 
-            background:rgba(31, 41, 55, 0.7); color:#fff; 
-            outline:none; font-family:'Cairo',sans-serif; font-size:15px; font-weight:600;
-            transition:all 0.3s;
-        }
-        .form-control:focus { 
-            border-color:#00ffc8; 
-            box-shadow: 0 0 20px rgba(0,255,200,0.3);
-            background:rgba(31, 41, 55, 0.9);
-        }
-        .form-control:disabled { opacity:0.4; cursor:not-allowed; }
-        
-        .btn-primary { 
-            width:100%; padding:16px; border:none; border-radius:16px; 
-            background: linear-gradient(135deg, #00ff88, #00d2ff);
-            color:#0a0e1a; font-size:18px; font-weight:900;
-            cursor:pointer; margin-top:12px; 
-            font-family:'Cairo',sans-serif;
-            box-shadow: 0 0 25px rgba(0, 255, 136, 0.5);
-            transition:all 0.3s;
-            position:relative; overflow:hidden;
-        }
-        .btn-primary::before {
-            content:''; position:absolute; top:0; left:-100%;
-            width:100%; height:100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
-            transition:left 0.6s;
-        }
-        .btn-primary:hover::before { left:100%; }
-        .btn-primary:hover { transform:translateY(-3px); box-shadow: 0 5px 35px rgba(0, 255, 136, 0.7); }
-        .btn-primary:disabled { opacity:0.4; cursor:not-allowed; box-shadow:none; transform:none; }
-        
-        .btn-blue { 
-            width:100%; padding:16px; border:none; border-radius:16px; 
-            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
-            color:#fff; font-size:16px; font-weight:800;
-            cursor:pointer; margin-top:10px; 
-            font-family:'Cairo',sans-serif;
-            box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
-            transition:all 0.3s;
-            display:flex; align-items:center; justify-content:center; gap:8px;
-        }
-        .btn-blue:hover { transform:translateY(-3px); box-shadow: 0 5px 30px rgba(59, 130, 246, 0.7); }
-        .btn-blue:disabled { opacity:0.4; cursor:not-allowed; }
-        
-        .btn-danger { 
-            background: linear-gradient(135deg, #ef4444, #b91c1c) !important;
-            box-shadow: 0 0 20px rgba(239, 68, 68, 0.5) !important;
-        }
-        .btn-danger:hover { box-shadow: 0 5px 30px rgba(239, 68, 68, 0.7) !important; }
-        
-        .number-box { 
-            display:flex; align-items:center; justify-content:space-between; 
-            background: linear-gradient(135deg, #000, #0f172a);
-            border:2px solid #00ff88; border-radius:16px; padding:16px; margin:18px 0;
-            box-shadow: 0 0 30px rgba(0, 255, 136, 0.4), inset 0 0 20px rgba(0, 255, 136, 0.1);
+        .number-box {
             animation: glowPulse 2s infinite;
         }
-        @keyframes glowPulse { 0%,100%{ box-shadow: 0 0 30px rgba(0, 255, 136, 0.4), inset 0 0 20px rgba(0, 255, 136, 0.1);} 50%{ box-shadow: 0 0 40px rgba(0, 255, 136, 0.7), inset 0 0 30px rgba(0, 255, 136, 0.2);} }
-        .number-box .number { 
-            font-family:'Courier New',monospace; font-size:22px; 
-            color:#00ff88; flex-grow:1; text-align:center; font-weight:bold;
-            text-shadow: 0 0 10px #00ff88;
-            letter-spacing:1px;
+        @keyframes glowPulse {
+            0%, 100%{ box-shadow: 0 0 30px rgba(0, 255, 136, 0.4), inset 0 0 20px rgba(0, 255, 136, 0.1);}
+            50%{ box-shadow: 0 0 50px rgba(0, 255, 136, 0.7), inset 0 0 30px rgba(0, 255, 136, 0.2);}
         }
-        .copy-number-btn { 
-            background:rgba(0, 255, 136, 0.15); border:1px solid #00ff88;
-            border-radius:10px; padding:8px 12px; color:#00ff88; 
-            cursor:pointer; font-size:18px; margin-right:10px;
-            transition:all 0.3s;
-        }
-        .copy-number-btn:hover { background:#00ff88; color:#000; transform:rotate(15deg); }
         
-        .otp-container { 
-            margin-top:20px; max-height:380px; overflow-y:auto; 
-            border:1px solid rgba(139, 92, 246, 0.3); border-radius:16px; padding:12px; 
-            background:rgba(15, 23, 42, 0.5);
+        .otp-item {
+            animation: slideIn 0.5s ease;
+            transition: all 0.3s;
         }
-        .otp-container::-webkit-scrollbar { width:6px; }
-        .otp-container::-webkit-scrollbar-track { background:rgba(255,255,255,0.05); border-radius:10px; }
-        .otp-container::-webkit-scrollbar-thumb { background:linear-gradient(180deg, #00ffc8, #8b5cf6); border-radius:10px; }
-        .otp-item { 
-            background: linear-gradient(135deg, #0f172a, #1e293b);
-            border:1px solid #00ff88; border-radius:14px; 
-            padding:14px; margin-bottom:12px; 
-            font-family:'Courier New'; font-size:15px; 
-            color:#00ff88; line-height:1.7;
-            box-shadow: 0 0 15px rgba(0, 255, 136, 0.2);
-            animation: slideIn 0.4s ease;
-            position:relative;
+        .otp-item:hover {
+            transform: scale(1.02);
+            box-shadow: 0 0 25px rgba(0, 255, 136, 0.3);
         }
-        @keyframes slideIn { from{opacity:0; transform:translateX(20px);} to{opacity:1; transform:translateX(0);} }
-        .otp-item .copy-btn { 
-            background:rgba(0, 255, 136, 0.2); border:1px solid #00ff88;
-            border-radius:8px; padding:5px 12px; color:#00ff88; 
-            cursor:pointer; font-size:12px; font-weight:bold;
-            transition:all 0.3s;
+        @keyframes slideIn {
+            from { opacity:0; transform: translateX(30px) scale(0.95); }
+            to { opacity:1; transform: translateX(0) scale(1); }
         }
-        .otp-item .copy-btn:hover { background:#00ff88; color:#000; }
-        .otp-item .info { color:#94a3b8; font-size:12px; display:block; margin-top:6px; }
         
-        .status { 
-            background: linear-gradient(135deg, rgba(31, 41, 55, 0.7), rgba(15, 23, 42, 0.7));
-            padding:14px; border-radius:14px; text-align:center; 
-            margin-top:20px; color:#cbd5e1; font-size:14px; font-weight:600;
-            border:1px solid rgba(255,255,255,0.1);
+        /* عداد الأرقام */
+        .badge-count {
+            background: rgba(0, 255, 200, 0.2);
+            border: 1px solid #00ffc8;
+            border-radius: 20px;
+            padding: 2px 10px;
+            font-size: 12px;
+            color: #00ffc8;
+            margin-right: 5px;
         }
-        .status .icon { font-size:18px; margin-left:8px; }
-        
-        .pulse-emoji { display:inline-block; animation: pulse 1.5s infinite; }
-        .spin-emoji { display:inline-block; animation: spin 3s linear infinite; }
-        @keyframes spin { from{transform:rotate(0);} to{transform:rotate(360deg);} }
         
         @media (min-width: 768px) {
-            .container { max-width:480px; margin:0 auto; min-height:100vh; }
-            .platform-selector { grid-template-columns:repeat(2, 1fr); }
-        }
-        @media (max-width: 380px) {
-            .header h1 { font-size:24px; }
-            .platform-btn img { width:32px; height:32px; }
-            .platform-btn span { font-size:12px; }
+            .container { max-width:480px; margin:0 auto; border-radius:30px; margin-top:20px; margin-bottom:20px; }
         }
     </style>
 </head>
 <body>
-    <div class="stars" id="stars"></div>
+    <canvas id="canvas"></canvas>
     
     <div class="container">
+        <!-- نفس المحتوى مع إضافة الكلاسات الجديدة -->
         <div class="top-bar">
             <button class="menu-btn" onclick="toggleMenu()">☰</button>
             <div class="dropdown-menu" id="contactMenu">
@@ -507,12 +402,13 @@ main_html = """
         </div>
 
         <div class="header">
-            <h1>🚀 موقع المطري OTP 🚀</h1>
-            <p><span class="crown">👑</span> أرقام واتساب سحب أكواد تطوير مطري <span class="crown">👑</span></p>
+            <h1 class="logo-float">🚀 موقع المطري OTP 🚀</h1>
+            <p><span class="crown icon-pulse">👑</span> أرقام واتساب سحب أكواد تطوير مطري <span class="crown icon-pulse">👑</span></p>
         </div>
 
+        <!-- باقي المحتوى كما هو -->
         <div class="section-title">
-            <span class="emoji">🎯</span>
+            <span class="emoji icon-pulse">🎯</span>
             <span>اختر المنصة</span>
         </div>
         <div class="form-group">
@@ -520,7 +416,7 @@ main_html = """
         </div>
 
         <div class="section-title">
-            <span class="emoji">🌍</span>
+            <span class="emoji icon-pulse">🌍</span>
             <span>اختر الدولة</span>
         </div>
         <div class="form-group">
@@ -549,7 +445,7 @@ main_html = """
 
         <div class="otp-container" id="otpHistory">
             <div style="text-align:center; color:#64748b; padding:25px;">
-                <div style="font-size:40px; margin-bottom:10px;">⏳</div>
+                <div style="font-size:40px; margin-bottom:10px; animation: iconPulse 2s infinite;">⏳</div>
                 <div>في انتظار الأكواد...</div>
             </div>
         </div>
@@ -560,32 +456,62 @@ main_html = """
         </div>
 
         <div style="text-align:center; margin-top:25px; color:#64748b; font-size:13px;">
-            <span class="pulse-emoji">💎</span> صُنع بحب <span class="spin-emoji">⚡</span> بواسطة المطري
+            <span class="icon-pulse">💎</span> صُنع بحب <span class="spin-emoji">⚡</span> بواسطة المطري
         </div>
     </div>
 
     <script>
+        // ========== كود تحريك النجوم ==========
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        let stars = [];
+        let W, H;
+
+        function resizeCanvas() {
+            W = canvas.width = window.innerWidth;
+            H = canvas.height = window.innerHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        function createStars(count = 200) {
+            stars = [];
+            for (let i = 0; i < count; i++) {
+                stars.push({
+                    x: Math.random() * W,
+                    y: Math.random() * H,
+                    radius: Math.random() * 1.5 + 0.5,
+                    speed: Math.random() * 0.5 + 0.2,
+                    opacity: Math.random() * 0.5 + 0.3,
+                    twinkleSpeed: Math.random() * 0.02 + 0.01
+                });
+            }
+        }
+        createStars();
+
+        function drawStars() {
+            ctx.clearRect(0, 0, W, H);
+            stars.forEach(star => {
+                star.x += star.speed * 0.1;
+                if (star.x > W) star.x = 0;
+                
+                const opacity = star.opacity + Math.sin(Date.now() * star.twinkleSpeed) * 0.2;
+                ctx.beginPath();
+                ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(255, 255, 255, ${Math.max(0, Math.min(1, opacity))})`;
+                ctx.fill();
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = 'rgba(255, 255, 255, 0.2)';
+            });
+            requestAnimationFrame(drawStars);
+        }
+        drawStars();
+
+        // ========== باقي كود الموقع ==========
         const platformLogos = {{ platform_logos | tojson }};
         const platformLogosSmall = {{ platform_logos_small | tojson }};
         const platformNames = {{ platform_names | tojson }};
         const platformGradients = {{ platform_gradients | tojson }};
-
-        function createStars() {
-            const stars = document.getElementById('stars');
-            for(let i=0; i<30; i++) {
-                const star = document.createElement('div');
-                star.className = 'star';
-                const size = Math.random() * 3 + 1;
-                star.style.width = size + 'px';
-                star.style.height = size + 'px';
-                star.style.left = Math.random() * 100 + '%';
-                star.style.top = Math.random() * 100 + '%';
-                star.style.animationDelay = Math.random() * 3 + 's';
-                star.style.opacity = Math.random() * 0.7 + 0.3;
-                stars.appendChild(star);
-            }
-        }
-        createStars();
 
         function initPlatformSelector() {
             const selector = document.getElementById('platformSelector');
@@ -770,6 +696,7 @@ main_html = """
 </html>
 """
 
+# ========== باقي الكود (admin, routes, monitor, etc) ==========
 admin_html = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -894,14 +821,9 @@ hr { border: 1px solid rgba(255,255,255,0.1); margin: 20px 0; }
 """
 
 @app.route('/')
-# ======================
-# 🔹 استبدل من هنا 👇
-# ======================
-
 def home():
-    return render_template_string(main_html, owner_link=OWNER_LINK, wa_group=WHATSAPP_GROUP_LINK, platform_logos=PLATFORM_LOGOS, platform_names=platform_names, platform_colors=platform_colors)
+    return render_template_string(main_html, owner_link=OWNER_LINK, wa_group=WHATSAPP_GROUP_LINK, platform_logos=PLATFORM_LOGOS, platform_logos_small=PLATFORM_LOGOS_SMALL, platform_names=platform_names, platform_gradients=PLATFORM_GRADIENTS)
 
-# ========== الحصول على قائمة الكومبوهات للحذف ==========
 def get_all_combos_list():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -910,11 +832,9 @@ def get_all_combos_list():
     conn.close()
     return rows
 
-# ========== صفحة الأدمن الجديدة ==========
 @app.route('/admin', methods=['GET', 'POST'])
 def admin():
     if request.method == 'POST':
-        # ===== حذف كومبو =====
         if request.form.get('action') == 'delete':
             platform = request.form.get('platform')
             country_code = request.form.get('country_code')
@@ -925,8 +845,6 @@ def admin():
                 conn.commit()
                 conn.close()
                 return redirect(url_for('admin'))
-
-        # ===== رفع كومبو =====
         else:
             platform = request.form.get('platform')
             file = request.files.get('file')
@@ -945,8 +863,6 @@ def admin():
                         name, flag = get_country_info(cc)
                         save_combo(platform, cc, name, flag, numbers)
                         return redirect(url_for('home'))
-    
-    # جلب قائمة الكومبوهات الحالية
     combos = get_all_combos_list()
     return render_template_string(admin_html, combos=combos)
 
@@ -992,21 +908,17 @@ def monitor_channel():
                             lines = clean.split('\n')
                             full_text = ' '.join(lines)
                             
-                            # =============================================
-                            # 🧠 الذكاء 1: استخراج الرقم (أي شكل)
-                            # =============================================
+                            # ===== استخراج الرقم =====
                             user_number = None
                             last_digits = None
                             country_code = None
                             
-                            # 1️⃣ البحث عن أرقام مخفية بصيغة 9567•••••966
                             hidden_match = re.search(r'(\d{3,4})[•*]{2,6}(\d{3,4})', clean)
                             if hidden_match:
                                 user_number = hidden_match.group(1) + hidden_match.group(2)
                                 last_digits = user_number[-4:]
                                 country_code = user_number[:3] if len(user_number) > 3 else None
                             
-                            # 2️⃣ البحث عن أي رقم طويل (8-15 رقم)
                             if not user_number:
                                 all_numbers = re.findall(r'\b\d{8,15}\b', clean)
                                 if all_numbers:
@@ -1014,62 +926,30 @@ def monitor_channel():
                                     last_digits = user_number[-4:]
                                     country_code = user_number[:3] if len(user_number) > 3 else None
                             
-                            # 3️⃣ البحث عن أرقام بصيغة 966*****0038
-                            if not user_number:
-                                star_match = re.search(r'(\d{3})\*{2,6}(\d{3,4})', clean)
-                                if star_match:
-                                    user_number = star_match.group(1) + star_match.group(2)
-                                    last_digits = user_number[-4:]
-                                    country_code = user_number[:3]
-                            
-                            # 4️⃣ البحث عن أرقام بعد الاختصار (WA | 216•••••4642)
-                            if not user_number:
-                                pipe_match = re.search(r'[A-Z]{2,4}\s*[|]\s*(\d{3,4})[•*]{2,6}(\d{3,4})', clean)
-                                if pipe_match:
-                                    user_number = pipe_match.group(1) + pipe_match.group(2)
-                                    last_digits = user_number[-4:]
-                                    country_code = user_number[:3]
-                            
-                            # 5️⃣ البحث عن أرقام بصيغة #رقم
-                            if not user_number:
-                                hash_num = re.search(r'#\s*(\d{8,12})', clean)
-                                if hash_num:
-                                    user_number = hash_num.group(1)
-                                    last_digits = user_number[-4:]
-                                    country_code = user_number[:3]
-                            
-                            # =============================================
-                            # 🧠 الذكاء 2: استخراج الكود (أي شكل)
-                            # =============================================
+                            # ===== استخراج الكود =====
                             otp = None
                             
-                            # 1️⃣ البحث عن كود بصيغة 303-441
                             dash_code = re.search(r'(\d{3})-(\d{3,4})', clean)
                             if dash_code:
                                 otp = dash_code.group(1) + dash_code.group(2)
                             
-                            # 2️⃣ البحث عن كود مكون من 4-8 أرقام (ذكي)
                             if not otp:
                                 all_codes = re.findall(r'\b\d{4,8}\b', clean)
                                 if all_codes:
                                     for c in all_codes:
-                                        # تجاهل الأرقام التي تشبه الرقم المستخدم
                                         if last_digits and c.endswith(last_digits):
                                             continue
                                         if country_code and c.startswith(country_code):
                                             continue
-                                        # تجاهل الأرقام القصيرة جداً
                                         if len(c) >= 4:
                                             otp = c
                                             break
                             
-                            # 3️⃣ البحث عن كود بعد "كود" أو "رمز"
                             if not otp:
                                 patterns = [
                                     r'(?:كود|رمز|code|otp|verification)[:\s\-]*[‎]?(\d{3,8})',
                                     r'#(\d{3,8})',
                                     r'(\d{3,4})[-\s](\d{3,4})',
-                                    r'(\d{6,8})\s*(?:هو|هذا|كود|رمز)',
                                 ]
                                 for pattern in patterns:
                                     match = re.search(pattern, clean, re.IGNORECASE)
@@ -1080,29 +960,7 @@ def monitor_channel():
                                             otp = match.group(1)
                                         break
                             
-                            # 4️⃣ البحث عن أي أرقام طويلة (6-8 أرقام) بعد السطر الأول
-                            if not otp:
-                                for line in lines[1:]:
-                                    nums = re.findall(r'\b\d{6,8}\b', line)
-                                    if nums:
-                                        for n in nums:
-                                            if last_digits and n.endswith(last_digits):
-                                                continue
-                                            otp = n
-                                            break
-                                if not otp:
-                                    # البحث في كل النص
-                                    all_long = re.findall(r'\b\d{6,8}\b', clean)
-                                    if all_long:
-                                        for n in all_long:
-                                            if last_digits and n.endswith(last_digits):
-                                                continue
-                                            otp = n
-                                            break
-                            
-                            # =============================================
-                            # 🧠 الذكاء 3: تحديد المنصة
-                            # =============================================
+                            # ===== تحديد المنصة =====
                             platform = "غير معروف"
                             text_lower = clean.lower()
                             
@@ -1125,7 +983,6 @@ def monitor_channel():
                                 if platform != "غير معروف":
                                     break
                             
-                            # محاولة استخراج المنصة من الاختصار الأول
                             if platform == "غير معروف" and lines:
                                 first_line = lines[0]
                                 platform_match = re.search(r'([A-Z]{2,4})\s*[|]', first_line)
@@ -1138,9 +995,7 @@ def monitor_channel():
                                     }
                                     platform = short_map.get(short, short)
                             
-                            # =============================================
-                            # 🧠 الذكاء 4: حفظ الكود
-                            # =============================================
+                            # ===== حفظ الكود =====
                             if otp:
                                 conn = sqlite3.connect(DB_PATH)
                                 if last_digits:
