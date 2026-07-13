@@ -819,6 +819,10 @@ main_html = """
         const platformNames = {{ platform_names | tojson }};
         const platformGradients = {{ platform_gradients | tojson }};
         const platformKeysMap = {{ platform_keys | tojson }};
+        
+        
+        
+        
 
         function createStars() {
             const stars = document.getElementById('stars');
