@@ -29,7 +29,7 @@ def init_db():
     conn.close()
 init_db()
 
-# ========== جميع دول العالم (أكثر من 195 دولة) ==========
+# ========== جميع دول العالم ==========
 COUNTRY_DATA = {
     "966": {"n": "السعودية", "f": "🇸🇦"},
     "971": {"n": "الإمارات", "f": "🇦🇪"},
@@ -89,7 +89,7 @@ COUNTRY_DATA = {
     "36": {"n": "المجر", "f": "🇭🇺"},
     "420": {"n": "التشيك", "f": "🇨🇿"},
     "421": {"n": "سلوفاكيا", "f": "🇸🇰"},
-    "380": {"n": "أوكرانिया", "f": "🇺🇦"},
+    "380": {"n": "أوكرانيا", "f": "🇺🇦"},
     "381": {"n": "صربيا", "f": "🇷🇸"},
     "385": {"n": "كرواتيا", "f": "🇭🇷"},
     "386": {"n": "سلوفينيا", "f": "🇸🇮"},
@@ -125,7 +125,7 @@ COUNTRY_DATA = {
     "356": {"n": "مالطا", "f": "🇲🇹"},
     "357": {"n": "قبرص", "f": "🇨🇾"},
     "358": {"n": "فنلندا", "f": "🇫🇮"},
-    "359": {"n": "بلغارיה", "f": "🇧🇬"},
+    "359": {"n": "بلغاريا", "f": "🇧🇬"},
     "350": {"n": "جبل طارق", "f": "🇬🇮"},
     "352": {"n": "لوكسمبورغ", "f": "🇱🇺"},
     "423": {"n": "ليختنشتاين", "f": "🇱🇮"},
@@ -170,17 +170,8 @@ COUNTRY_DATA = {
     "850": {"n": "كوريا الشمالية", "f": "🇰🇵"},
     "852": {"n": "هونغ كونغ", "f": "🇭🇰"},
     "853": {"n": "ماكاو", "f": "🇲🇴"},
-    "855": {"n": "كمبوديا", "f": "🇰🇭"},
-    "856": {"n": "لاوس", "f": "🇱🇦"},
     "880": {"n": "بنغلاديش", "f": "🇧🇩"},
     "886": {"n": "تايوان", "f": "🇹🇼"},
-    "960": {"n": "جزر المالديف", "f": "🇲🇻"},
-    "961": {"n": "لبنان", "f": "🇱🇧"},
-    "962": {"n": "الأردن", "f": "🇯🇴"},
-    "963": {"n": "سوريا", "f": "🇸🇾"},
-    "964": {"n": "العراق", "f": "🇮🇶"},
-    "965": {"n": "الكويت", "f": "🇰🇼"},
-    "967": {"n": "اليمن", "f": "🇾🇪"},
 }
 
 def get_country_info(code):
@@ -265,9 +256,40 @@ main_html = """
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
+        /* ============ [ميزة 4] متغيرات الوضع الليلي/النهاري ============ */
+        :root {
+            --bg-base: #0a0e1a;
+            --bg-container: rgba(17, 24, 39, 0.85);
+            --bg-card: rgba(31, 41, 55, 0.7);
+            --text-main: #fff;
+            --text-muted: #cbd5e1;
+            --text-soft: #94a3b8;
+            --border-soft: rgba(255,255,255,0.1);
+            --accent: #00ffc8;
+            --accent-2: #8b5cf6;
+            --accent-3: #ec4899;
+            --otp-glow: rgba(0, 255, 136, 0.4);
+            --star-color: #fff;
+        }
+        body.light-mode {
+            --bg-base: #f0f4f8;
+            --bg-container: rgba(255, 255, 255, 0.85);
+            --bg-card: rgba(255, 255, 255, 0.9);
+            --text-main: #0f172a;
+            --text-muted: #475569;
+            --text-soft: #64748b;
+            --border-soft: rgba(0,0,0,0.1);
+            --accent: #0891b2;
+            --accent-2: #7c3aed;
+            --accent-3: #db2777;
+            --otp-glow: rgba(8, 145, 178, 0.3);
+            --star-color: #facc15;
+        }
+
         * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-        html, body { font-family:'Cairo',sans-serif; background:#0a0e1a; color:#fff; overflow-x:hidden; }
+        html, body { font-family:'Cairo',sans-serif; background:var(--bg-base); color:var(--text-main); overflow-x:hidden; transition: background 0.5s, color 0.5s; }
         
+        /* ============ [ميزة 6] خلفية متحركة + نجوم ============ */
         body::before {
             content:''; position:fixed; inset:0; z-index:-2;
             background: radial-gradient(circle at 20% 20%, rgba(0, 255, 200, 0.15), transparent 40%),
@@ -275,40 +297,51 @@ main_html = """
                         radial-gradient(circle at 50% 50%, rgba(236, 72, 153, 0.1), transparent 50%);
             animation: bgShift 12s ease-in-out infinite alternate;
         }
+        body.light-mode::before {
+            background: radial-gradient(circle at 20% 20%, rgba(8, 145, 178, 0.15), transparent 40%),
+                        radial-gradient(circle at 80% 70%, rgba(124, 58, 237, 0.15), transparent 40%),
+                        radial-gradient(circle at 50% 50%, rgba(219, 39, 119, 0.1), transparent 50%);
+        }
         @keyframes bgShift { 0%{ transform:scale(1) rotate(0deg);} 100%{ transform:scale(1.1) rotate(5deg);} }
         
         .stars { position:fixed; inset:0; z-index:-1; pointer-events:none; }
-        .star { position:absolute; background:#fff; border-radius:50%; animation: twinkle 3s infinite; box-shadow: 0 0 8px #fff; }
+        .star { position:absolute; background:var(--star-color); border-radius:50%; animation: twinkle 3s infinite; box-shadow: 0 0 8px var(--star-color); }
         @keyframes twinkle { 0%,100%{ opacity:0; transform:scale(0);} 50%{ opacity:1; transform:scale(1);} }
         
-        .container { background:rgba(17, 24, 39, 0.85); backdrop-filter:blur(20px); padding:25px 18px 40px; width:100%; min-height:100vh; border-inline:1px solid rgba(139, 92, 246, 0.3); }
+        .container { background:var(--bg-container); backdrop-filter:blur(20px); padding:25px 18px 40px; width:100%; min-height:100vh; border-inline:1px solid rgba(139, 92, 246, 0.3); transition: background 0.5s; }
         
-        .top-bar { display:flex; justify-content:flex-end; margin-bottom:15px; position:relative; }
-        .menu-btn { 
+        .top-bar { display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; position:relative; }
+        .top-actions { display:flex; gap:8px; }
+        .menu-btn, .theme-btn { 
             background:linear-gradient(135deg, #1f2937, #374151); border:1px solid rgba(0,255,200,0.4);
-            border-radius:12px; padding:10px 16px; color:#00ffc8; font-size:20px; cursor:pointer;
+            border-radius:12px; padding:10px 16px; color:var(--accent); font-size:20px; cursor:pointer;
             box-shadow: 0 0 15px rgba(0,255,200,0.3);
             transition:all 0.3s;
         }
-        .menu-btn:hover { box-shadow: 0 0 25px rgba(0,255,200,0.6); transform:translateY(-2px); }
+        body.light-mode .menu-btn, body.light-mode .theme-btn {
+            background:linear-gradient(135deg, #ffffff, #e0f2fe); border-color: rgba(8, 145, 178, 0.4);
+            box-shadow: 0 0 15px rgba(8, 145, 178, 0.2);
+        }
+        .menu-btn:hover, .theme-btn:hover { box-shadow: 0 0 25px rgba(0,255,200,0.6); transform:translateY(-2px); }
+        .theme-btn.active { background: var(--accent); color: #0a0e1a; }
         .dropdown-menu { 
             display:none; position:absolute; top:55px; right:0; 
-            background:rgba(17, 24, 39, 0.95); backdrop-filter:blur(15px);
+            background:var(--bg-container); backdrop-filter:blur(15px);
             border:1px solid rgba(0,255,200,0.3); border-radius:14px; padding:8px; 
             min-width:180px; z-index:100; box-shadow:0 5px 25px rgba(0,255,200,0.3); 
         }
         .dropdown-menu a { 
-            display:flex; align-items:center; gap:10px; color:#fff; text-decoration:none; 
+            display:flex; align-items:center; gap:10px; color:var(--text-main); text-decoration:none; 
             padding:10px 14px; border-radius:10px; font-weight:600; transition:all 0.3s; 
         }
-        .dropdown-menu a:hover { background:rgba(0,255,200,0.15); color:#00ffc8; transform:translateX(-5px); }
+        .dropdown-menu a:hover { background:rgba(0,255,200,0.15); color:var(--accent); transform:translateX(-5px); }
         .dropdown-menu.show { display:block; animation: slideDown 0.3s ease; }
         @keyframes slideDown { from{ opacity:0; transform:translateY(-10px);} to{ opacity:1; transform:translateY(0);} }
         
         .header { text-align:center; margin:20px 0 30px; position:relative; }
         .header h1 { 
             font-size:30px; font-weight:900; 
-            background: linear-gradient(90deg, #00ffc8, #8b5cf6, #ec4899, #00ffc8);
+            background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--accent-3), var(--accent));
             background-size: 300% 300%;
             -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
             animation: glow 4s ease infinite;
@@ -316,23 +349,23 @@ main_html = """
             margin-bottom:8px;
         }
         @keyframes glow { 0%,100%{ background-position:0% 50%; } 50%{ background-position:100% 50%; } }
-        .header p { color:#cbd5e1; font-size:15px; font-weight:600; }
+        .header p { color:var(--text-muted); font-size:15px; font-weight:600; }
         .header p .crown { display:inline-block; animation: bounce 1.5s infinite; }
         @keyframes bounce { 0%,100%{ transform:translateY(0);} 50%{ transform:translateY(-5px);} }
         
         .section-title { 
             display:flex; align-items:center; gap:10px; margin:25px 0 15px; 
-            color:#00ffc8; font-size:17px; font-weight:700;
+            color:var(--accent); font-size:17px; font-weight:700;
         }
         .section-title .emoji { font-size:22px; animation: pulse 2s infinite; }
         @keyframes pulse { 0%,100%{ transform:scale(1);} 50%{ transform:scale(1.2);} }
-        .section-title::after { content:''; flex:1; height:2px; background:linear-gradient(90deg, #00ffc8, transparent); border-radius:2px; }
+        .section-title::after { content:''; flex:1; height:2px; background:linear-gradient(90deg, var(--accent), transparent); border-radius:2px; }
         
         .platform-selector { display:grid; grid-template-columns:repeat(2, 1fr); gap:12px; margin-bottom:10px; }
         .platform-btn {
             display:flex; align-items:center; gap:12px; padding:14px 12px;
-            border:2px solid rgba(255,255,255,0.1); border-radius:16px;
-            background:rgba(31, 41, 55, 0.7); color:#fff;
+            border:2px solid var(--border-soft); border-radius:16px;
+            background:var(--bg-card); color:var(--text-main);
             cursor:pointer; transition:all 0.4s cubic-bezier(0.4, 0, 0.2, 1); 
             font-size:14px; font-weight:700; font-family:'Cairo',sans-serif;
             position:relative; overflow:hidden;
@@ -367,28 +400,30 @@ main_html = """
         .platform-btn span { position:relative; z-index:1; }
         
         .form-group { margin-bottom:18px; }
-        .form-group label { display:flex; align-items:center; gap:8px; margin-bottom:10px; color:#cbd5e1; font-weight:700; font-size:14px; }
+        .form-group label { display:flex; align-items:center; gap:8px; margin-bottom:10px; color:var(--text-muted); font-weight:700; font-size:14px; }
         .form-control { 
             width:100%; padding:14px 16px; border-radius:14px; 
-            border:2px solid rgba(255,255,255,0.1); 
-            background:rgba(31, 41, 55, 0.7); color:#fff; 
+            border:2px solid var(--border-soft); 
+            background:var(--bg-card); color:var(--text-main); 
             outline:none; font-family:'Cairo',sans-serif; font-size:15px; font-weight:600;
             transition:all 0.3s;
         }
         .form-control:focus { 
-            border-color:#00ffc8; 
-            box-shadow: 0 0 20px rgba(0,255,200,0.3);
+            border-color:var(--accent); 
+            box-shadow: 0 0 20px var(--otp-glow);
             background:rgba(31, 41, 55, 0.9);
         }
+        body.light-mode .form-control:focus { background:rgba(255, 255, 255, 1); }
         .form-control:disabled { opacity:0.4; cursor:not-allowed; }
         
+        /* ============ [ميزة 6] أزرار نيون ============ */
         .btn-primary { 
             width:100%; padding:16px; border:none; border-radius:16px; 
             background: linear-gradient(135deg, #00ff88, #00d2ff);
             color:#0a0e1a; font-size:18px; font-weight:900;
             cursor:pointer; margin-top:12px; 
             font-family:'Cairo',sans-serif;
-            box-shadow: 0 0 25px rgba(0, 255, 136, 0.5);
+            box-shadow: 0 0 25px rgba(0, 255, 136, 0.6), 0 0 50px rgba(0, 255, 136, 0.3);
             transition:all 0.3s;
             position:relative; overflow:hidden;
         }
@@ -399,7 +434,7 @@ main_html = """
             transition:left 0.6s;
         }
         .btn-primary:hover::before { left:100%; }
-        .btn-primary:hover { transform:translateY(-3px); box-shadow: 0 5px 35px rgba(0, 255, 136, 0.7); }
+        .btn-primary:hover { transform:translateY(-3px); box-shadow: 0 5px 35px rgba(0, 255, 136, 0.8), 0 0 60px rgba(0, 255, 136, 0.5); }
         .btn-primary:disabled { opacity:0.4; cursor:not-allowed; box-shadow:none; transform:none; }
         
         .btn-blue { 
@@ -408,27 +443,27 @@ main_html = """
             color:#fff; font-size:16px; font-weight:800;
             cursor:pointer; margin-top:10px; 
             font-family:'Cairo',sans-serif;
-            box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.6), 0 0 40px rgba(59, 130, 246, 0.3);
             transition:all 0.3s;
             display:flex; align-items:center; justify-content:center; gap:8px;
         }
-        .btn-blue:hover { transform:translateY(-3px); box-shadow: 0 5px 30px rgba(59, 130, 246, 0.7); }
+        .btn-blue:hover { transform:translateY(-3px); box-shadow: 0 5px 30px rgba(59, 130, 246, 0.8), 0 0 50px rgba(59, 130, 246, 0.5); }
         .btn-blue:disabled { opacity:0.4; cursor:not-allowed; }
         
         .btn-danger { 
             background: linear-gradient(135deg, #ef4444, #b91c1c) !important;
-            box-shadow: 0 0 20px rgba(239, 68, 68, 0.5) !important;
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.6), 0 0 40px rgba(239, 68, 68, 0.3) !important;
         }
-        .btn-danger:hover { box-shadow: 0 5px 30px rgba(239, 68, 68, 0.7) !important; }
+        .btn-danger:hover { box-shadow: 0 5px 30px rgba(239, 68, 68, 0.8), 0 0 50px rgba(239, 68, 68, 0.5) !important; }
         
         .number-box { 
             display:flex; align-items:center; justify-content:space-between; 
             background: linear-gradient(135deg, #000, #0f172a);
             border:2px solid #00ff88; border-radius:16px; padding:16px; margin:18px 0;
-            box-shadow: 0 0 30px rgba(0, 255, 136, 0.4), inset 0 0 20px rgba(0, 255, 136, 0.1);
+            box-shadow: 0 0 30px var(--otp-glow), inset 0 0 20px rgba(0, 255, 136, 0.1);
             animation: glowPulse 2s infinite;
         }
-        @keyframes glowPulse { 0%,100%{ box-shadow: 0 0 30px rgba(0, 255, 136, 0.4), inset 0 0 20px rgba(0, 255, 136, 0.1);} 50%{ box-shadow: 0 0 40px rgba(0, 255, 136, 0.7), inset 0 0 30px rgba(0, 255, 136, 0.2);} }
+        @keyframes glowPulse { 0%,100%{ box-shadow: 0 0 30px var(--otp-glow), inset 0 0 20px rgba(0, 255, 136, 0.1);} 50%{ box-shadow: 0 0 40px rgba(0, 255, 136, 0.7), inset 0 0 30px rgba(0, 255, 136, 0.2);} }
         .number-box .number { 
             font-family:'Courier New',monospace; font-size:22px; 
             color:#00ff88; flex-grow:1; text-align:center; font-weight:bold;
@@ -448,18 +483,23 @@ main_html = """
             border:1px solid rgba(139, 92, 246, 0.3); border-radius:16px; padding:12px; 
             background:rgba(15, 23, 42, 0.5);
         }
+        body.light-mode .otp-container { background:rgba(255, 255, 255, 0.6); }
         .otp-container::-webkit-scrollbar { width:6px; }
         .otp-container::-webkit-scrollbar-track { background:rgba(255,255,255,0.05); border-radius:10px; }
-        .otp-container::-webkit-scrollbar-thumb { background:linear-gradient(180deg, #00ffc8, #8b5cf6); border-radius:10px; }
+        .otp-container::-webkit-scrollbar-thumb { background:linear-gradient(180deg, var(--accent), var(--accent-2)); border-radius:10px; }
         .otp-item { 
             background: linear-gradient(135deg, #0f172a, #1e293b);
             border:1px solid #00ff88; border-radius:14px; 
             padding:14px; margin-bottom:12px; 
             font-family:'Courier New'; font-size:15px; 
             color:#00ff88; line-height:1.7;
-            box-shadow: 0 0 15px rgba(0, 255, 136, 0.2);
+            box-shadow: 0 0 15px var(--otp-glow);
             animation: slideIn 0.4s ease;
             position:relative;
+        }
+        body.light-mode .otp-item {
+            background: linear-gradient(135deg, #ffffff, #e0f2fe);
+            color:#0891b2;
         }
         @keyframes slideIn { from{opacity:0; transform:translateX(20px);} to{opacity:1; transform:translateX(0);} }
         .otp-item .copy-btn { 
@@ -469,13 +509,47 @@ main_html = """
             transition:all 0.3s;
         }
         .otp-item .copy-btn:hover { background:#00ff88; color:#000; }
-        .otp-item .info { color:#94a3b8; font-size:12px; display:block; margin-top:6px; }
+        .otp-item .info { color:var(--text-soft); font-size:12px; display:block; margin-top:6px; }
         
+        /* ============ [ميزة 2] عداد تنازلي 60 ثانية ============ */
+        .countdown-timer {
+            display:inline-block; margin-right:10px; padding:3px 10px;
+            background:rgba(0, 255, 136, 0.15); border:1px solid #00ff88;
+            border-radius:20px; font-size:12px; font-weight:bold;
+            color:#00ff88; font-family:'Courier New', monospace;
+        }
+        .countdown-timer.expired {
+            background:rgba(239, 68, 68, 0.15); border-color:#ef4444; color:#ef4444;
+        }
+        .countdown-timer.warning {
+            background:rgba(245, 158, 11, 0.15); border-color:#f59e0b; color:#f59e0b;
+        }
+
+        /* ============ [ميزة 2] قسم الأكواد القديمة ============ */
+        .old-otp-item {
+            opacity:0.6;
+            background: linear-gradient(135deg, #1a1f2e, #0f172a) !important;
+            border:1px solid #475569 !important;
+            color:#94a3b8 !important;
+        }
+        body.light-mode .old-otp-item {
+            background: linear-gradient(135deg, #f1f5f9, #e2e8f0) !important;
+            color:#64748b !important;
+        }
+        .old-otp-item .countdown-timer { display:none; }
+        .old-section-title { color:#94a3b8 !important; }
+        .old-section-title::after { background: linear-gradient(90deg, #94a3b8, transparent) !important; }
+        body.light-mode .old-section-title { color:#64748b !important; }
+        body.light-mode .old-section-title::after { background: linear-gradient(90deg, #64748b, transparent) !important; }
+
         .status { 
             background: linear-gradient(135deg, rgba(31, 41, 55, 0.7), rgba(15, 23, 42, 0.7));
             padding:14px; border-radius:14px; text-align:center; 
-            margin-top:20px; color:#cbd5e1; font-size:14px; font-weight:600;
-            border:1px solid rgba(255,255,255,0.1);
+            margin-top:20px; color:var(--text-muted); font-size:14px; font-weight:600;
+            border:1px solid var(--border-soft);
+        }
+        body.light-mode .status {
+            background: linear-gradient(135deg, #ffffff, #e0f2fe);
         }
         .status .icon { font-size:18px; margin-left:8px; }
         
@@ -499,6 +573,10 @@ main_html = """
     
     <div class="container">
         <div class="top-bar">
+            <div class="top-actions">
+                <!-- [ميزة 4] زر تبديل الوضع الليلي/النهاري -->
+                <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="تبديل الوضع">🌙</button>
+            </div>
             <button class="menu-btn" onclick="toggleMenu()">☰</button>
             <div class="dropdown-menu" id="contactMenu">
                 <a href="{{ owner_link }}" target="_blank">📞 تواصل معي</a>
@@ -554,6 +632,18 @@ main_html = """
             </div>
         </div>
 
+        <!-- [ميزة 2] قسم الأكواد القديمة -->
+        <div class="section-title old-section-title" id="oldSectionTitle" style="display:none;">
+            <span class="emoji">📜</span>
+            <span>الأكواد القديمة (منتهية الصلاحية)</span>
+        </div>
+        <div class="otp-container" id="oldOtpHistory" style="display:none; max-height:250px;">
+            <div style="text-align:center; color:#64748b; padding:25px;">
+                <div style="font-size:40px; margin-bottom:10px;">📭</div>
+                <div>لا توجد أكواد قديمة بعد</div>
+            </div>
+        </div>
+
         <div class="status" id="status">
             <span class="icon">⚡</span>
             اختر المنصة والدولة للبدء
@@ -572,7 +662,7 @@ main_html = """
 
         function createStars() {
             const stars = document.getElementById('stars');
-            for(let i=0; i<30; i++) {
+            for(let i=0; i<40; i++) {
                 const star = document.createElement('div');
                 star.className = 'star';
                 const size = Math.random() * 3 + 1;
@@ -611,6 +701,65 @@ main_html = """
             });
         }
 
+        // ============ [ميزة 4] تبديل الوضع الليلي/النهاري ============
+        function toggleTheme() {
+            document.body.classList.toggle('light-mode');
+            const btn = document.getElementById('themeBtn');
+            const isLight = document.body.classList.contains('light-mode');
+            btn.textContent = isLight ? '☀️' : '🌙';
+            btn.classList.toggle('active', isLight);
+            localStorage.setItem('theme', isLight ? 'light' : 'dark');
+        }
+        // استرجاع الوضع المحفوظ
+        (function() {
+            const saved = localStorage.getItem('theme');
+            if (saved === 'light') {
+                document.body.classList.add('light-mode');
+                document.addEventListener('DOMContentLoaded', () => {
+                    const btn = document.getElementById('themeBtn');
+                    btn.textContent = '☀️'; btn.classList.add('active');
+                });
+            }
+        })();
+
+        // ============ [ميزة 1] صوت تنبيه Web Audio API ============
+        const notificationSound = (function() {
+            let audioCtx = null;
+            function getCtx() {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                return audioCtx;
+            }
+            return function play() {
+                try {
+                    const ctx = getCtx();
+                    // نغمة 1
+                    const osc1 = ctx.createOscillator();
+                    const gain1 = ctx.createGain();
+                    osc1.connect(gain1); gain1.connect(ctx.destination);
+                    osc1.frequency.value = 880;
+                    osc1.type = 'sine';
+                    gain1.gain.setValueAtTime(0, ctx.currentTime);
+                    gain1.gain.linearRampToValueAtTime(0.25, ctx.currentTime + 0.05);
+                    gain1.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.2);
+                    osc1.start(ctx.currentTime);
+                    osc1.stop(ctx.currentTime + 0.2);
+                    // نغمة 2
+                    const osc2 = ctx.createOscillator();
+                    const gain2 = ctx.createGain();
+                    osc2.connect(gain2); gain2.connect(ctx.destination);
+                    osc2.frequency.value = 1320;
+                    osc2.type = 'sine';
+                    gain2.gain.setValueAtTime(0, ctx.currentTime + 0.15);
+                    gain2.gain.linearRampToValueAtTime(0.25, ctx.currentTime + 0.2);
+                    gain2.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.4);
+                    osc2.start(ctx.currentTime + 0.15);
+                    osc2.stop(ctx.currentTime + 0.4);
+                } catch (e) { console.log('Audio failed:', e); }
+            };
+        })();
+
         function toggleMenu() {
             document.getElementById('contactMenu').classList.toggle('show');
         }
@@ -639,6 +788,9 @@ main_html = """
         let currentPlatform = '';
         let currentNumber = '';
         let monitorInterval = null;
+
+        // ============ [ميزة 2] تخزين العدادات التنازلية ============
+        const otpCountdowns = new Map();
 
         function selectPlatform(platform, event) {
             currentPlatform = platform;
@@ -713,23 +865,83 @@ main_html = """
             }
         }
 
-        function addOtpToHistory(number, otp, timestamp) {
+        // ============ [ميزة 2] تحديث العداد التنازلي ============
+        function updateCountdowns() {
+            const now = Date.now();
+            otpCountdowns.forEach((endTime, otpId) => {
+                const timerEl = document.getElementById('timer-' + otpId);
+                if (!timerEl) return;
+                const remaining = Math.max(0, Math.floor((endTime - now) / 1000));
+                if (remaining <= 0) {
+                    timerEl.textContent = '⏱️ منتهي';
+                    timerEl.classList.add('expired');
+                    timerEl.classList.remove('warning');
+                    // [ميزة 2] نقل الكود لقسم الأكواد القديمة
+                    moveToOld(otpId);
+                } else {
+                    timerEl.textContent = '⏱️ ' + remaining + 'ث';
+                    timerEl.classList.remove('expired');
+                    if (remaining <= 10) timerEl.classList.add('warning');
+                    else timerEl.classList.remove('warning');
+                }
+            });
+        }
+        setInterval(updateCountdowns, 1000);
+
+        // ============ [ميزة 3] إضافة كود - الجديد في الأعلى ============
+        function addOtpToHistory(otp, platform, number, timestamp) {
             const container = document.getElementById('otpHistory');
+            
+            // تنظيف رسالة "في انتظار"
             if (container.children.length === 1 && container.textContent.includes('في انتظار')) {
                 container.innerHTML = '';
             }
+
             const div = document.createElement('div');
             div.className = 'otp-item';
+            const otpId = 'otp-' + Date.now() + '-' + Math.random().toString(36).substr(2,5);
+            div.id = otpId;
+            
+            // [ميزة 2] عداد تنازلي 60 ثانية
+            otpCountdowns.set(otpId, Date.now() + 60000);
+
             div.innerHTML = `
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                    <strong style="color:#00ffc8;">🔑 ${otp}</strong>
-                    <button class="copy-btn" onclick="copyText('${otp}')">📋 نسخ</button>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:6px;">
+                    <strong style="color:#00ff88;">🔑 ${otp}</strong>
+                    <div style="display:flex; gap:6px; align-items:center;">
+                        <span class="countdown-timer" id="timer-${otpId}">⏱️ 60ث</span>
+                        <button class="copy-btn" onclick="copyText('${otp}')">📋 نسخ</button>
+                    </div>
                 </div>
-                <span class="info">📞 +${number}  •  🕒 ${timestamp}</span>
+                <span class="info">📞 +${number} • 📱 ${platform} • 🕒 ${timestamp}</span>
             `;
+            // [ميزة 3] الجديد في الأعلى
             container.prepend(div);
-            if (container.children.length > 25) container.removeChild(container.lastChild);
-            showToast('🎉 كود جديد: ' + otp);
+            // أقصى عدد 25 كود
+            while (container.children.length > 25) container.removeChild(container.lastChild);
+        }
+
+        // ============ [ميزة 2] نقل كود منتهي لقسم الأكواد القديمة ============
+        function moveToOld(otpId) {
+            const el = document.getElementById(otpId);
+            if (!el || el.classList.contains('old-otp-item')) return;
+            otpCountdowns.delete(otpId);
+            const newContainer = document.getElementById('oldOtpHistory');
+            document.getElementById('oldSectionTitle').style.display = 'flex';
+            document.getElementById('oldOtpHistory').style.display = 'block';
+            // تنظيف رسالة "لا توجد أكواد قديمة" إن وُجدت
+            if (newContainer.textContent.includes('لا توجد أكواد قديمة')) {
+                newContainer.innerHTML = '';
+            }
+            el.classList.add('old-otp-item');
+            const timerEl = el.querySelector('.countdown-timer');
+            if (timerEl) {
+                timerEl.classList.add('expired');
+                timerEl.classList.remove('warning');
+                timerEl.textContent = '⏱️ منتهي';
+            }
+            // [ميزة 3] الجديد في الأعلى
+            newContainer.prepend(el);
         }
 
         function copyText(text) { 
@@ -737,6 +949,7 @@ main_html = """
             showToast('✅ تم نسخ الكود!');
         }
 
+        // ============ سحب الأكواد ============
         function startMonitoring() {
             if (!currentNumber) return;
             if (monitorInterval) clearInterval(monitorInterval);
@@ -747,8 +960,10 @@ main_html = """
                 .then(res => res.json()).then(data => {
                     if (data.otp) {
                         const now = new Date().toLocaleString('ar-YE', {timeZone: 'Asia/Aden'});
-                        addOtpToHistory(currentNumber, data.otp, now);
+                        addOtpToHistory(data.otp, 'واتساب', currentNumber, now);
                         document.getElementById('status').innerHTML = '<span class="icon">✅</span>تم العثور على كود!';
+                        // [ميزة 1] تشغيل صوت التنبيه
+                        notificationSound();
                         stopMonitoring();
                     }
                 });
@@ -822,7 +1037,7 @@ h3 { color:#cbd5e1; margin-bottom:12px; margin-top:18px; }
     width:100%; padding:14px; border:none; border-radius:12px; 
     background: linear-gradient(135deg, #ef4444, #b91c1c);
     color:#fff; cursor:pointer; margin-top:10px; 
-    font-weight:800; font-size:15px; font-family:'Cairo',sans-serif';
+    font-weight:800; font-size:15px; font-family:'Cairo',sans-serif;
     box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
     transition:all 0.3s;
 }
@@ -893,15 +1108,7 @@ hr { border: 1px solid rgba(255,255,255,0.1); margin: 20px 0; }
 </html>
 """
 
-@app.route('/')
-# ======================
-# 🔹 استبدل من هنا 👇
-# ======================
-
-def home():
-    return render_template_string(main_html, owner_link=OWNER_LINK, wa_group=WHATSAPP_GROUP_LINK, platform_logos=PLATFORM_LOGOS, platform_names=platform_names, platform_colors=platform_colors)
-
-# ========== الحصول على قائمة الكومبوهات للحذف ==========
+# ========== المسارات ==========
 def get_all_combos_list():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -910,11 +1117,21 @@ def get_all_combos_list():
     conn.close()
     return rows
 
-# ========== صفحة الأدمن الجديدة ==========
+@app.route('/')
+def home():
+    return render_template_string(
+        main_html,
+        owner_link=OWNER_LINK,
+        wa_group=WHATSAPP_GROUP_LINK,
+        platform_logos=PLATFORM_LOGOS,
+        platform_logos_small=PLATFORM_LOGOS_SMALL,
+        platform_names=platform_names,
+        platform_gradients=PLATFORM_GRADIENTS
+    )
+
 @app.route('/admin', methods=['GET', 'POST'])
 def admin():
     if request.method == 'POST':
-        # ===== حذف كومبو =====
         if request.form.get('action') == 'delete':
             platform = request.form.get('platform')
             country_code = request.form.get('country_code')
@@ -925,8 +1142,6 @@ def admin():
                 conn.commit()
                 conn.close()
                 return redirect(url_for('admin'))
-
-        # ===== رفع كومبو =====
         else:
             platform = request.form.get('platform')
             file = request.files.get('file')
@@ -945,8 +1160,6 @@ def admin():
                         name, flag = get_country_info(cc)
                         save_combo(platform, cc, name, flag, numbers)
                         return redirect(url_for('home'))
-    
-    # جلب قائمة الكومبوهات الحالية
     combos = get_all_combos_list()
     return render_template_string(admin_html, combos=combos)
 
@@ -970,6 +1183,7 @@ def api_get_otp():
     conn.close()
     return jsonify({'otp': row[0] if row else None})
 
+# ========== مراقب قناة تيليجرام ==========
 def monitor_channel():
     last_update_id = 0
     while True:
@@ -990,23 +1204,17 @@ def monitor_channel():
                             
                             clean = re.sub(r'[\u200B-\u200F\u202A-\u202E‏‎]', '', text)
                             lines = clean.split('\n')
-                            full_text = ' '.join(lines)
                             
-                            # =============================================
-                            # 🧠 الذكاء 1: استخراج الرقم (أي شكل)
-                            # =============================================
                             user_number = None
                             last_digits = None
                             country_code = None
                             
-                            # 1️⃣ البحث عن أرقام مخفية بصيغة 9567•••••966
                             hidden_match = re.search(r'(\d{3,4})[•*]{2,6}(\d{3,4})', clean)
                             if hidden_match:
                                 user_number = hidden_match.group(1) + hidden_match.group(2)
                                 last_digits = user_number[-4:]
                                 country_code = user_number[:3] if len(user_number) > 3 else None
                             
-                            # 2️⃣ البحث عن أي رقم طويل (8-15 رقم)
                             if not user_number:
                                 all_numbers = re.findall(r'\b\d{8,15}\b', clean)
                                 if all_numbers:
@@ -1014,7 +1222,6 @@ def monitor_channel():
                                     last_digits = user_number[-4:]
                                     country_code = user_number[:3] if len(user_number) > 3 else None
                             
-                            # 3️⃣ البحث عن أرقام بصيغة 966*****0038
                             if not user_number:
                                 star_match = re.search(r'(\d{3})\*{2,6}(\d{3,4})', clean)
                                 if star_match:
@@ -1022,7 +1229,6 @@ def monitor_channel():
                                     last_digits = user_number[-4:]
                                     country_code = user_number[:3]
                             
-                            # 4️⃣ البحث عن أرقام بعد الاختصار (WA | 216•••••4642)
                             if not user_number:
                                 pipe_match = re.search(r'[A-Z]{2,4}\s*[|]\s*(\d{3,4})[•*]{2,6}(\d{3,4})', clean)
                                 if pipe_match:
@@ -1030,7 +1236,6 @@ def monitor_channel():
                                     last_digits = user_number[-4:]
                                     country_code = user_number[:3]
                             
-                            # 5️⃣ البحث عن أرقام بصيغة #رقم
                             if not user_number:
                                 hash_num = re.search(r'#\s*(\d{8,12})', clean)
                                 if hash_num:
@@ -1038,32 +1243,24 @@ def monitor_channel():
                                     last_digits = user_number[-4:]
                                     country_code = user_number[:3]
                             
-                            # =============================================
-                            # 🧠 الذكاء 2: استخراج الكود (أي شكل)
-                            # =============================================
                             otp = None
                             
-                            # 1️⃣ البحث عن كود بصيغة 303-441
                             dash_code = re.search(r'(\d{3})-(\d{3,4})', clean)
                             if dash_code:
                                 otp = dash_code.group(1) + dash_code.group(2)
                             
-                            # 2️⃣ البحث عن كود مكون من 4-8 أرقام (ذكي)
                             if not otp:
                                 all_codes = re.findall(r'\b\d{4,8}\b', clean)
                                 if all_codes:
                                     for c in all_codes:
-                                        # تجاهل الأرقام التي تشبه الرقم المستخدم
                                         if last_digits and c.endswith(last_digits):
                                             continue
                                         if country_code and c.startswith(country_code):
                                             continue
-                                        # تجاهل الأرقام القصيرة جداً
                                         if len(c) >= 4:
                                             otp = c
                                             break
                             
-                            # 3️⃣ البحث عن كود بعد "كود" أو "رمز"
                             if not otp:
                                 patterns = [
                                     r'(?:كود|رمز|code|otp|verification)[:\s\-]*[‎]?(\d{3,8})',
@@ -1080,7 +1277,6 @@ def monitor_channel():
                                             otp = match.group(1)
                                         break
                             
-                            # 4️⃣ البحث عن أي أرقام طويلة (6-8 أرقام) بعد السطر الأول
                             if not otp:
                                 for line in lines[1:]:
                                     nums = re.findall(r'\b\d{6,8}\b', line)
@@ -1091,7 +1287,6 @@ def monitor_channel():
                                             otp = n
                                             break
                                 if not otp:
-                                    # البحث في كل النص
                                     all_long = re.findall(r'\b\d{6,8}\b', clean)
                                     if all_long:
                                         for n in all_long:
@@ -1100,9 +1295,6 @@ def monitor_channel():
                                             otp = n
                                             break
                             
-                            # =============================================
-                            # 🧠 الذكاء 3: تحديد المنصة
-                            # =============================================
                             platform = "غير معروف"
                             text_lower = clean.lower()
                             
@@ -1125,7 +1317,6 @@ def monitor_channel():
                                 if platform != "غير معروف":
                                     break
                             
-                            # محاولة استخراج المنصة من الاختصار الأول
                             if platform == "غير معروف" and lines:
                                 first_line = lines[0]
                                 platform_match = re.search(r'([A-Z]{2,4})\s*[|]', first_line)
@@ -1138,9 +1329,6 @@ def monitor_channel():
                                     }
                                     platform = short_map.get(short, short)
                             
-                            # =============================================
-                            # 🧠 الذكاء 4: حفظ الكود
-                            # =============================================
                             if otp:
                                 conn = sqlite3.connect(DB_PATH)
                                 if last_digits:
