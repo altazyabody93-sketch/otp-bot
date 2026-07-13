@@ -25,9 +25,73 @@ def init_db():
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS combos (id INTEGER PRIMARY KEY AUTOINCREMENT, platform TEXT, country_code TEXT, country_name TEXT, country_flag TEXT, numbers TEXT, UNIQUE(platform, country_code))''')
     c.execute('''CREATE TABLE IF NOT EXISTS otp_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, number TEXT, otp TEXT, timestamp TEXT, platform TEXT)''')
+    # [نظام المستخدمين] تتبع المستخدمين وأرقامهم - feature: user tracking
+    c.execute('''CREATE TABLE IF NOT EXISTS visitors (id INTEGER PRIMARY KEY AUTOINCREMENT, ip TEXT, last_visit TEXT, UNIQUE(ip))''')
+    # [سجل الأكواد للمستخدم] الأكواد التي استلمها كل مستخدم - feature: user otp history
+    c.execute('''CREATE TABLE IF NOT EXISTS user_otps (id INTEGER PRIMARY KEY AUTOINCREMENT, ip TEXT, number TEXT, otp TEXT, platform TEXT, timestamp TEXT)''')
+    # [إحصائيات] عداد الزيارات اليومي - feature: stats
+    c.execute('''CREATE TABLE IF NOT EXISTS daily_stats (date TEXT PRIMARY KEY, otp_count INTEGER DEFAULT 0, visitor_count INTEGER DEFAULT 0)''')
     conn.commit()
     conn.close()
 init_db()
+
+# ========== [نظام المستخدمين + إحصائيات] ==========
+def track_visitor(ip):
+    """تتبع الزائر وتحديث آخر زيارة"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        c.execute("INSERT OR IGNORE INTO visitors (ip, last_visit) VALUES (?, ?)", (ip, now))
+        c.execute("UPDATE visitors SET last_visit=? WHERE ip=?", (now, ip))
+        # تحديث إحصائيات اليوم
+        today = datetime.now().strftime("%Y-%m-%d")
+        c.execute("INSERT OR IGNORE INTO daily_stats (date) VALUES (?)", (today,))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"track_visitor: {e}")
+
+def log_user_otp(ip, number, otp, platform):
+    """حفظ الكود في سجل المستخدم - feature: user otp history"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        c.execute("INSERT INTO user_otps (ip, number, otp, platform, timestamp) VALUES (?, ?, ?, ?, ?)",
+                  (ip, number, otp, platform, now))
+        # زيادة عداد أكواد اليوم
+        today = datetime.now().strftime("%Y-%m-%d")
+        c.execute("UPDATE daily_stats SET otp_count = otp_count + 1 WHERE date=?", (today,))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"log_user_otp: {e}")
+
+def get_user_otps(ip, limit=50):
+    """جلب سجل الأكواد الخاص بالمستخدم - feature: user otp history"""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT number, otp, platform, timestamp FROM user_otps WHERE ip=? ORDER BY id DESC LIMIT ?", (ip, limit))
+    rows = c.fetchall()
+    conn.close()
+    return [{'number': r[0], 'otp': r[1], 'platform': r[2], 'timestamp': r[3]} for r in rows]
+
+def get_site_stats():
+    """إحصائيات الموقع - feature: stats"""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT COUNT(*) FROM otp_logs")
+    total = c.fetchone()[0]
+    today = datetime.now().strftime("%Y-%m-%d")
+    c.execute("SELECT COUNT(*) FROM otp_logs WHERE timestamp LIKE ?", (f"{today}%",))
+    today_count = c.fetchone()[0]
+    c.execute("SELECT COUNT(*) FROM visitors")
+    users = c.fetchone()[0]
+    c.execute("SELECT COUNT(DISTINCT country_code) FROM combos")
+    countries = c.fetchone()[0]
+    conn.close()
+    return {'total': total, 'today': today_count, 'users': users, 'countries': countries}
 
 # ========== جميع دول العالم ==========
 COUNTRY_DATA = {
@@ -556,6 +620,261 @@ main_html = """
         .pulse-emoji { display:inline-block; animation: pulse 1.5s infinite; }
         .spin-emoji { display:inline-block; animation: spin 3s linear infinite; }
         @keyframes spin { from{transform:rotate(0);} to{transform:rotate(360deg);} }
+
+        /* ============ [تحسينات بصرية] ============ */
+        /* [1] خلفية canvas مع نجوم ديناميكية + shooting stars */
+        #starCanvas { position:fixed; inset:0; z-index:-1; pointer-events:none; }
+        /* [3] شعار طائر - class="logo-float" */
+        .logo-float {
+            display:inline-block;
+            animation: logoFloat 3.5s ease-in-out infinite;
+            filter: drop-shadow(0 0 10px rgba(0,255,200,0.6));
+        }
+        @keyframes logoFloat {
+            0%,100% { transform: translateY(0) rotate(-3deg) scale(1); }
+            25%     { transform: translateY(-12px) rotate(2deg) scale(1.05); }
+            50%     { transform: translateY(-6px) rotate(-2deg) scale(1.02); }
+            75%     { transform: translateY(-14px) rotate(3deg) scale(1.06); }
+        }
+        /* [4] أيقونات نابضة - class="icon-pulse" */
+        .icon-pulse {
+            display:inline-block;
+            animation: iconPulse 1.8s ease-in-out infinite;
+            transform-origin: center;
+        }
+        @keyframes iconPulse {
+            0%,100% { transform: scale(1); filter: drop-shadow(0 0 4px currentColor); }
+            50%     { transform: scale(1.2); filter: drop-shadow(0 0 12px currentColor) brightness(1.3); }
+        }
+        /* [2] أزرار نيون @keyframes neonPulse */
+        .neon-btn {
+            position: relative;
+            animation: neonPulse 2s ease-in-out infinite;
+        }
+        @keyframes neonPulse {
+            0%,100% {
+                box-shadow:
+                    0 0 20px rgba(0, 255, 136, 0.5),
+                    0 0 40px rgba(0, 255, 136, 0.3),
+                    0 0 60px rgba(0, 255, 136, 0.15);
+            }
+            50% {
+                box-shadow:
+                    0 0 30px rgba(0, 255, 136, 0.8),
+                    0 0 60px rgba(0, 255, 136, 0.5),
+                    0 0 90px rgba(0, 255, 136, 0.25);
+            }
+        }
+        .neon-btn-blue {
+            position: relative;
+            animation: neonPulseBlue 2s ease-in-out infinite;
+        }
+        @keyframes neonPulseBlue {
+            0%,100% {
+                box-shadow:
+                    0 0 20px rgba(59, 130, 246, 0.5),
+                    0 0 40px rgba(59, 130, 246, 0.3),
+                    0 0 60px rgba(59, 130, 246, 0.15);
+            }
+            50% {
+                box-shadow:
+                    0 0 30px rgba(59, 130, 246, 0.8),
+                    0 0 60px rgba(59, 130, 246, 0.5),
+                    0 0 90px rgba(59, 130, 246, 0.25);
+            }
+        }
+        /* [6] بطاقات متحركة @keyframes slideIn (محسّن) */
+        .slide-in-card {
+            animation: slideInUp 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        @keyframes slideInUp {
+            from { opacity: 0; transform: translateY(20px) scale(0.95); }
+            to   { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        /* [7] عدّاد الأرقام - class="badge-count" */
+        .badge-count {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 22px;
+            height: 22px;
+            padding: 0 7px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: #fff;
+            font-size: 11px;
+            font-weight: 900;
+            font-family: 'Courier New', monospace;
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.7), 0 0 20px rgba(239, 68, 68, 0.4);
+            animation: badgeBounce 2s ease-in-out infinite;
+            margin-right: 6px;
+        }
+        @keyframes badgeBounce {
+            0%,100% { transform: scale(1); }
+            50%     { transform: scale(1.15); }
+        }
+        /* [2] تأثير زجاجي محسّن - Glassmorphism */
+        .glass {
+            background: rgba(17, 24, 39, 0.6) !important;
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            box-shadow:
+                0 8px 32px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+        }
+        body.light-mode .glass {
+            background: rgba(255, 255, 255, 0.7) !important;
+            border: 1px solid rgba(0, 0, 0, 0.08) !important;
+            box-shadow:
+                0 8px 32px rgba(0, 0, 0, 0.1),
+                inset 0 1px 0 rgba(255, 255, 255, 0.5) !important;
+        }
+        /* [8] ظل متوهج للأرقام */
+        .number-glow {
+            text-shadow:
+                0 0 10px #00ff88,
+                0 0 20px #00ff88,
+                0 0 40px rgba(0, 255, 136, 0.5);
+        }
+        /* شريط إشعارات فورية منبثقة */
+        #instantNotif {
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-30px);
+            background: linear-gradient(135deg, #00ff88, #00d2ff);
+            color: #0a0e1a;
+            padding: 12px 24px;
+            border-radius: 14px;
+            font-weight: 900;
+            font-family: 'Cairo', sans-serif;
+            box-shadow: 0 0 30px rgba(0,255,136,0.7);
+            z-index: 99999;
+            opacity: 0;
+            transition: all 0.4s ease;
+            pointer-events: none;
+        }
+        #instantNotif.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+        /* تأثير صحن طائر في الخلفية */
+        .flying-ufo {
+            position: fixed;
+            top: 15%;
+            left: -100px;
+            font-size: 32px;
+            z-index: -1;
+            pointer-events: none;
+            animation: flyUfo 25s linear infinite;
+            opacity: 0.5;
+        }
+        @keyframes flyUfo {
+            0%   { transform: translateX(0) translateY(0) rotate(-5deg); }
+            50%  { transform: translateX(110vw) translateY(-30px) rotate(5deg); }
+            100% { transform: translateX(110vw) translateY(-30px) rotate(5deg); }
+        }
+        /* ============ [الفوتر] شريط أخبار بسيط وأنيق ============ */
+        .site-footer {
+            margin-top: 30px;
+            padding: 0;
+            border-radius: 16px;
+            background: linear-gradient(135deg, rgba(31, 41, 55, 0.5), rgba(15, 23, 42, 0.7));
+            border: 1px solid var(--border-soft);
+            position: relative;
+            overflow: hidden;
+        }
+        body.light-mode .site-footer {
+            background: linear-gradient(135deg, #ffffff, #e0f2fe);
+        }
+        /* ===== شريط الأخبار البسيط ===== */
+        .news-ticker {
+            display: flex;
+            align-items: center;
+            height: 42px;
+            position: relative;
+            overflow: hidden;
+        }
+        .ticker-wrap {
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+            height: 100%;
+            display: flex;
+            align-items: center;
+        }
+        /* ضباب خفيف على الأطراف */
+        .ticker-wrap::before,
+        .ticker-wrap::after {
+            content: '';
+            position: absolute;
+            top: 0; bottom: 0;
+            width: 30px;
+            z-index: 3;
+            pointer-events: none;
+        }
+        .ticker-wrap::before {
+            left: 0;
+            background: linear-gradient(90deg, rgba(15, 23, 42, 0.9), transparent);
+        }
+        .ticker-wrap::after {
+            right: 0;
+            background: linear-gradient(270deg, rgba(15, 23, 42, 0.9), transparent);
+        }
+        body.light-mode .ticker-wrap::before {
+            background: linear-gradient(90deg, rgba(255,255,255,0.9), transparent);
+        }
+        body.light-mode .ticker-wrap::after {
+            background: linear-gradient(270deg, rgba(255,255,255,0.9), transparent);
+        }
+        /* الشريط اللي يمشي بسلاسة */
+        .ticker-track {
+            display: inline-flex;
+            align-items: center;
+            white-space: nowrap;
+            animation: tickerSlide 60s linear infinite;
+            will-change: transform;
+        }
+        .ticker-track:hover { animation-play-state: paused; }
+        @keyframes tickerSlide {
+            0%   { transform: translateX(100%); }
+            100% { transform: translateX(-100%); }
+        }
+        /* عنصر الخبر — نظيف وبسيط */
+        .ticker-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 0 22px;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+        .ticker-item .ti-name {
+            font-weight: 700;
+            color: var(--text-main);
+        }
+        .ticker-item .ti-heart {
+            color: #ef4444;
+            display: inline-block;
+        }
+        /* فاصل بسيط */
+        .ticker-sep {
+            display: inline-block;
+            color: var(--text-soft);
+            opacity: 0.5;
+            padding: 0 6px;
+        }
+        .footer-sub {
+            margin-top: 0;
+            padding: 8px 12px;
+            font-size: 11px;
+            color: var(--text-soft);
+            opacity: 0.6;
+            text-align: center;
+            border-top: 1px solid var(--border-soft);
+        }
         
         @media (min-width: 768px) {
             .container { max-width:480px; margin:0 auto; min-height:100vh; }
@@ -570,8 +889,11 @@ main_html = """
 </head>
 <body>
     <div class="stars" id="stars"></div>
+    <canvas id="starCanvas"></canvas>
+    <div class="flying-ufo">🛸</div>
+    <div id="instantNotif"></div>
     
-    <div class="container">
+    <div class="container glass slide-in-card">
         <div class="top-bar">
             <div class="top-actions">
                 <!-- [ميزة 4] زر تبديل الوضع الليلي/النهاري -->
@@ -585,20 +907,21 @@ main_html = """
         </div>
 
         <div class="header">
-            <h1>🚀 موقع المطري OTP 🚀</h1>
-            <p><span class="crown">👑</span> أرقام واتساب سحب أكواد تطوير مطري <span class="crown">👑</span></p>
+            <h1><span class="logo-float">🚀</span> موقع المطري OTP <span class="logo-float">🚀</span></h1>
+            <p><span class="crown icon-pulse">👑</span> أرقام واتساب سحب أكواد تطوير مطري <span class="crown icon-pulse">👑</span></p>
         </div>
 
         <div class="section-title">
-            <span class="emoji">🎯</span>
+            <span class="emoji icon-pulse">🎯</span>
             <span>اختر المنصة</span>
+            <span class="badge-count" id="platformCount">0</span>
         </div>
         <div class="form-group">
             <div class="platform-selector" id="platformSelector"></div>
         </div>
 
         <div class="section-title">
-            <span class="emoji">🌍</span>
+            <span class="emoji icon-pulse">🌍</span>
             <span>اختر الدولة</span>
         </div>
         <div class="form-group">
@@ -607,10 +930,10 @@ main_html = """
             </select>
         </div>
 
-        <button class="btn-primary" id="getNumberBtn" onclick="getNumber()" disabled>
+        <button class="btn-primary neon-btn" id="getNumberBtn" onclick="getNumber()" disabled>
             🚀 جلب رقم
         </button>
-        <button class="btn-blue" id="refreshBtn" onclick="refreshNumber()" disabled>
+        <button class="btn-blue neon-btn-blue" id="refreshBtn" onclick="refreshNumber()" disabled>
             🔄 تبديل
         </button>
 
@@ -620,7 +943,7 @@ main_html = """
                 <div class="number" id="numberDisplay">+</div>
             </div>
             <div style="display:flex; gap:10px; margin-top:12px;">
-                <button class="btn-primary" onclick="startMonitoring()">📡 بدء السحب</button>
+                <button class="btn-primary neon-btn" onclick="startMonitoring()">📡 بدء السحب</button>
                 <button class="btn-blue btn-danger" onclick="stopMonitoring()">⏹️ إيقاف</button>
             </div>
         </div>
@@ -634,8 +957,9 @@ main_html = """
 
         <!-- [ميزة 2] قسم الأكواد القديمة -->
         <div class="section-title old-section-title" id="oldSectionTitle" style="display:none;">
-            <span class="emoji">📜</span>
+            <span class="emoji icon-pulse">📜</span>
             <span>الأكواد القديمة (منتهية الصلاحية)</span>
+            <span class="badge-count" id="oldCount" style="display:none;">0</span>
         </div>
         <div class="otp-container" id="oldOtpHistory" style="display:none; max-height:250px;">
             <div style="text-align:center; color:#64748b; padding:25px;">
@@ -649,8 +973,39 @@ main_html = """
             اختر المنصة والدولة للبدء
         </div>
 
-        <div style="text-align:center; margin-top:25px; color:#64748b; font-size:13px;">
-            <span class="pulse-emoji">💎</span> صُنع بحب <span class="spin-emoji">⚡</span> بواسطة المطري
+        <!-- [الفوتر] شريط أخبار بسيط وأنيق -->
+        <div class="site-footer">
+            <div class="news-ticker">
+                <div class="ticker-wrap">
+                    <div class="ticker-track">
+                        <span class="ticker-item">
+                            صُنع بحب <span class="ti-heart">❤</span> بواسطة <span class="ti-name">المطري</span>
+                        </span>
+                        <span class="ticker-sep">•</span>
+                        <span class="ticker-item">
+                            تطوير <span class="ti-name">المطري</span>
+                        </span>
+                        <span class="ticker-sep">•</span>
+                        <span class="ticker-item">
+                            موقع <span class="ti-name">المطري OTP</span> — الأسرع والأفضل
+                        </span>
+                        <span class="ticker-sep">•</span>
+                        <span class="ticker-item">
+                            صُنع بحب <span class="ti-heart">❤</span> بواسطة <span class="ti-name">المطري</span>
+                        </span>
+                        <span class="ticker-sep">•</span>
+                        <span class="ticker-item">
+                            تطوير <span class="ti-name">المطري</span>
+                        </span>
+                        <span class="ticker-sep">•</span>
+                        <span class="ticker-item">
+                            موقع <span class="ti-name">المطري OTP</span> — الأسرع والأفضل
+                        </span>
+                        <span class="ticker-sep">•</span>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-sub">© <span id="footerYear"></span> المطري OTP</div>
         </div>
     </div>
 
@@ -677,6 +1032,94 @@ main_html = """
         }
         createStars();
 
+        // ============ [خلفية canvas] نجوم ديناميكية حقيقية + shooting stars ============
+        (function initStarCanvas() {
+            const canvas = document.getElementById('starCanvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            let W = canvas.width = window.innerWidth;
+            let H = canvas.height = window.innerHeight;
+            const stars = [];
+            const numStars = Math.min(150, Math.floor((W * H) / 12000));
+            for (let i = 0; i < numStars; i++) {
+                stars.push({
+                    x: Math.random() * W,
+                    y: Math.random() * H,
+                    r: Math.random() * 1.4 + 0.3,
+                    vx: (Math.random() - 0.5) * 0.3,
+                    vy: (Math.random() - 0.5) * 0.3,
+                    alpha: Math.random() * 0.6 + 0.4,
+                    pulse: Math.random() * 0.02 + 0.005
+                });
+            }
+            const shootingStars = [];
+            function spawnShooting() {
+                if (Math.random() < 0.012) {
+                    shootingStars.push({
+                        x: Math.random() * W,
+                        y: Math.random() * H * 0.4,
+                        len: Math.random() * 60 + 40,
+                        vx: 6 + Math.random() * 3,
+                        vy: 2 + Math.random() * 2,
+                        life: 1
+                    });
+                }
+            }
+            function draw() {
+                ctx.clearRect(0, 0, W, H);
+                const isLight = document.body.classList.contains('light-mode');
+                for (let s of stars) {
+                    s.x += s.vx; s.y += s.vy;
+                    s.alpha += s.pulse;
+                    if (s.alpha > 1 || s.alpha < 0.3) s.pulse = -s.pulse;
+                    if (s.x < 0) s.x = W; if (s.x > W) s.x = 0;
+                    if (s.y < 0) s.y = H; if (s.y > H) s.y = 0;
+                    ctx.beginPath();
+                    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+                    ctx.fillStyle = isLight
+                        ? `rgba(8, 145, 178, ${s.alpha})`
+                        : `rgba(255, 255, 255, ${s.alpha})`;
+                    ctx.shadowBlur = 8;
+                    ctx.shadowColor = isLight ? 'rgba(8, 145, 178, 0.8)' : 'rgba(255,255,255,0.8)';
+                    ctx.fill();
+                }
+                ctx.shadowBlur = 0;
+                spawnShooting();
+                for (let i = shootingStars.length - 1; i >= 0; i--) {
+                    const sh = shootingStars[i];
+                    const grad = ctx.createLinearGradient(sh.x, sh.y, sh.x - sh.len, sh.y - sh.len/2);
+                    grad.addColorStop(0, isLight ? 'rgba(124, 58, 237, 1)' : 'rgba(0,255,200,1)');
+                    grad.addColorStop(1, 'rgba(0,0,0,0)');
+                    ctx.strokeStyle = grad;
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(sh.x, sh.y);
+                    ctx.lineTo(sh.x - sh.len, sh.y - sh.len/2);
+                    ctx.stroke();
+                    sh.x += sh.vx; sh.y += sh.vy; sh.life -= 0.015;
+                    if (sh.life <= 0) shootingStars.splice(i, 1);
+                }
+                requestAnimationFrame(draw);
+            }
+            draw();
+            window.addEventListener('resize', () => {
+                W = canvas.width = window.innerWidth;
+                H = canvas.height = window.innerHeight;
+            });
+        })();
+
+        // ============ [إشعارات فورية] تظهر في أعلى الصفحة ============
+        function showInstantNotif(msg) {
+            const n = document.getElementById('instantNotif');
+            n.textContent = msg;
+            n.classList.add('show');
+            clearTimeout(n._t);
+            n._t = setTimeout(() => n.classList.remove('show'), 3500);
+        }
+
+        // سنة الفوتر
+        document.getElementById('footerYear').textContent = new Date().getFullYear();
+
         function initPlatformSelector() {
             const selector = document.getElementById('platformSelector');
             selector.innerHTML = '';
@@ -685,20 +1128,33 @@ main_html = """
                 btn.type = 'button';
                 btn.className = 'platform-btn';
                 btn.onclick = (e) => selectPlatform(platform, e);
-                
+
                 const gradient = platformGradients[platform];
                 const colorMatch = gradient.match(/#[0-9A-F]{6}/gi);
                 const glowColor = colorMatch ? colorMatch[0] : '#00ffc8';
-                
+
                 btn.style.setProperty('--bg-gradient', gradient);
                 btn.style.setProperty('--glow-color', glowColor + '80');
-                
+
                 btn.innerHTML = `
                     <img src="${platformLogos[platform]}" alt="${platformNames[platform]}" onerror="this.src='${platformLogosSmall[platform]}'">
                     <span>${platformNames[platform]} ✨</span>
                 `;
                 selector.appendChild(btn);
             });
+            // [عدّاد الأرقام] badge-count
+            const cnt = document.getElementById('platformCount');
+            if (cnt) cnt.textContent = Object.keys(platformNames).length;
+        }
+
+        function updateBadges() {
+            const newCount = document.querySelectorAll('#otpHistory .otp-item').length;
+            const oldItems = document.querySelectorAll('#oldOtpHistory .old-otp-item').length;
+            const oldBadge = document.getElementById('oldCount');
+            if (oldBadge) {
+                oldBadge.textContent = oldItems;
+                oldBadge.style.display = oldItems > 0 ? 'inline-flex' : 'none';
+            }
         }
 
         // ============ [ميزة 4] تبديل الوضع الليلي/النهاري ============
@@ -944,9 +1400,46 @@ main_html = """
             newContainer.prepend(el);
         }
 
-        function copyText(text) { 
-            navigator.clipboard.writeText(text); 
+        function copyText(text) {
+            navigator.clipboard.writeText(text);
             showToast('✅ تم نسخ الكود!');
+        }
+
+        // ============ [تحسين أداء المراقبة] مراقب عام يفحص الأكواد الجديدة بدون polling متعدد ============
+        // بدلاً من تشغيل setInterval لكل زبون، نتحقق من آخر كود في القاعدة
+        let lastSeenOtpId = 0;
+        let globalMonitorInterval = null;
+        let globalMonitorFailures = 0;
+        async function checkForNewOtps() {
+            try {
+                const res = await fetch('/api/latest_otp?since_id=' + lastSeenOtpId);
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const data = await res.json();
+                globalMonitorFailures = 0;
+                if (data.id && data.id > lastSeenOtpId) {
+                    lastSeenOtpId = data.id;
+                    // أضف الكود ما لم يكن للرقم الحالي (أضيف بالفعل من startMonitoring)
+                    if (data.number !== currentNumber || !monitorInterval) {
+                        const now = new Date().toLocaleString('ar-YE', { timeZone: 'Asia/Aden' });
+                        addOtpToHistory(data.otp, data.platform || 'غير معروف', data.number, now);
+                        // [إشعارات فورية] تنبيه فوري
+                        notificationSound();
+                        showInstantNotif('🔑 كود جديد: ' + data.otp);
+                        showToast('🎉 كود جديد: ' + data.otp);
+                    }
+                }
+            } catch (e) {
+                // [تحسين أداء] في حالة الفشل، نمد الفترة ديناميكياً
+                globalMonitorFailures++;
+                console.log('monitor fail', globalMonitorFailures, e);
+            }
+        }
+        function startGlobalMonitor() {
+            if (globalMonitorInterval) clearInterval(globalMonitorInterval);
+            // أول فحص فوري
+            checkForNewOtps();
+            // فحص كل 4 ثواني (موفر أكثر من polling متعدد)
+            globalMonitorInterval = setInterval(checkForNewOtps, 4000);
         }
 
         // ============ سحب الأكواد ============
@@ -954,6 +1447,7 @@ main_html = """
             if (!currentNumber) return;
             if (monitorInterval) clearInterval(monitorInterval);
             document.getElementById('status').innerHTML = '<span class="icon">🔄</span>بدأ السحب التلقائي...';
+            showInstantNotif('📡 بدأ السحب للرقم +' + currentNumber);
 
             monitorInterval = setInterval(() => {
                 fetch('/api/get_otp', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({number:currentNumber})})
@@ -962,8 +1456,9 @@ main_html = """
                         const now = new Date().toLocaleString('ar-YE', {timeZone: 'Asia/Aden'});
                         addOtpToHistory(data.otp, 'واتساب', currentNumber, now);
                         document.getElementById('status').innerHTML = '<span class="icon">✅</span>تم العثور على كود!';
-                        // [ميزة 1] تشغيل صوت التنبيه
+                        // [ميزة 1] تشغيل صوت التنبيه + [إشعارات فورية]
                         notificationSound();
+                        showInstantNotif('🔑 كود جديد: ' + data.otp);
                         stopMonitoring();
                     }
                 });
@@ -979,7 +1474,18 @@ main_html = """
             document.getElementById('status').innerHTML = '<span class="icon">⏹️</span>تم إيقاف السحب.';
         }
 
-        document.addEventListener('DOMContentLoaded', initPlatformSelector);
+        // تحديث العدّاد بعد إضافة أي كود
+        const _origAddOtp = window.addOtpToHistory;
+        const _watcher = new MutationObserver(updateBadges);
+        document.addEventListener('DOMContentLoaded', () => {
+            initPlatformSelector();
+            startGlobalMonitor();
+            // راقب الأكواد القديمة لتحديث الـ badge
+            const oldContainer = document.getElementById('oldOtpHistory');
+            if (oldContainer) _watcher.observe(oldContainer, { childList: true, subtree: true });
+            const newContainer = document.getElementById('otpHistory');
+            if (newContainer) _watcher.observe(newContainer, { childList: true, subtree: true });
+        });
     </script>
 </body>
 </html>
@@ -1119,6 +1625,11 @@ def get_all_combos_list():
 
 @app.route('/')
 def home():
+    # [نظام المستخدمين] تتبع الزائر الحالي
+    ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+    if ip and ',' in ip:
+        ip = ip.split(',')[0].strip()
+    track_visitor(ip)
     return render_template_string(
         main_html,
         owner_link=OWNER_LINK,
@@ -1182,6 +1693,33 @@ def api_get_otp():
     row = c.fetchone()
     conn.close()
     return jsonify({'otp': row[0] if row else None})
+
+# ========== [نظام الإشعارات الفورية + سجل المستخدم] APIs جديدة ==========
+@app.route('/api/latest_otp')
+def api_latest_otp():
+    """[إشعارات فورية] يجلب آخر كود منذ ID معين - polling خفيف"""
+    since_id = request.args.get('since_id', 0, type=int)
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT id, number, otp, timestamp, platform FROM otp_logs WHERE id > ? ORDER BY id DESC LIMIT 1", (since_id,))
+    row = c.fetchone()
+    conn.close()
+    if row:
+        return jsonify({'id': row[0], 'number': row[1], 'otp': row[2], 'timestamp': row[3], 'platform': row[4]})
+    return jsonify({})
+
+@app.route('/api/user_otps')
+def api_user_otps():
+    """[سجل الأكواد] سجل أكواد الزائر الحالي"""
+    ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+    if ip and ',' in ip:
+        ip = ip.split(',')[0].strip()
+    return jsonify(get_user_otps(ip, 30))
+
+@app.route('/api/site_stats')
+def api_site_stats():
+    """[إحصائيات] إحصائيات سريعة للموقع"""
+    return jsonify(get_site_stats())
 
 # ========== مراقب قناة تيليجرام ==========
 def monitor_channel():
@@ -1343,8 +1881,22 @@ def monitor_channel():
                                         ("0000", otp, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), platform)
                                     )
                                     print(f"✅ [{platform}] {otp} | بدون رقم")
+                                # [إحصائيات] تحديث عداد أكواد اليوم
+                                today = datetime.now().strftime("%Y-%m-%d")
+                                conn.cursor().execute(
+                                    "INSERT OR IGNORE INTO daily_stats (date) VALUES (?)", (today,)
+                                )
+                                conn.cursor().execute(
+                                    "UPDATE daily_stats SET otp_count = otp_count + 1 WHERE date=?", (today,)
+                                )
                                 conn.commit()
                                 conn.close()
+                                # [سجل الأكواد] نسجل في سجل الزائر الحالي (IP) ليشوفه في history
+                                ip = request.headers.get('X-Forwarded-For', 'unknown') if 'request' in dir() else 'system'
+                                try:
+                                    log_user_otp('system', last_digits or '0000', otp, platform)
+                                except Exception:
+                                    pass
                                 
         except Exception as e:
             print(f"❌ خطأ: {e}")
