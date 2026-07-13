@@ -1558,11 +1558,17 @@ def home():
         owner_link=OWNER_LINK,
         wa_group=WHATSAPP_GROUP_LINK,
         platform_logos=PLATFORM_LOGOS,
-        platform_logos_small=PLATFORM_LOGOS_SMALL,
-        platform_names=platform_names,
-        platform_gradients=PLATFORM_GRADIENTS,
-        platform_keys=platform_keys
-    )
+        platform_names=platform_names
+     )
+        
+        
+        
+        
+        
+        
+        
+        
+    
 
 def get_all_combos_list():
     conn = sqlite3.connect(DB_PATH)
