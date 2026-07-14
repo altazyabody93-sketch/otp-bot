@@ -1869,37 +1869,33 @@ def monitor_channel():
                             
                             if otp:
                                 conn = sqlite3.connect(DB_PATH)
-                                if last_digits:
-                                    conn.cursor().execute(
+                                cursor = conn.cursor()
+                                if user_number:
+                                    cursor.execute(
                                         "INSERT INTO otp_logs (number, otp, timestamp, platform) VALUES (?, ?, ?, ?)",
-                                        (last_digits, otp, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), platform)
+                                        (user_number, otp, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), platform)
                                     )
-                                    print(f"✅ [{platform}] {otp} | الرقم: {last_digits}")
+                                    print(f"✅ [{platform}] {otp} | الرقم: {user_number}")
                                 else:
-                                    conn.cursor().execute(
+                                    cursor.execute(
                                         "INSERT INTO otp_logs (number, otp, timestamp, platform) VALUES (?, ?, ?, ?)",
                                         ("0000", otp, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), platform)
                                     )
                                     print(f"✅ [{platform}] {otp} | بدون رقم")
-                                # [إحصائيات] تحديث عداد أكواد اليوم
+                                
+                                # تحديث إحصائيات اليوم
                                 today = datetime.now().strftime("%Y-%m-%d")
-                                conn.cursor().execute(
-                                    "INSERT OR IGNORE INTO daily_stats (date) VALUES (?)", (today,)
-                                )
-                                conn.cursor().execute(
-                                    "UPDATE daily_stats SET otp_count = otp_count + 1 WHERE date=?", (today,)
-                                )
+                                cursor.execute("INSERT OR IGNORE INTO daily_stats (date) VALUES (?)", (today,))
+                                cursor.execute("UPDATE daily_stats SET otp_count = otp_count + 1 WHERE date = ?", (today,))
                                 conn.commit()
                                 conn.close()
-                                # [سجل الأكواد] نسجل في سجل الزائر الحالي (IP) ليشوفه في history
-                                ip = request.headers.get('X-Forwarded-For', 'unknown') if 'request' in dir() else 'system'
-                                try:
-                                    log_user_otp('system', last_digits or '0000', otp, platform)
-                                except Exception:
-                                    pass
                                 
-        except Exception as e:
-            print(f"❌ خطأ: {e}")
+                                # تسجيل في سجل المستخدم
+                                ip = request.headers.get('X-Forwarded-For', 'unknown') if 'request' in dir() else 'unknown'
+                                try:
+                                    log_user_otp('system', user_number or '0000', otp, platform)
+                                except Exception as e:
+                                    print(f"⚠️ فشل تسجيل السجل: {e}")
         time.sleep(5)
 
 threading.Thread(target=monitor_channel, daemon=True).start()
