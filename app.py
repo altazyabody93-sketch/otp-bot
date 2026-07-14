@@ -7,7 +7,7 @@ import re
 import requests
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 
 app = Flask(__name__)
 DB_PATH = "bot.db"
@@ -16,70 +16,82 @@ WHATSAPP_GROUP_LINK = "https://chat.whatsapp.com/IeK2gNS64fd8YSnenzt4WR"
 OWNER_PHONE = "967733723953"
 OWNER_LINK = f"https://wa.me/{OWNER_PHONE}"
 
-# ========== Telegram token (ننصح لاحقاً بنقله لمتغير بيئة) ==========
-TELEGRAM_BOT_TOKEN = os.environ.get("BOT_TOKEN", "8814038881:AAGYuACUYA4YPKlJQhAyUMkpRNiV0u1gNuU")
+TELEGRAM_BOT_TOKEN = "8814038881:AAGyuACUYA4YPKlJQhAyUMkpRNiV0u1gNuU"
 CHANNEL_USERNAME = "@jsjsgsjsvh"
-
-# ⏱️ المدة الجديدة للـ OTP
-OTP_VALID_SECONDS = 60
 
 # ========== قاعدة البيانات ==========
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS combos (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        platform TEXT,
-        country_code TEXT,
-        country_name TEXT,
-        country_flag TEXT,
-        numbers TEXT,
-        UNIQUE(platform, country_code)
-    )''')
-    c.execute('''CREATE TABLE IF NOT EXISTS otp_logs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        number TEXT,
-        otp TEXT,
-        timestamp TEXT,
-        platform TEXT
-    )''')
-    # جدول سجل "التواصل معي" (يظهر للقائمة)
-    c.execute('''CREATE TABLE IF NOT EXISTS contacts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT,
-        link TEXT,
-        icon TEXT
-    )''')
-    # جدول المجموعات
-    c.execute('''CREATE TABLE IF NOT EXISTS groups (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT,
-        link TEXT,
-        icon TEXT
-    )''')
-    # إدخال بيانات افتراضية إذا الجداول فاضية
-    c.execute("SELECT COUNT(*) FROM contacts")
-    if c.fetchone()[0] == 0:
-        for c_row in [
-            ("واتساب المطور", OWNER_LINK, "📞"),
-            ("تلجرام المطور", "https://t.me/", "✈️"),
-            ("انستقرام", "https://instagram.com/", "📸"),
-            ("تيك توك", "https://tiktok.com/", "🎵"),
-        ]:
-            c.execute("INSERT INTO contacts (name, link, icon) VALUES (?, ?, ?)", c_row)
-    c.execute("SELECT COUNT(*) FROM groups")
-    if c.fetchone()[0] == 0:
-        for g_row in [
-            ("جروب واتساب الدعم", WHATSAPP_GROUP_LINK, "💬"),
-            ("قناة تيليجرام", "https://t.me/jsjsgsjsvh", "📢"),
-            ("جروب تيليجرام", "https://t.me/", "👥"),
-            ("قناة واتساب", "https://whatsapp.com/channel/", "📣"),
-        ]:
-            c.execute("INSERT INTO groups (name, link, icon) VALUES (?, ?, ?)", g_row)
+    c.execute('''CREATE TABLE IF NOT EXISTS combos (id INTEGER PRIMARY KEY AUTOINCREMENT, platform TEXT, country_code TEXT, country_name TEXT, country_flag TEXT, numbers TEXT, UNIQUE(platform, country_code))''')
+    c.execute('''CREATE TABLE IF NOT EXISTS otp_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, number TEXT, otp TEXT, timestamp TEXT, platform TEXT)''')
+    # [نظام المستخدمين] تتبع المستخدمين وأرقامهم - feature: user tracking
+    c.execute('''CREATE TABLE IF NOT EXISTS visitors (id INTEGER PRIMARY KEY AUTOINCREMENT, ip TEXT, last_visit TEXT, UNIQUE(ip))''')
+    # [سجل الأكواد للمستخدم] الأكواد التي استلمها كل مستخدم - feature: user otp history
+    c.execute('''CREATE TABLE IF NOT EXISTS user_otps (id INTEGER PRIMARY KEY AUTOINCREMENT, ip TEXT, number TEXT, otp TEXT, platform TEXT, timestamp TEXT)''')
+    # [إحصائيات] عداد الزيارات اليومي - feature: stats
+    c.execute('''CREATE TABLE IF NOT EXISTS daily_stats (date TEXT PRIMARY KEY, otp_count INTEGER DEFAULT 0, visitor_count INTEGER DEFAULT 0)''')
     conn.commit()
     conn.close()
-
 init_db()
+
+# ========== [نظام المستخدمين + إحصائيات] ==========
+def track_visitor(ip):
+    """تتبع الزائر وتحديث آخر زيارة"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        c.execute("INSERT OR IGNORE INTO visitors (ip, last_visit) VALUES (?, ?)", (ip, now))
+        c.execute("UPDATE visitors SET last_visit=? WHERE ip=?", (now, ip))
+        # تحديث إحصائيات اليوم
+        today = datetime.now().strftime("%Y-%m-%d")
+        c.execute("INSERT OR IGNORE INTO daily_stats (date) VALUES (?)", (today,))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"track_visitor: {e}")
+
+def log_user_otp(ip, number, otp, platform):
+    """حفظ الكود في سجل المستخدم - feature: user otp history"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        c.execute("INSERT INTO user_otps (ip, number, otp, platform, timestamp) VALUES (?, ?, ?, ?, ?)",
+                  (ip, number, otp, platform, now))
+        # زيادة عداد أكواد اليوم
+        today = datetime.now().strftime("%Y-%m-%d")
+        c.execute("UPDATE daily_stats SET otp_count = otp_count + 1 WHERE date=?", (today,))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"log_user_otp: {e}")
+
+def get_user_otps(ip, limit=50):
+    """جلب سجل الأكواد الخاص بالمستخدم - feature: user otp history"""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT number, otp, platform, timestamp FROM user_otps WHERE ip=? ORDER BY id DESC LIMIT ?", (ip, limit))
+    rows = c.fetchall()
+    conn.close()
+    return [{'number': r[0], 'otp': r[1], 'platform': r[2], 'timestamp': r[3]} for r in rows]
+
+def get_site_stats():
+    """إحصائيات الموقع - feature: stats"""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT COUNT(*) FROM otp_logs")
+    total = c.fetchone()[0]
+    today = datetime.now().strftime("%Y-%m-%d")
+    c.execute("SELECT COUNT(*) FROM otp_logs WHERE timestamp LIKE ?", (f"{today}%",))
+    today_count = c.fetchone()[0]
+    c.execute("SELECT COUNT(*) FROM visitors")
+    users = c.fetchone()[0]
+    c.execute("SELECT COUNT(DISTINCT country_code) FROM combos")
+    countries = c.fetchone()[0]
+    conn.close()
+    return {'total': total, 'today': today_count, 'users': users, 'countries': countries}
 
 # ========== جميع دول العالم ==========
 COUNTRY_DATA = {
@@ -204,6 +216,7 @@ COUNTRY_DATA = {
     "598": {"n": "أوروغواي", "f": "🇺🇾"},
     "670": {"n": "تيمور الشرقية", "f": "🇹🇱"},
     "673": {"n": "بروناي", "f": "🇧🇳"},
+    "674": {"n": "ناورو", "f": "🇳🇷"},
     "675": {"n": "بابوا غينيا الجديدة", "f": "🇵🇬"},
     "676": {"n": "تونغا", "f": "🇹🇴"},
     "677": {"n": "جزر سليمان", "f": "🇸🇧"},
@@ -257,28 +270,11 @@ def get_numbers(platform, country_code):
 def save_combo(platform, country_code, country_name, country_flag, numbers):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("REPLACE INTO combos (platform, country_code, country_name, country_flag, numbers) VALUES (?, ?, ?, ?, ?)",
-              (platform, country_code, country_name, country_flag, json.dumps(numbers)))
+    c.execute("REPLACE INTO combos (platform, country_code, country_name, country_flag, numbers) VALUES (?, ?, ?, ?, ?)", (platform, country_code, country_name, country_flag, json.dumps(numbers)))
     conn.commit()
     conn.close()
 
-def get_contacts():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT name, link, icon FROM contacts ORDER BY id ASC")
-    rows = c.fetchall()
-    conn.close()
-    return [{"name": r[0], "link": r[1], "icon": r[2]} for r in rows]
-
-def get_groups():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT name, link, icon FROM groups ORDER BY id ASC")
-    rows = c.fetchall()
-    conn.close()
-    return [{"name": r[0], "link": r[1], "icon": r[2]} for r in rows]
-
-# ============= شعارات SVG (نفس الأصلية) =============
+# ============= شعارات SVG =============
 PLATFORM_LOGOS = {
     "whatsapp": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%2325D366'/><path fill='%23fff' d='M50 18c-17.6 0-32 14.4-32 32 0 6 1.7 11.8 4.8 16.8L18 82l15.6-4.7C38.6 80.1 44.2 82 50 82c17.6 0 32-14.4 32-32S67.6 18 50 18zm18.6 45.6c-.8 2.2-4.6 4.2-6.4 4.5-1.6.3-3.7.4-5.9-.4-1.4-.5-3.1-1.1-5.4-2.2-9.5-4.1-15.7-13.7-16.2-14.3-.5-.7-3.9-5.1-3.9-9.7s2.4-6.9 3.3-7.9c.9-.9 1.9-1.2 2.6-1.2.6 0 1.2 0 1.7 0 .6 0 1.3-.2 2 .1 1.6.7 2.6 3 2.9 3.9.3.9.5 1.5 0 2.4-.4.9-1.5 2.4-2.2 3.4 0 0 .7.7 1.4 1.5 2.4 2.7 5.3 5.5 9.6 7.1 1.5.5 2.3.6 3-.4.6-1 2.5-3 3.2-4 .7-1 1.4-.8 2.3-.5.9.3 5.8 2.7 6.8 3.2 1 .5 1.6.7 1.8 1.1.2.5.2 2.5-.6 4.7z'/></svg>",
     "facebook": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%231877F2'/><path fill='%23fff' d='M58 84V52h10l1-12H58v-7c0-3 1-5 5-5h6V17h-9c-10 0-15 6-15 14v9H36v12h9v32h13z'/></svg>",
@@ -314,475 +310,1125 @@ platform_names = {
     'twitter': 'تويتر/X'
 }
 
-platform_colors = {
-    'whatsapp': '#25D366',
-    'telegram': '#0088cc',
-    'tiktok': '#FE2C55',
-    'facebook': '#1877f2',
-    'instagram': '#E4405F',
-    'snapchat': '#FFFC00',
-    'google': '#4285F4',
-    'twitter': '#1DA1F2'
-}
-
-# ========== HTML الصفحة الرئيسية ==========
 main_html = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
-    <title>المطري OTP</title>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <title>🚀 موقع المطري OTP 🚀</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
+        /* ============ [ميزة 4] متغيرات الوضع الليلي/النهاري ============ */
+        :root {
+            --bg-base: #0a0e1a;
+            --bg-container: rgba(17, 24, 39, 0.85);
+            --bg-card: rgba(31, 41, 55, 0.7);
+            --text-main: #fff;
+            --text-muted: #cbd5e1;
+            --text-soft: #94a3b8;
+            --border-soft: rgba(255,255,255,0.1);
+            --accent: #00ffc8;
+            --accent-2: #8b5cf6;
+            --accent-3: #ec4899;
+            --otp-glow: rgba(0, 255, 136, 0.4);
+            --star-color: #fff;
+        }
+        body.light-mode {
+            --bg-base: #f0f4f8;
+            --bg-container: rgba(255, 255, 255, 0.85);
+            --bg-card: rgba(255, 255, 255, 0.9);
+            --text-main: #0f172a;
+            --text-muted: #475569;
+            --text-soft: #64748b;
+            --border-soft: rgba(0,0,0,0.1);
+            --accent: #0891b2;
+            --accent-2: #7c3aed;
+            --accent-3: #db2777;
+            --otp-glow: rgba(8, 145, 178, 0.3);
+            --star-color: #facc15;
+        }
+
         * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-        html, body { font-family:'Cairo',sans-serif; background:#0a0e14; color:#e6e6e6; overflow-x:hidden; }
-        body { min-height:100vh; position:relative; }
-
-        /* ============= خلفية المطر الرقمي (Matrix) ============= */
-        #matrixCanvas {
-            position:fixed; top:0; left:0; width:100%; height:100%;
-            z-index:1; opacity:0.18; pointer-events:none;
+        html, body { font-family:'Cairo',sans-serif; background:var(--bg-base); color:var(--text-main); overflow-x:hidden; transition: background 0.5s, color 0.5s; }
+        
+        /* ============ [ميزة 6] خلفية متحركة + نجوم ============ */
+        body::before {
+            content:''; position:fixed; inset:0; z-index:-2;
+            background: radial-gradient(circle at 20% 20%, rgba(0, 255, 200, 0.15), transparent 40%),
+                        radial-gradient(circle at 80% 70%, rgba(139, 92, 246, 0.15), transparent 40%),
+                        radial-gradient(circle at 50% 50%, rgba(236, 72, 153, 0.1), transparent 50%);
+            animation: bgShift 12s ease-in-out infinite alternate;
         }
-        .app { position:relative; z-index:10; max-width:480px; margin:0 auto; background:rgba(22,27,34,0.78); backdrop-filter:blur(6px); min-height:100vh; display:flex; flex-direction:column; }
-
-        /* ============= HEADER ============= */
-        .top-bar { background:rgba(22,27,34,0.95); padding:14px 16px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #21262d; position:sticky; top:0; z-index:50; }
-        .brand { display:flex; align-items:center; gap:10px; }
-        .brand-icon { width:36px; height:36px; border-radius:10px; background:linear-gradient(135deg, #1f6feb, #388bfd); display:flex; align-items:center; justify-content:center; font-size:18px; animation:logoSpin 6s linear infinite; }
-        @keyframes logoSpin { 0%,100%{transform:rotate(0);} 50%{transform:rotate(15deg) scale(1.08);} }
-        .brand-text { font-size:16px; font-weight:700; color:#fff; }
-        .menu-btn { background:transparent; border:none; color:#8b949e; font-size:22px; cursor:pointer; padding:4px 8px; }
-        .menu-btn:hover { color:#58a6ff; }
-        .dropdown-menu { display:none; position:absolute; top:55px; left:16px; right:16px; background:#1c2128; border:1px solid #30363d; border-radius:12px; padding:6px; z-index:9999; box-shadow:0 8px 24px rgba(0,0,0,0.6); max-height:70vh; overflow-y:auto; }
-        .dropdown-menu.show { display:block; animation:menuSlide 0.25s ease; }
-        @keyframes menuSlide { from{opacity:0; transform:translateY(-8px);} to{opacity:1; transform:translateY(0);} }
-        .dropdown-menu .menu-section-title { padding:8px 12px 4px; color:#58a6ff; font-size:12px; font-weight:800; border-bottom:1px solid #21262d; margin-bottom:4px; }
-        .dropdown-menu a { display:flex; align-items:center; gap:10px; color:#e6e6e6; text-decoration:none; padding:10px 12px; border-radius:8px; font-size:14px; font-weight:600; transition:all 0.15s; }
-        .dropdown-menu a:hover { background:#21262d; color:#58a6ff; transform:translateX(-4px); }
-        .dropdown-menu a .icon { font-size:18px; }
-
-        /* ============= MAIN ============= */
-        .main { padding:16px; flex:1; }
-
-        .hero { text-align:center; padding:24px 12px 20px; }
-        .hero h1 { font-size:24px; font-weight:800; color:#fff; margin-bottom:6px; text-shadow:0 0 18px rgba(31,111,235,0.45); }
-        .hero p { font-size:14px; color:#8b949e; line-height:1.5; }
-
-        .floating-emoji { position:absolute; font-size:20px; pointer-events:none; animation:floatEmoji 5s ease-in-out infinite; opacity:0.85; }
-        @keyframes floatEmoji {
-            0%,100% { transform:translate(0,0) rotate(0deg); }
-            25% { transform:translate(20px,-15px) rotate(20deg); }
-            50% { transform:translate(-10px,-25px) rotate(-15deg); }
-            75% { transform:translate(15px,10px) rotate(10deg); }
+        body.light-mode::before {
+            background: radial-gradient(circle at 20% 20%, rgba(8, 145, 178, 0.15), transparent 40%),
+                        radial-gradient(circle at 80% 70%, rgba(124, 58, 237, 0.15), transparent 40%),
+                        radial-gradient(circle at 50% 50%, rgba(219, 39, 119, 0.1), transparent 50%);
         }
-
-        .section-title { font-size:15px; font-weight:700; color:#fff; margin:18px 4px 12px; display:flex; align-items:center; gap:8px; }
-        .section-title .icon { color:#58a6ff; }
-
-        /* ============= PLATFORMS GRID ============= */
-        .platforms { display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; margin-bottom:8px; }
+        @keyframes bgShift { 0%{ transform:scale(1) rotate(0deg);} 100%{ transform:scale(1.1) rotate(5deg);} }
+        
+        .stars { position:fixed; inset:0; z-index:-1; pointer-events:none; }
+        .star { position:absolute; background:var(--star-color); border-radius:50%; animation: twinkle 3s infinite; box-shadow: 0 0 8px var(--star-color); }
+        @keyframes twinkle { 0%,100%{ opacity:0; transform:scale(0);} 50%{ opacity:1; transform:scale(1);} }
+        
+        /* ============ [خلفية الماتريكس - مطر الأرقام] ============ */
+        #matrixCanvas { position:fixed; inset:0; z-index:-2; pointer-events:none; opacity:0.12; }
+        
+        /* ============ [شريط الإعلان المتحرك] ============ */
+        .ad-banner {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(90deg, rgba(0,0,0,0.95), rgba(20,20,40,0.95), rgba(0,0,0,0.95));
+            border-top: 2px solid var(--accent);
+            padding: 10px 0;
+            z-index: 9998;
+            overflow: hidden;
+            box-shadow: 0 -5px 30px rgba(0, 255, 200, 0.3);
+        }
+        .ad-track {
+            display: flex;
+            white-space: nowrap;
+            animation: adScroll 30s linear infinite;
+        }
+        .ad-track:hover { animation-play-state: paused; }
+        @keyframes adScroll {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+        .ad-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 0 30px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--accent);
+            text-shadow: 0 0 10px var(--accent);
+        }
+        .ad-item .ad-icon { font-size: 16px; }
+        .ad-sep {
+            display: inline-block;
+            color: var(--accent-2);
+            opacity: 0.6;
+        }
+        
+        .container { background:var(--bg-container); backdrop-filter:blur(20px); padding:25px 18px 100px; width:100%; min-height:100vh; border-inline:1px solid rgba(139, 92, 246, 0.3); transition: background 0.5s; }
+        
+        .top-bar { display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; position:relative; }
+        .top-actions { display:flex; gap:8px; }
+        .menu-btn, .theme-btn { 
+            background:linear-gradient(135deg, #1f2937, #374151); border:1px solid rgba(0,255,200,0.4);
+            border-radius:12px; padding:10px 16px; color:var(--accent); font-size:20px; cursor:pointer;
+            box-shadow: 0 0 15px rgba(0,255,200,0.3);
+            transition:all 0.3s;
+        }
+        body.light-mode .menu-btn, body.light-mode .theme-btn {
+            background:linear-gradient(135deg, #ffffff, #e0f2fe); border-color: rgba(8, 145, 178, 0.4);
+            box-shadow: 0 0 15px rgba(8, 145, 178, 0.2);
+        }
+        .menu-btn:hover, .theme-btn:hover { box-shadow: 0 0 25px rgba(0,255,200,0.6); transform:translateY(-2px); }
+        .theme-btn.active { background: var(--accent); color: #0a0e1a; }
+        .dropdown-menu { 
+            display:none; position:absolute; top:55px; right:0; 
+            background:var(--bg-container); backdrop-filter:blur(15px);
+            border:1px solid rgba(0,255,200,0.3); border-radius:14px; padding:8px; 
+            min-width:180px; z-index:100; box-shadow:0 5px 25px rgba(0,255,200,0.3); 
+        }
+        .dropdown-menu a { 
+            display:flex; align-items:center; gap:10px; color:var(--text-main); text-decoration:none; 
+            padding:10px 14px; border-radius:10px; font-weight:600; transition:all 0.3s; 
+        }
+        .dropdown-menu a:hover { background:rgba(0,255,200,0.15); color:var(--accent); transform:translateX(-5px); }
+        .dropdown-menu.show { display:block; animation: slideDown 0.3s ease; }
+        @keyframes slideDown { from{ opacity:0; transform:translateY(-10px);} to{ opacity:1; transform:translateY(0);} }
+        
+        .header { text-align:center; margin:20px 0 30px; position:relative; }
+        .header h1 { 
+            font-size:30px; font-weight:900; 
+            background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--accent-3), var(--accent));
+            background-size: 300% 300%;
+            -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+            animation: glow 4s ease infinite;
+            text-shadow: 0 0 30px rgba(0,255,200,0.5);
+            margin-bottom:8px;
+        }
+        @keyframes glow { 0%,100%{ background-position:0% 50%; } 50%{ background-position:100% 50%; } }
+        .header p { color:var(--text-muted); font-size:15px; font-weight:600; }
+        .header p .crown { display:inline-block; animation: bounce 1.5s infinite; }
+        @keyframes bounce { 0%,100%{ transform:translateY(0);} 50%{ transform:translateY(-5px);} }
+        
+        .section-title { 
+            display:flex; align-items:center; gap:10px; margin:25px 0 15px; 
+            color:var(--accent); font-size:17px; font-weight:700;
+        }
+        .section-title .emoji { font-size:22px; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%,100%{ transform:scale(1);} 50%{ transform:scale(1.2);} }
+        .section-title::after { content:''; flex:1; height:2px; background:linear-gradient(90deg, var(--accent), transparent); border-radius:2px; }
+        
+        .platform-selector { display:grid; grid-template-columns:repeat(2, 1fr); gap:12px; margin-bottom:10px; }
         .platform-btn {
-            display:flex; align-items:center; gap:10px; padding:12px 14px;
-            background:#1c2128; border:1px solid #30363d; border-radius:12px;
-            color:#e6e6e6; cursor:pointer; transition:all 0.2s ease;
-            font-size:14px; font-weight:600; font-family:'Cairo',sans-serif;
+            display:flex; align-items:center; gap:12px; padding:14px 12px;
+            border:2px solid var(--border-soft); border-radius:16px;
+            background:var(--bg-card); color:var(--text-main);
+            cursor:pointer; transition:all 0.4s cubic-bezier(0.4, 0, 0.2, 1); 
+            font-size:14px; font-weight:700; font-family:'Cairo',sans-serif;
             position:relative; overflow:hidden;
         }
         .platform-btn::before {
-            content:''; position:absolute; inset:0; opacity:0; transition:opacity 0.3s;
-            background:radial-gradient(circle at center, var(--glow, #1f6feb) 0%, transparent 70%);
+            content:''; position:absolute; inset:0; opacity:0; transition:opacity 0.4s;
+            background:var(--bg-gradient);
+            z-index:0;
         }
-        .platform-btn:hover { background:#21262d; border-color:var(--glow, #1f6feb); transform:translateY(-2px); }
-        .platform-btn:hover::before { opacity:0.25; }
-        .platform-btn:active { transform:scale(0.96); }
-        .platform-btn.active {
-            background:linear-gradient(135deg, var(--glow, #1f6feb), #161b22);
-            border-color:var(--glow, #1f6feb); color:#fff;
-            box-shadow:0 0 24px var(--glow, #1f6feb), 0 0 48px rgba(31,111,235,0.4);
-            animation:platformPulse 1.4s ease-in-out infinite;
+        .platform-btn:hover { 
+            transform:translateY(-3px) scale(1.02); 
+            border-color:transparent;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.5);
         }
-        @keyframes platformPulse {
-            0%,100% { box-shadow:0 0 24px var(--glow, #1f6feb), 0 0 48px rgba(31,111,235,0.4); }
-            50% { box-shadow:0 0 32px var(--glow, #1f6feb), 0 0 64px rgba(31,111,235,0.6); }
+        .platform-btn:hover::before { opacity:1; }
+        .platform-btn.active { 
+            border-color:transparent;
+            box-shadow: 0 0 25px var(--glow-color), 0 0 50px var(--glow-color);
+            transform:translateY(-2px);
         }
-        .platform-btn img { width:32px; height:32px; object-fit:contain; border-radius:8px; background:#fff; padding:2px; position:relative; z-index:2; }
-        .platform-btn span { position:relative; z-index:2; }
-
-        /* ============= SELECT & BUTTONS ============= */
-        .select-wrap { position:relative; }
-        .form-control {
-            width:100%; padding:14px 16px; border-radius:10px;
-            border:1px solid #30363d; background:#0d1117; color:#e6e6e6;
-            outline:none; font-family:'Cairo',sans-serif; font-size:14px; font-weight:600;
-            appearance:none; -webkit-appearance:none;
-            background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='%238b949e' d='M6 9L1 4h10z'/></svg>");
-            background-repeat:no-repeat; background-position:left 16px center; padding-left:40px;
+        .platform-btn.active::before { opacity:1; }
+        .platform-btn img { 
+            width:42px; height:42px; object-fit:contain; 
+            border-radius:12px;
+            position:relative; z-index:1;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+            transition:transform 0.4s;
+            background: rgba(255,255,255,0.95);
+            padding: 3px;
         }
-        .form-control:focus { border-color:#1f6feb; box-shadow:0 0 0 3px rgba(31,111,235,0.18); }
-        .form-control:disabled { opacity:0.5; cursor:not-allowed; }
-
-        .btn-primary {
-            width:100%; padding:14px; border:none; border-radius:10px;
-            background:linear-gradient(135deg, #238636, #2ea043); color:#fff; font-size:15px; font-weight:700;
-            cursor:pointer; margin-top:10px; font-family:'Cairo',sans-serif;
-            transition:all 0.2s; box-shadow:0 4px 14px rgba(35,134,54,0.35);
+        .platform-btn.active img { transform: rotate(360deg) scale(1.15); }
+        .platform-btn span { position:relative; z-index:1; }
+        
+        .form-group { margin-bottom:18px; }
+        .form-group label { display:flex; align-items:center; gap:8px; margin-bottom:10px; color:var(--text-muted); font-weight:700; font-size:14px; }
+        .form-control { 
+            width:100%; padding:14px 16px; border-radius:14px; 
+            border:2px solid var(--border-soft); 
+            background:var(--bg-card); color:var(--text-main); 
+            outline:none; font-family:'Cairo',sans-serif; font-size:15px; font-weight:600;
+            transition:all 0.3s;
         }
-        .btn-primary:hover:not(:disabled) { background:linear-gradient(135deg, #2ea043, #3fb950); transform:translateY(-2px); box-shadow:0 6px 20px rgba(35,134,54,0.5); }
-        .btn-primary:active:not(:disabled) { transform:scale(0.98); }
-        .btn-primary:disabled { opacity:0.5; cursor:not-allowed; box-shadow:none; }
-
-        .btn-blue {
-            width:100%; padding:14px; border:none; border-radius:10px;
-            background:linear-gradient(135deg, #1f6feb, #388bfd); color:#fff; font-size:15px; font-weight:700;
-            cursor:pointer; margin-top:8px; font-family:'Cairo',sans-serif;
-            transition:all 0.2s; box-shadow:0 4px 14px rgba(31,111,235,0.35);
+        .form-control:focus { 
+            border-color:var(--accent); 
+            box-shadow: 0 0 20px var(--otp-glow);
+            background:rgba(31, 41, 55, 0.9);
         }
-        .btn-blue:hover { background:linear-gradient(135deg, #388bfd, #58a6ff); transform:translateY(-2px); }
-
-        /* ============= NUMBER BOX ============= */
-        .number-card {
-            background:linear-gradient(135deg, #0d1117, #161b22);
-            border:1px solid var(--num-glow, #238636);
-            border-radius:14px;
-            padding:20px; margin:16px 0; text-align:center;
-            box-shadow:0 0 28px var(--num-glow-shadow, rgba(35,134,54,0.3));
-            transition:border-color 0.3s, box-shadow 0.3s;
+        body.light-mode .form-control:focus { background:rgba(255, 255, 255, 1); }
+        .form-control:disabled { opacity:0.4; cursor:not-allowed; }
+        
+        /* ============ [ميزة 6] أزرار نيون ============ */
+        .btn-primary { 
+            width:100%; padding:16px; border:none; border-radius:16px; 
+            background: linear-gradient(135deg, #00ff88, #00d2ff);
+            color:#0a0e1a; font-size:18px; font-weight:900;
+            cursor:pointer; margin-top:12px; 
+            font-family:'Cairo',sans-serif;
+            box-shadow: 0 0 25px rgba(0, 255, 136, 0.6), 0 0 50px rgba(0, 255, 136, 0.3);
+            transition:all 0.3s;
             position:relative; overflow:hidden;
         }
-        .number-card::after {
-            content:''; position:absolute; top:-50%; left:-50%;
-            width:200%; height:200%;
-            background:linear-gradient(45deg, transparent 40%, rgba(255,255,255,0.04) 50%, transparent 60%);
-            animation:shine 3.5s linear infinite;
-            pointer-events:none;
+        .btn-primary::before {
+            content:''; position:absolute; top:0; left:-100%;
+            width:100%; height:100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+            transition:left 0.6s;
         }
-        @keyframes shine { 0%{transform:translateX(-30%) translateY(-30%);} 100%{transform:translateX(30%) translateY(30%);} }
-        .number-label { font-size:12px; color:#8b949e; margin-bottom:6px; font-weight:700; }
-        .number {
-            font-family:'Courier New',monospace; font-size:26px; font-weight:bold;
-            color:var(--num-color, #3fb950); letter-spacing:1.5px;
-            text-shadow:0 0 12px var(--num-glow, #3fb950);
-            animation:numAppear 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+        .btn-primary:hover::before { left:100%; }
+        .btn-primary:hover { transform:translateY(-3px); box-shadow: 0 5px 35px rgba(0, 255, 136, 0.8), 0 0 60px rgba(0, 255, 136, 0.5); }
+        .btn-primary:disabled { opacity:0.4; cursor:not-allowed; box-shadow:none; transform:none; }
+        
+        .btn-blue { 
+            width:100%; padding:16px; border:none; border-radius:16px; 
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            color:#fff; font-size:16px; font-weight:800;
+            cursor:pointer; margin-top:10px; 
+            font-family:'Cairo',sans-serif;
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.6), 0 0 40px rgba(59, 130, 246, 0.3);
+            transition:all 0.3s;
+            display:flex; align-items:center; justify-content:center; gap:8px;
         }
-        @keyframes numAppear {
-            0% { transform:scale(0.5) rotateX(90deg); opacity:0; }
-            100% { transform:scale(1) rotateX(0); opacity:1; }
+        .btn-blue:hover { transform:translateY(-3px); box-shadow: 0 5px 30px rgba(59, 130, 246, 0.8), 0 0 50px rgba(59, 130, 246, 0.5); }
+        .btn-blue:disabled { opacity:0.4; cursor:not-allowed; }
+        
+        .btn-danger { 
+            background: linear-gradient(135deg, #ef4444, #b91c1c) !important;
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.6), 0 0 40px rgba(239, 68, 68, 0.3) !important;
         }
-        .number-platform { font-size:13px; color:#8b949e; margin-top:8px; font-weight:600; }
-        .copy-btn-mini {
-            background:transparent; border:1px solid #30363d; color:#8b949e;
-            padding:6px 12px; border-radius:8px; cursor:pointer; font-size:12px; margin-top:10px;
-            font-family:'Cairo',sans-serif; font-weight:600;
+        .btn-danger:hover { box-shadow: 0 5px 30px rgba(239, 68, 68, 0.8), 0 0 50px rgba(239, 68, 68, 0.5) !important; }
+        
+        .number-box { 
+            display:flex; align-items:center; justify-content:space-between; 
+            background: linear-gradient(135deg, #000, #0f172a);
+            border:2px solid #00ff88; border-radius:16px; padding:16px; margin:18px 0;
+            box-shadow: 0 0 30px var(--otp-glow), inset 0 0 20px rgba(0, 255, 136, 0.1);
+            animation: glowPulse 2s infinite;
         }
-        .copy-btn-mini:hover { color:#3fb950; border-color:#3fb950; }
-
-        /* ============= OTP TIMER ============= */
-        .otp-timer {
-            text-align:center; margin:10px 0; padding:10px;
-            background:rgba(31,111,235,0.08); border:1px solid #1f6feb;
-            border-radius:10px; font-weight:700; font-size:14px;
-            color:#58a6ff;
+        @keyframes glowPulse { 0%,100%{ box-shadow: 0 0 30px var(--otp-glow), inset 0 0 20px rgba(0, 255, 136, 0.1);} 50%{ box-shadow: 0 0 40px rgba(0, 255, 136, 0.7), inset 0 0 30px rgba(0, 255, 136, 0.2);} }
+        .number-box .number { 
+            font-family:'Courier New',monospace; font-size:22px; 
+            color:#00ff88; flex-grow:1; text-align:center; font-weight:bold;
+            text-shadow: 0 0 10px #00ff88;
+            letter-spacing:1px;
         }
-        .otp-timer.urgent { color:#f85149; border-color:#f85149; background:rgba(248,81,73,0.1); animation:timerPulse 1s ease infinite; }
-        .otp-timer.expired { color:#8b949e; border-color:#30363d; background:#0d1117; }
-        @keyframes timerPulse { 0%,100%{transform:scale(1);} 50%{transform:scale(1.02);} }
-        .progress-bar-wrap { height:4px; background:#0d1117; border-radius:4px; overflow:hidden; margin-top:8px; }
-        .progress-bar { height:100%; background:linear-gradient(90deg, #1f6feb, #3fb950); transition:width 1s linear, background 0.3s; }
-
-        /* ============= OTP LIST ============= */
-        .otp-list { display:flex; flex-direction:column; gap:8px; margin-top:12px; max-height:400px; overflow-y:auto; padding-left:4px; }
-        .otp-list::-webkit-scrollbar { width:4px; }
-        .otp-list::-webkit-scrollbar-thumb { background:#30363d; border-radius:2px; }
-        .otp-item {
-            background:#1c2128; border:1px solid #30363d; border-radius:10px;
-            padding:12px 14px; display:flex; justify-content:space-between; align-items:center;
-            transition:all 0.2s; animation:slideInRight 0.4s ease;
+        .copy-number-btn { 
+            background:rgba(0, 255, 136, 0.15); border:1px solid #00ff88;
+            border-radius:10px; padding:8px 12px; color:#00ff88; 
+            cursor:pointer; font-size:18px; margin-right:10px;
+            transition:all 0.3s;
         }
-        .otp-item:hover { border-color:#3fb950; transform:translateX(-3px); }
-        .otp-item.fresh { border-color:#3fb950; box-shadow:0 0 12px rgba(63,185,80,0.3); }
-        @keyframes slideInRight { from{opacity:0; transform:translateX(20px);} to{opacity:1; transform:translateX(0);} }
-        .otp-item .otp-code { font-family:'Courier New',monospace; font-size:17px; font-weight:bold; color:#3fb950; letter-spacing:1px; }
-        .otp-item .otp-info { font-size:11px; color:#8b949e; margin-top:4px; }
-        .otp-item .copy-btn { background:transparent; border:1px solid #30363d; color:#58a6ff; padding:5px 12px; border-radius:6px; cursor:pointer; font-size:11px; font-weight:600; font-family:'Cairo',sans-serif; }
-        .otp-item .copy-btn:hover { background:#1f6feb; color:#fff; }
+        .copy-number-btn:hover { background:#00ff88; color:#000; transform:rotate(15deg); }
+        
+        .otp-container { 
+            margin-top:20px; max-height:380px; overflow-y:auto; 
+            border:1px solid rgba(139, 92, 246, 0.3); border-radius:16px; padding:12px; 
+            background:rgba(15, 23, 42, 0.5);
+        }
+        body.light-mode .otp-container { background:rgba(255, 255, 255, 0.6); }
+        .otp-container::-webkit-scrollbar { width:6px; }
+        .otp-container::-webkit-scrollbar-track { background:rgba(255,255,255,0.05); border-radius:10px; }
+        .otp-container::-webkit-scrollbar-thumb { background:linear-gradient(180deg, var(--accent), var(--accent-2)); border-radius:10px; }
+        .otp-item { 
+            background: linear-gradient(135deg, #0f172a, #1e293b);
+            border:1px solid #00ff88; border-radius:14px; 
+            padding:14px; margin-bottom:12px; 
+            font-family:'Courier New'; font-size:15px; 
+            color:#00ff88; line-height:1.7;
+            box-shadow: 0 0 15px var(--otp-glow);
+            animation: slideIn 0.4s ease;
+            position:relative;
+        }
+        body.light-mode .otp-item {
+            background: linear-gradient(135deg, #ffffff, #e0f2fe);
+            color:#0891b2;
+        }
+        @keyframes slideIn { from{opacity:0; transform:translateX(20px);} to{opacity:1; transform:translateX(0);} }
+        .otp-item .copy-btn { 
+            background:rgba(0, 255, 136, 0.2); border:1px solid #00ff88;
+            border-radius:8px; padding:5px 12px; color:#00ff88; 
+            cursor:pointer; font-size:12px; font-weight:bold;
+            transition:all 0.3s;
+        }
+        .otp-item .copy-btn:hover { background:#00ff88; color:#000; }
+        .otp-item .info { color:var(--text-soft); font-size:12px; display:block; margin-top:6px; }
+        
+        /* ============ [ميزة 2] عداد تنازلي 60 ثانية ============ */
+        .countdown-timer {
+            display:inline-block; margin-right:10px; padding:3px 10px;
+            background:rgba(0, 255, 136, 0.15); border:1px solid #00ff88;
+            border-radius:20px; font-size:12px; font-weight:bold;
+            color:#00ff88; font-family:'Courier New', monospace;
+        }
+        .countdown-timer.expired {
+            background:rgba(239, 68, 68, 0.15); border-color:#ef4444; color:#ef4444;
+        }
+        .countdown-timer.warning {
+            background:rgba(245, 158, 11, 0.15); border-color:#f59e0b; color:#f59e0b;
+        }
 
-        .empty-state { text-align:center; padding:30px 16px; color:#8b949e; font-size:13px; }
-        .empty-state .icon { font-size:36px; margin-bottom:8px; opacity:0.6; }
+        /* ============ [ميزة 2] قسم الأكواد القديمة ============ */
+        .old-otp-item {
+            opacity:0.6;
+            background: linear-gradient(135deg, #1a1f2e, #0f172a) !important;
+            border:1px solid #475569 !important;
+            color:#94a3b8 !important;
+        }
+        body.light-mode .old-otp-item {
+            background: linear-gradient(135deg, #f1f5f9, #e2e8f0) !important;
+            color:#64748b !important;
+        }
+        .old-otp-item .countdown-timer { display:none; }
+        .old-section-title { color:#94a3b8 !important; }
+        .old-section-title::after { background: linear-gradient(90deg, #94a3b8, transparent) !important; }
+        body.light-mode .old-section-title { color:#64748b !important; }
+        body.light-mode .old-section-title::after { background: linear-gradient(90deg, #64748b, transparent) !important; }
 
-        /* ============= STATUS BAR ============= */
-        .status { background:#1c2128; border:1px solid #30363d; border-radius:10px; padding:12px 16px; text-align:center; margin-top:14px; color:#8b949e; font-size:13px; font-weight:600; }
+        .status { 
+            background: linear-gradient(135deg, rgba(31, 41, 55, 0.7), rgba(15, 23, 42, 0.7));
+            padding:14px; border-radius:14px; text-align:center; 
+            margin-top:20px; color:var(--text-muted); font-size:14px; font-weight:600;
+            border:1px solid var(--border-soft);
+        }
+        body.light-mode .status {
+            background: linear-gradient(135deg, #ffffff, #e0f2fe);
+        }
+        .status .icon { font-size:18px; margin-left:8px; }
+        
+        .pulse-emoji { display:inline-block; animation: pulse 1.5s infinite; }
+        .spin-emoji { display:inline-block; animation: spin 3s linear infinite; }
+        @keyframes spin { from{transform:rotate(0);} to{transform:rotate(360deg);} }
 
-        /* ============= THEME TOGGLE ============= */
-        .theme-toggle { background:transparent; border:1px solid #30363d; color:#8b949e; padding:6px 10px; border-radius:8px; cursor:pointer; font-size:14px; }
-        .theme-toggle:hover { color:#58a6ff; border-color:#58a6ff; }
-
-        /* ============= LIGHT MODE ============= */
-        body.light { background:#f6f8fa !important; color:#1f2328 !important; }
-        body.light .app { background:rgba(255,255,255,0.85) !important; }
-        body.light .top-bar { background:rgba(255,255,255,0.95) !important; border-bottom-color:#d0d7de !important; }
-        body.light .brand-text, body.light .hero h1, body.light .section-title { color:#1f2328 !important; }
-        body.light .hero p, body.light .status, body.light .empty-state { color:#656d76 !important; }
-        body.light .platform-btn { background:#f6f8fa; border-color:#d0d7de; color:#1f2328; }
-        body.light .platform-btn:hover { background:#eaeef2; }
-        body.light .form-control { background:#ffffff; border-color:#d0d7de; color:#1f2328; }
-        body.light .otp-item { background:#f6f8fa; border-color:#d0d7de; }
-        body.light .otp-item .otp-code { color:#1a7f37; }
-        body.light .dropdown-menu { background:#ffffff; border-color:#d0d7de; }
-        body.light .dropdown-menu a { color:#1f2328; }
-        body.light .status { background:#f6f8fa; border-color:#d0d7de; }
-        body.light .number-card { background:#f6f8fa; }
-        body.light .number { color:#1a7f37; }
-
-        /* ============= TICKER (شريط إخباري متحرك) ============= */
+        /* ============ [تحسينات بصرية] ============ */
+        /* [1] خلفية canvas مع نجوم ديناميكية + shooting stars */
+        #starCanvas { position:fixed; inset:0; z-index:-1; pointer-events:none; }
+        /* [3] شعار طائر - class="logo-float" */
+        .logo-float {
+            display:inline-block;
+            animation: logoFloat 3.5s ease-in-out infinite;
+            filter: drop-shadow(0 0 10px rgba(0,255,200,0.6));
+        }
+        @keyframes logoFloat {
+            0%,100% { transform: translateY(0) rotate(-3deg) scale(1); }
+            25%     { transform: translateY(-12px) rotate(2deg) scale(1.05); }
+            50%     { transform: translateY(-6px) rotate(-2deg) scale(1.02); }
+            75%     { transform: translateY(-14px) rotate(3deg) scale(1.06); }
+        }
+        /* [4] أيقونات نابضة - class="icon-pulse" */
+        .icon-pulse {
+            display:inline-block;
+            animation: iconPulse 1.8s ease-in-out infinite;
+            transform-origin: center;
+        }
+        @keyframes iconPulse {
+            0%,100% { transform: scale(1); filter: drop-shadow(0 0 4px currentColor); }
+            50%     { transform: scale(1.2); filter: drop-shadow(0 0 12px currentColor) brightness(1.3); }
+        }
+        /* [2] أزرار نيون @keyframes neonPulse */
+        .neon-btn {
+            position: relative;
+            animation: neonPulse 2s ease-in-out infinite;
+        }
+        @keyframes neonPulse {
+            0%,100% {
+                box-shadow:
+                    0 0 20px rgba(0, 255, 136, 0.5),
+                    0 0 40px rgba(0, 255, 136, 0.3),
+                    0 0 60px rgba(0, 255, 136, 0.15);
+            }
+            50% {
+                box-shadow:
+                    0 0 30px rgba(0, 255, 136, 0.8),
+                    0 0 60px rgba(0, 255, 136, 0.5),
+                    0 0 90px rgba(0, 255, 136, 0.25);
+            }
+        }
+        .neon-btn-blue {
+            position: relative;
+            animation: neonPulseBlue 2s ease-in-out infinite;
+        }
+        @keyframes neonPulseBlue {
+            0%,100% {
+                box-shadow:
+                    0 0 20px rgba(59, 130, 246, 0.5),
+                    0 0 40px rgba(59, 130, 246, 0.3),
+                    0 0 60px rgba(59, 130, 246, 0.15);
+            }
+            50% {
+                box-shadow:
+                    0 0 30px rgba(59, 130, 246, 0.8),
+                    0 0 60px rgba(59, 130, 246, 0.5),
+                    0 0 90px rgba(59, 130, 246, 0.25);
+            }
+        }
+        /* [6] بطاقات متحركة @keyframes slideIn (محسّن) */
+        .slide-in-card {
+            animation: slideInUp 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        @keyframes slideInUp {
+            from { opacity: 0; transform: translateY(20px) scale(0.95); }
+            to   { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        /* [7] عدّاد الأرقام - class="badge-count" */
+        .badge-count {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 22px;
+            height: 22px;
+            padding: 0 7px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: #fff;
+            font-size: 11px;
+            font-weight: 900;
+            font-family: 'Courier New', monospace;
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.7), 0 0 20px rgba(239, 68, 68, 0.4);
+            animation: badgeBounce 2s ease-in-out infinite;
+            margin-right: 6px;
+        }
+        @keyframes badgeBounce {
+            0%,100% { transform: scale(1); }
+            50%     { transform: scale(1.15); }
+        }
+        /* [2] تأثير زجاجي محسّن - Glassmorphism */
+        .glass {
+            background: rgba(17, 24, 39, 0.6) !important;
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            box-shadow:
+                0 8px 32px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+        }
+        body.light-mode .glass {
+            background: rgba(255, 255, 255, 0.7) !important;
+            border: 1px solid rgba(0, 0, 0, 0.08) !important;
+            box-shadow:
+                0 8px 32px rgba(0, 0, 0, 0.1),
+                inset 0 1px 0 rgba(255, 255, 255, 0.5) !important;
+        }
+        /* [8] ظل متوهج للأرقام */
+        .number-glow {
+            text-shadow:
+                0 0 10px #00ff88,
+                0 0 20px #00ff88,
+                0 0 40px rgba(0, 255, 136, 0.5);
+        }
+        /* شريط إشعارات فورية منبثقة */
+        #instantNotif {
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-30px);
+            background: linear-gradient(135deg, #00ff88, #00d2ff);
+            color: #0a0e1a;
+            padding: 12px 24px;
+            border-radius: 14px;
+            font-weight: 900;
+            font-family: 'Cairo', sans-serif;
+            box-shadow: 0 0 30px rgba(0,255,136,0.7);
+            z-index: 99999;
+            opacity: 0;
+            transition: all 0.4s ease;
+            pointer-events: none;
+        }
+        #instantNotif.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+        /* تأثير صحن طائر في الخلفية */
+        .flying-ufo {
+            position: fixed;
+            top: 15%;
+            left: -100px;
+            font-size: 32px;
+            z-index: -1;
+            pointer-events: none;
+            animation: flyUfo 25s linear infinite;
+            opacity: 0.5;
+        }
+        @keyframes flyUfo {
+            0%   { transform: translateX(0) translateY(0) rotate(-5deg); }
+            50%  { transform: translateX(110vw) translateY(-30px) rotate(5deg); }
+            100% { transform: translateX(110vw) translateY(-30px) rotate(5deg); }
+        }
+        /* ============ [الفوتر] شريط أخبار بسيط وأنيق ============ */
+        .site-footer {
+            margin-top: 30px;
+            padding: 0;
+            border-radius: 16px;
+            background: linear-gradient(135deg, rgba(31, 41, 55, 0.5), rgba(15, 23, 42, 0.7));
+            border: 1px solid var(--border-soft);
+            position: relative;
+            overflow: hidden;
+        }
+        body.light-mode .site-footer {
+            background: linear-gradient(135deg, #ffffff, #e0f2fe);
+        }
+        /* ===== شريط الأخبار البسيط ===== */
+        .news-ticker {
+            display: flex;
+            align-items: center;
+            height: 42px;
+            position: relative;
+            overflow: hidden;
+        }
         .ticker-wrap {
-            position:sticky; bottom:0; left:0; right:0; z-index:50;
-            background:linear-gradient(90deg, #0d1117, #161b22, #0d1117);
-            border-top:1px solid #21262d; padding:10px 0; overflow:hidden;
-            box-shadow:0 -4px 20px rgba(0,0,0,0.4);
-            display:flex; align-items:center;
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+            height: 100%;
+            display: flex;
+            align-items: center;
         }
-        .ticker-label {
-            background:linear-gradient(135deg, #f85149, #da3633);
-            color:#fff; font-weight:800; font-size:11px;
-            padding:4px 10px; border-radius:6px; margin:0 8px;
-            white-space:nowrap; flex-shrink:0;
-            box-shadow:0 0 12px rgba(248,81,73,0.5);
-            animation:labelBlink 1.5s ease infinite;
-            z-index:2;
+        /* ضباب خفيف على الأطراف */
+        .ticker-wrap::before,
+        .ticker-wrap::after {
+            content: '';
+            position: absolute;
+            top: 0; bottom: 0;
+            width: 30px;
+            z-index: 3;
+            pointer-events: none;
         }
-        @keyframes labelBlink { 0%,100%{opacity:1;} 50%{opacity:0.5;} }
-        .ticker-viewport {
-            flex:1; overflow:hidden; position:relative;
-            -webkit-mask-image:linear-gradient(90deg, transparent 0%, #000 5%, #000 95%, transparent 100%);
-            mask-image:linear-gradient(90deg, transparent 0%, #000 5%, #000 95%, transparent 100%);
+        .ticker-wrap::before {
+            left: 0;
+            background: linear-gradient(90deg, rgba(15, 23, 42, 0.9), transparent);
         }
-        .ticker {
-            display:inline-block; white-space:nowrap;
-            animation:tickerScroll 30s linear infinite;
-            color:#58a6ff; font-weight:700; font-size:14px;
+        .ticker-wrap::after {
+            right: 0;
+            background: linear-gradient(270deg, rgba(15, 23, 42, 0.9), transparent);
         }
-        .ticker span { margin:0 24px; }
-        .ticker .accent { color:#3fb950; }
-        .ticker .warn { color:#f0b429; }
-        .ticker .pulse { animation:textPulse 2s ease infinite; }
-        @keyframes tickerScroll {
-            0% { transform:translateX(100vw); }
-            100% { transform:translateX(-100%); }
+        body.light-mode .ticker-wrap::before {
+            background: linear-gradient(90deg, rgba(255,255,255,0.9), transparent);
         }
-        @keyframes textPulse { 0%,100%{opacity:1;} 50%{opacity:0.5;} }
-
-        /* ============= إيموجيات متحركة ============= */
-        .emoji-bg-layer {
-            position:fixed; top:0; left:0; width:100%; height:100%;
-            pointer-events:none; z-index:2; overflow:hidden;
+        body.light-mode .ticker-wrap::after {
+            background: linear-gradient(270deg, rgba(255,255,255,0.9), transparent);
         }
-        .emoji-float {
-            position:absolute; font-size:24px; opacity:0.5;
-            animation:emojiRise linear infinite;
+        /* الشريط اللي يمشي بسلاسة */
+        .ticker-track {
+            display: inline-flex;
+            align-items: center;
+            white-space: nowrap;
+            animation: tickerSlide 60s linear infinite;
+            will-change: transform;
         }
-        @keyframes emojiRise {
-            0% { transform:translateY(110vh) translateX(0) rotate(0deg); opacity:0; }
-            10% { opacity:0.6; }
-            90% { opacity:0.6; }
-            100% { transform:translateY(-20vh) translateX(60px) rotate(360deg); opacity:0; }
+        .ticker-track:hover { animation-play-state: paused; }
+        @keyframes tickerSlide {
+            0%   { transform: translateX(100%); }
+            100% { transform: translateX(-100%); }
         }
-
-        .footer { text-align:center; padding:14px 16px 8px; color:#484f58; font-size:12px; }
-
-        @media (max-width:380px) {
-            .hero h1 { font-size:20px; }
-            .platform-btn { font-size:13px; padding:10px 12px; }
-            .number { font-size:22px; }
+        /* عنصر الخبر — نظيف وبسيط */
+        .ticker-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 0 22px;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+        .ticker-item .ti-name {
+            font-weight: 700;
+            color: var(--text-main);
+        }
+        .ticker-item .ti-heart {
+            color: #ef4444;
+            display: inline-block;
+        }
+        /* فاصل بسيط */
+        .ticker-sep {
+            display: inline-block;
+            color: var(--text-soft);
+            opacity: 0.5;
+            padding: 0 6px;
+        }
+        .footer-sub {
+            margin-top: 0;
+            padding: 8px 12px;
+            font-size: 11px;
+            color: var(--text-soft);
+            opacity: 0.6;
+            text-align: center;
+            border-top: 1px solid var(--border-soft);
+        }
+        
+        @media (min-width: 768px) {
+            .container { max-width:480px; margin:0 auto; min-height:100vh; }
+            .platform-selector { grid-template-columns:repeat(2, 1fr); }
+        }
+        @media (max-width: 380px) {
+            .header h1 { font-size:24px; }
+            .platform-btn img { width:32px; height:32px; }
+            .platform-btn span { font-size:12px; }
         }
     </style>
 </head>
 <body>
+    <div class="stars" id="stars"></div>
+    <canvas id="starCanvas"></canvas>
     <canvas id="matrixCanvas"></canvas>
-    <div class="emoji-bg-layer" id="emojiLayer"></div>
-
-    <div class="app">
-        <!-- HEADER -->
+    <div class="flying-ufo">🛸</div>
+    
+    <!-- [شريط الإعلان المتحرك] -->
+    <div class="ad-banner">
+        <div class="ad-track" id="adTrack">
+            <span class="ad-item"><span class="ad-icon">🚀</span> موقع المطري OTP - الأسرع والأقوى</span>
+            <span class="ad-sep">◆</span>
+            <span class="ad-item"><span class="ad-icon">⚡</span> اسحب أكواد أي منصة بسهولة</span>
+            <span class="ad-sep">◆</span>
+            <span class="ad-item"><span class="ad-icon">🔐</span> أمان عالي وسرعة فائقة</span>
+            <span class="ad-sep">◆</span>
+            <span class="ad-item"><span class="ad-icon">🌟</span> جرب الآن مجاناً</span>
+            <span class="ad-sep">◆</span>
+            <span class="ad-item"><span class="ad-icon">💎</span> أفضل خدمة OTP في الوطن العربي</span>
+            <span class="ad-sep">◆</span>
+            <span class="ad-item"><span class="ad-icon">🎯</span>精准快速的验证码服务</span>
+            <span class="ad-sep">◆</span>
+            <span class="ad-item"><span class="ad-icon">🚀</span> موقع المطري OTP - الأسرع والأقوى</span>
+            <span class="ad-sep">◆</span>
+            <span class="ad-item"><span class="ad-icon">⚡</span> اسحب أكواد أي منصة بسهولة</span>
+            <span class="ad-sep">◆</span>
+            <span class="ad-item"><span class="ad-icon">🔐</span> أمان عالي وسرعة فائقة</span>
+            <span class="ad-sep">◆</span>
+            <span class="ad-item"><span class="ad-icon">🌟</span> جرب الآن مجاناً</span>
+            <span class="ad-sep">◆</span>
+            <span class="ad-item"><span class="ad-icon">💎</span> أفضل خدمة OTP في الوطن العربي</span>
+            <span class="ad-sep">◆</span>
+            <span class="ad-item"><span class="ad-icon">🎯</span>精准快速的验证码服务</span>
+            <span class="ad-sep">◆</span>
+        </div>
+    </div>
+    <div id="instantNotif"></div>
+    
+    <div class="container glass slide-in-card">
         <div class="top-bar">
-            <div class="brand">
-                <div class="brand-icon">🚀</div>
-                <div class="brand-text">المطري OTP</div>
+            <div class="top-actions">
+                <!-- [ميزة 4] زر تبديل الوضع الليلي/النهاري -->
+                <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="تبديل الوضع">🌙</button>
             </div>
-            <div style="display:flex; gap:6px; position:relative;">
-                <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">🌙</button>
-                <button class="menu-btn" onclick="toggleMenu()">☰</button>
-                <div class="dropdown-menu" id="contactMenu">
-                    <div class="menu-section-title">📞 التواصل معي</div>
-                    {% for c in contacts %}
-                    <a href="{{ c.link }}" target="_blank"><span class="icon">{{ c.icon }}</span>{{ c.name }}</a>
-                    {% endfor %}
-                    <div class="menu-section-title">👥 مجموعاتي</div>
-                    {% for g in groups %}
-                    <a href="{{ g.link }}" target="_blank"><span class="icon">{{ g.icon }}</span>{{ g.name }}</a>
-                    {% endfor %}
-                </div>
+            <button class="menu-btn" onclick="toggleMenu()">☰</button>
+            <div class="dropdown-menu" id="contactMenu">
+                <a href="{{ owner_link }}" target="_blank">📞 تواصل معي</a>
+                <a href="{{ wa_group }}" target="_blank">💬 جروب واتساب</a>
             </div>
         </div>
 
-        <!-- MAIN -->
-        <div class="main">
-            <div class="hero">
-                <h1>🚀 موقع المطري OTP</h1>
-                <p><span class="floating-emoji" style="position:relative;display:inline-block;animation:floatEmoji 4s ease-in-out infinite;">👑</span> أرقام سحب أكواد مطري <span class="floating-emoji" style="position:relative;display:inline-block;animation:floatEmoji 4s ease-in-out infinite;animation-delay:0.5s;">👑</span></p>
+        <div class="header">
+            <h1><span class="logo-float">🚀</span> موقع المطري OTP <span class="logo-float">🚀</span></h1>
+            <p><span class="crown icon-pulse">👑</span> أرقام واتساب سحب أكواد تطوير مطري <span class="crown icon-pulse">👑</span></p>
+        </div>
+
+        <div class="section-title">
+            <span class="emoji icon-pulse">🎯</span>
+            <span>اختر المنصة</span>
+            <span class="badge-count" id="platformCount">0</span>
+        </div>
+        <div class="form-group">
+            <div class="platform-selector" id="platformSelector"></div>
+        </div>
+
+        <div class="section-title">
+            <span class="emoji icon-pulse">🌍</span>
+            <span>اختر الدولة</span>
+        </div>
+        <div class="form-group">
+            <select id="country" class="form-control" disabled>
+                <option value="">🚀 -- اختر المنصة أولاً -- 🚀</option>
+            </select>
+        </div>
+
+        <button class="btn-primary neon-btn" id="getNumberBtn" onclick="getNumber()" disabled>
+            🚀 جلب رقم
+        </button>
+        <button class="btn-blue neon-btn-blue" id="refreshBtn" onclick="refreshNumber()" disabled>
+            🔄 تبديل
+        </button>
+
+        <div id="numberContainer" style="display:none;">
+            <div class="number-box">
+                <button class="copy-number-btn" onclick="copyNumber()" title="نسخ">📋</button>
+                <div class="number" id="numberDisplay">+</div>
             </div>
-
-            <div class="section-title"><span class="icon">🎯</span> اختر المنصة</div>
-            <div class="platforms" id="platformSelector">
-                {% for p in platforms_list %}
-                <button type="button" class="platform-btn" data-platform="{{ p }}" style="--glow: {{ platform_colors[p] }};">
-                    <img src="{{ platform_logos[p] }}" alt="{{ platform_names[p] }}"><span>{{ platform_names[p] }}</span>
-                </button>
-                {% endfor %}
+            <div style="display:flex; gap:10px; margin-top:12px;">
+                <button class="btn-primary neon-btn" onclick="startMonitoring()">📡 بدء السحب</button>
+                <button class="btn-blue btn-danger" onclick="stopMonitoring()">⏹️ إيقاف</button>
             </div>
+        </div>
 
-            <div class="section-title"><span class="icon">🌍</span> اختر الدولة</div>
-            <div class="select-wrap">
-                <select id="country" class="form-control" disabled>
-                    <option value="">-- اختر المنصة أولاً --</option>
-                </select>
+        <div class="otp-container" id="otpHistory">
+            <div style="text-align:center; color:#64748b; padding:25px;">
+                <div style="font-size:40px; margin-bottom:10px;">⏳</div>
+                <div>في انتظار الأكواد...</div>
             </div>
+        </div>
 
-            <button class="btn-primary" id="getNumberBtn" onclick="getNumber()" disabled>🚀 جلب رقم</button>
-            <button class="btn-blue" id="refreshBtn" onclick="refreshNumber()" disabled>🔄 تبديل</button>
+        <!-- [ميزة 2] قسم الأكواد القديمة -->
+        <div class="section-title old-section-title" id="oldSectionTitle" style="display:none;">
+            <span class="emoji icon-pulse">📜</span>
+            <span>الأكواد القديمة (منتهية الصلاحية)</span>
+            <span class="badge-count" id="oldCount" style="display:none;">0</span>
+        </div>
+        <div class="otp-container" id="oldOtpHistory" style="display:none; max-height:250px;">
+            <div style="text-align:center; color:#64748b; padding:25px;">
+                <div style="font-size:40px; margin-bottom:10px;">📭</div>
+                <div>لا توجد أكواد قديمة بعد</div>
+            </div>
+        </div>
 
-            <div id="numberContainer" style="display:none;">
-                <div class="number-card" id="numberCard">
-                    <div class="number-label">📱 الرقم المختار</div>
-                    <div class="number" id="numberDisplay">+</div>
-                    <div class="number-platform" id="numberPlatform"></div>
-                    <button class="copy-btn-mini" onclick="copyNumber()">📋 نسخ الرقم</button>
-                </div>
-                <div class="otp-timer" id="otpTimer" style="display:none;">
-                    <span id="timerText">⏱️ صلاحية الكود: <strong id="timerCount">60</strong> ثانية</span>
-                    <div class="progress-bar-wrap">
-                        <div class="progress-bar" id="progressBar" style="width:100%;"></div>
+        <div class="status" id="status">
+            <span class="icon">⚡</span>
+            اختر المنصة والدولة للبدء
+        </div>
+
+        <!-- [الفوتر] شريط أخبار بسيط وأنيق -->
+        <div class="site-footer">
+            <div class="news-ticker">
+                <div class="ticker-wrap">
+                    <div class="ticker-track">
+                        <span class="ticker-item">
+                            صُنع بحب <span class="ti-heart">❤</span> بواسطة <span class="ti-name">المطري</span>
+                        </span>
+                        <span class="ticker-sep">•</span>
+                        <span class="ticker-item">
+                            تطوير <span class="ti-name">المطري</span>
+                        </span>
+                        <span class="ticker-sep">•</span>
+                        <span class="ticker-item">
+                            موقع <span class="ti-name">المطري OTP</span> — الأسرع والأفضل
+                        </span>
+                        <span class="ticker-sep">•</span>
+                        <span class="ticker-item">
+                            صُنع بحب <span class="ti-heart">❤</span> بواسطة <span class="ti-name">المطري</span>
+                        </span>
+                        <span class="ticker-sep">•</span>
+                        <span class="ticker-item">
+                            تطوير <span class="ti-name">المطري</span>
+                        </span>
+                        <span class="ticker-sep">•</span>
+                        <span class="ticker-item">
+                            موقع <span class="ti-name">المطري OTP</span> — الأسرع والأفضل
+                        </span>
+                        <span class="ticker-sep">•</span>
                     </div>
                 </div>
-                <div style="display:flex; gap:8px;">
-                    <button class="btn-primary" onclick="startMonitoring()">📡 بدء السحب</button>
-                    <button class="btn-blue" onclick="stopMonitoring()" style="background:linear-gradient(135deg,#da3633,#b91c1c);">⏹️ إيقاف</button>
-                </div>
             </div>
-
-            <div class="section-title" style="margin-top:24px;"><span class="icon">📜</span> الأكواد المسحوبة <span style="margin-right:auto;font-size:12px;color:#8b949e;">(الأحدث أولاً)</span></div>
-            <div class="otp-list" id="otpHistory">
-                <div class="empty-state">
-                    <div class="icon">⏳</div>
-                    <div>في انتظار الأكواد...</div>
-                </div>
-            </div>
-
-            <div class="status" id="status">⚡ اختر المنصة والدولة للبدء</div>
+            <div class="footer-sub">© <span id="footerYear"></span> المطري OTP</div>
         </div>
-
-        <!-- شريط إخباري متحرك -->
-        <div class="ticker-wrap">
-            <span class="ticker-label">📢 مباشر</span>
-            <div class="ticker-viewport">
-                <div class="ticker" id="ticker">
-                    <span>🚀 المطري OTP</span>
-                    <span class="accent">⚡ أسرع موقع سحب أكواد</span>
-                    <span class="warn">👑 صُنع بحب</span>
-                    <span class="pulse">🔥 أكواد حقيقية</span>
-                    <span class="accent">📱 كل المنصات</span>
-                    <span class="warn">🌍 كل الدول</span>
-                    <span>💎 المطري OTP - أحمد المطري</span>
-                    <span class="pulse">⚡ جرب الآن!</span>
-                    <!-- نسخة مكررة لضمان التكرار المستمر -->
-                    <span>🚀 المطري OTP</span>
-                    <span class="accent">⚡ أسرع موقع سحب أكواد</span>
-                    <span class="warn">👑 صُنع بحب</span>
-                    <span class="pulse">🔥 أكواد حقيقية</span>
-                    <span class="accent">📱 كل المنصات</span>
-                    <span class="warn">🌍 كل الدول</span>
-                </div>
-            </div>
-        </div>
-
-        <div class="footer">💎 صُنع بحب ⚡ بواسطة المطري</div>
     </div>
 
-    <!-- أصوات الإشعار (سأضع ملفين: افتراضي + بديل) -->
-    <!-- يمكن للمستخدم تبديل الصوت من الزر -->
-    <audio id="notifSoundA" preload="auto" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"></audio>
-    <audio id="notifSoundB" preload="auto" src="https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3"></audio>
-    <audio id="notifSoundC" preload="auto" src="https://assets.mixkit.co/active_storage/sfx/2702/2702-preview.mp3"></audio>
-
     <script>
-        // ========== بيانات من السيرفر ==========
         const platformLogos = {{ platform_logos | tojson }};
+        const platformLogosSmall = {{ platform_logos_small | tojson }};
         const platformNames = {{ platform_names | tojson }};
         const platformGradients = {{ platform_gradients | tojson }};
-        const platformColors = {{ platform_colors | tojson }};
-        const OTP_VALID_SECONDS = {{ otp_seconds | tojson }};
-        const OWNER_PHONE = "{{ owner_phone }}";
-        const WA_GROUP = "{{ wa_group }}";
 
-        // ========== Matrix Rain (أرقام متساقطة) ==========
+        function createStars() {
+            const stars = document.getElementById('stars');
+            for(let i=0; i<40; i++) {
+                const star = document.createElement('div');
+                star.className = 'star';
+                const size = Math.random() * 3 + 1;
+                star.style.width = size + 'px';
+                star.style.height = size + 'px';
+                star.style.left = Math.random() * 100 + '%';
+                star.style.top = Math.random() * 100 + '%';
+                star.style.animationDelay = Math.random() * 3 + 's';
+                star.style.opacity = Math.random() * 0.7 + 0.3;
+                stars.appendChild(star);
+            }
+        }
+        createStars();
+
+        // ============ [خلفية canvas] نجوم ديناميكية حقيقية + shooting stars ============
+        (function initStarCanvas() {
+            const canvas = document.getElementById('starCanvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            let W = canvas.width = window.innerWidth;
+            let H = canvas.height = window.innerHeight;
+            const stars = [];
+            const numStars = Math.min(150, Math.floor((W * H) / 12000));
+            for (let i = 0; i < numStars; i++) {
+                stars.push({
+                    x: Math.random() * W,
+                    y: Math.random() * H,
+                    r: Math.random() * 1.4 + 0.3,
+                    vx: (Math.random() - 0.5) * 0.3,
+                    vy: (Math.random() - 0.5) * 0.3,
+                    alpha: Math.random() * 0.6 + 0.4,
+                    pulse: Math.random() * 0.02 + 0.005
+                });
+            }
+            const shootingStars = [];
+            function spawnShooting() {
+                if (Math.random() < 0.012) {
+                    shootingStars.push({
+                        x: Math.random() * W,
+                        y: Math.random() * H * 0.4,
+                        len: Math.random() * 60 + 40,
+                        vx: 6 + Math.random() * 3,
+                        vy: 2 + Math.random() * 2,
+                        life: 1
+                    });
+                }
+            }
+            function draw() {
+                ctx.clearRect(0, 0, W, H);
+                const isLight = document.body.classList.contains('light-mode');
+                for (let s of stars) {
+                    s.x += s.vx; s.y += s.vy;
+                    s.alpha += s.pulse;
+                    if (s.alpha > 1 || s.alpha < 0.3) s.pulse = -s.pulse;
+                    if (s.x < 0) s.x = W; if (s.x > W) s.x = 0;
+                    if (s.y < 0) s.y = H; if (s.y > H) s.y = 0;
+                    ctx.beginPath();
+                    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+                    ctx.fillStyle = isLight
+                        ? `rgba(8, 145, 178, ${s.alpha})`
+                        : `rgba(255, 255, 255, ${s.alpha})`;
+                    ctx.shadowBlur = 8;
+                    ctx.shadowColor = isLight ? 'rgba(8, 145, 178, 0.8)' : 'rgba(255,255,255,0.8)';
+                    ctx.fill();
+                }
+                ctx.shadowBlur = 0;
+                spawnShooting();
+                for (let i = shootingStars.length - 1; i >= 0; i--) {
+                    const sh = shootingStars[i];
+                    const grad = ctx.createLinearGradient(sh.x, sh.y, sh.x - sh.len, sh.y - sh.len/2);
+                    grad.addColorStop(0, isLight ? 'rgba(124, 58, 237, 1)' : 'rgba(0,255,200,1)');
+                    grad.addColorStop(1, 'rgba(0,0,0,0)');
+                    ctx.strokeStyle = grad;
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(sh.x, sh.y);
+                    ctx.lineTo(sh.x - sh.len, sh.y - sh.len/2);
+                    ctx.stroke();
+                    sh.x += sh.vx; sh.y += sh.vy; sh.life -= 0.015;
+                    if (sh.life <= 0) shootingStars.splice(i, 1);
+                }
+                requestAnimationFrame(draw);
+            }
+            draw();
+            window.addEventListener('resize', () => {
+                W = canvas.width = window.innerWidth;
+                H = canvas.height = window.innerHeight;
+            });
+        })();
+
+        // ============ [إشعارات فورية] تظهر في أعلى الصفحة ============
+        function showInstantNotif(msg) {
+            const n = document.getElementById('instantNotif');
+            n.textContent = msg;
+            n.classList.add('show');
+            clearTimeout(n._t);
+            n._t = setTimeout(() => n.classList.remove('show'), 3500);
+        }
+
+        // ============ [صوت إشعار جديد - نغمة تقنية حديثة] ============
+        const notificationSound = (function() {
+            let audioCtx = null;
+            function getCtx() {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                return audioCtx;
+            }
+            return function play() {
+                try {
+                    const ctx = getCtx();
+                    const now = ctx.currentTime;
+                    
+                    // نغمة 1: chirp سريع
+                    const osc1 = ctx.createOscillator();
+                    const gain1 = ctx.createGain();
+                    osc1.connect(gain1); gain1.connect(ctx.destination);
+                    osc1.type = 'sine';
+                    osc1.frequency.setValueAtTime(1200, now);
+                    osc1.frequency.exponentialRampToValueAtTime(2400, now + 0.08);
+                    gain1.gain.setValueAtTime(0, now);
+                    gain1.gain.linearRampToValueAtTime(0.3, now + 0.02);
+                    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+                    osc1.start(now);
+                    osc1.stop(now + 0.15);
+                    
+                    // نغمة 2: نبض منخفض
+                    const osc2 = ctx.createOscillator();
+                    const gain2 = ctx.createGain();
+                    osc2.connect(gain2); gain2.connect(ctx.destination);
+                    osc2.type = 'triangle';
+                    osc2.frequency.setValueAtTime(400, now + 0.08);
+                    osc2.frequency.exponentialRampToValueAtTime(200, now + 0.3);
+                    gain2.gain.setValueAtTime(0, now + 0.08);
+                    gain2.gain.linearRampToValueAtTime(0.2, now + 0.12);
+                    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+                    osc2.start(now + 0.08);
+                    osc2.stop(now + 0.35);
+                    
+                    // نغمة 3: نغمة نهائية حادة
+                    const osc3 = ctx.createOscillator();
+                    const gain3 = ctx.createGain();
+                    osc3.connect(gain3); gain3.connect(ctx.destination);
+                    osc3.type = 'sine';
+                    osc3.frequency.setValueAtTime(1800, now + 0.2);
+                    osc3.frequency.exponentialRampToValueAtTime(3200, now + 0.28);
+                    gain3.gain.setValueAtTime(0, now + 0.2);
+                    gain3.gain.linearRampToValueAtTime(0.25, now + 0.22);
+                    gain3.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+                    osc3.start(now + 0.2);
+                    osc3.stop(now + 0.4);
+                    
+                    // تأثير ضوضاء خفيفة
+                    const bufferSize = ctx.sampleRate * 0.1;
+                    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+                    const output = noiseBuffer.getChannelData(0);
+                    for (let i = 0; i < bufferSize; i++) {
+                        output[i] = Math.random() * 2 - 1;
+                    }
+                    const noise = ctx.createBufferSource();
+                    const noiseGain = ctx.createGain();
+                    const filter = ctx.createBiquadFilter();
+                    noise.buffer = noiseBuffer;
+                    filter.type = 'highpass';
+                    filter.frequency.value = 5000;
+                    noise.connect(filter);
+                    filter.connect(noiseGain);
+                    noiseGain.connect(ctx.destination);
+                    noiseGain.gain.setValueAtTime(0, now);
+                    noiseGain.gain.linearRampToValueAtTime(0.08, now + 0.01);
+                    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+                    noise.start(now);
+                    noise.stop(now + 0.1);
+                } catch (e) { console.log('Audio failed:', e); }
+            };
+        })();
+
+        // ============ [خلفية الماتريكس - مطر الأرقام] ============
         (function initMatrix() {
-            try {
-                const canvas = document.getElementById('matrixCanvas');
-                if (!canvas) return;
-                const ctx = canvas.getContext('2d');
-                let w, h, cols, drops;
-                function resize() {
-                    w = canvas.width = window.innerWidth;
-                    h = canvas.height = window.innerHeight;
-                    cols = Math.floor(w / 18);
-                    drops = Array(cols).fill(0).map(()=>Math.random()*-50);
+            const canvas = document.getElementById('matrixCanvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            
+            // تغيير حجم الكانفس
+            function resize() {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            }
+            resize();
+            window.addEventListener('resize', resize);
+            
+            // إعداد الأعمدة
+            const fontSize = 14;
+            const cols = Math.floor(canvas.width / fontSize);
+            const drops = [];
+            for (let i = 0; i < cols; i++) {
+                drops[i] = Math.random() * -100;
+            }
+            
+            // الأحرف المستخدمة (حروف + أرقام)
+            const matrixChars = '01アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789';
+            
+            const isLight = () => document.body.classList.contains('light-mode');
+            
+            function draw() {
+                // خلفية شفافة
+                ctx.fillStyle = 'rgba(10, 14, 26, 0.05)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                ctx.font = fontSize + 'px monospace';
+                
+                for (let i = 0; i < drops.length; i++) {
+                    const char = matrixChars[Math.floor(Math.random() * matrixChars.length)];
+                    const x = i * fontSize;
+                    const y = drops[i] * fontSize;
+                    
+                    // لون متدرج
+                    const hue = isLight() ? 180 : 160;
+                    ctx.fillStyle = `hsla(${hue}, 100%, 50%, ${0.3 + Math.random() * 0.7})`;
+                    ctx.fillText(char, x, y);
+                    
+                    // الرأس اللامع
+                    if (Math.random() > 0.98) {
+                        ctx.fillStyle = isLight() ? 'rgba(8, 145, 178, 0.9)' : 'rgba(0, 255, 200, 0.9)';
+                        ctx.fillText(char, x, y);
+                    }
+                    
+                    // تحريك القطرة
+                    if (y > canvas.height && Math.random() > 0.975) {
+                        drops[i] = 0;
+                    }
+                    drops[i]++;
                 }
-                resize();
-                window.addEventListener('resize', resize);
-                const chars = '0123456789';
-                function draw() {
-                    try {
-                        ctx.fillStyle = 'rgba(10, 14, 20, 0.08)';
-                        ctx.fillRect(0, 0, w, h);
-                        ctx.font = '16px monospace';
-                        for (let i = 0; i < drops.length; i++) {
-                            const text = chars[Math.floor(Math.random()*chars.length)];
-                            const brightness = Math.random();
-                            if (brightness > 0.95) ctx.fillStyle = '#ffffff';
-                            else if (brightness > 0.7) ctx.fillStyle = '#3fb950';
-                            else ctx.fillStyle = '#1f6feb';
-                            ctx.fillText(text, i*18, drops[i]*18);
-                            if (drops[i]*18 > h && Math.random() > 0.975) drops[i] = 0;
-                            drops[i]++;
-                        }
-                    } catch(e) { return; }
-                    requestAnimationFrame(draw);
-                }
-                draw();
-            } catch(e) { console.warn('Matrix init failed:', e); }
+            }
+            
+            setInterval(draw, 50);
         })();
 
-        // ========== إيموجيات طايرة بالخلفية ==========
-        (function spawnEmojis() {
-            try {
-                const layer = document.getElementById('emojiLayer');
-                if (!layer) return;
-                const emojis = ['🚀','⚡','💎','🔑','👑','🎯','🔥','💫','✨','🌟','📱','🌍'];
-                setInterval(() => {
-                    try {
-                        const el = document.createElement('div');
-                        el.className = 'emoji-float';
-                        el.textContent = emojis[Math.floor(Math.random()*emojis.length)];
-                        el.style.left = Math.random()*100 + '%';
-                        el.style.fontSize = (16 + Math.random()*16) + 'px';
-                        el.style.animationDuration = (8 + Math.random()*8) + 's';
-                        layer.appendChild(el);
-                        setTimeout(()=>el.remove(), 16000);
-                    } catch(e) {}
-                }, 1500);
-            } catch(e) { console.warn('Emoji init failed:', e); }
+        // سنة الفوتر
+        document.getElementById('footerYear').textContent = new Date().getFullYear();
+
+        function initPlatformSelector() {
+            const selector = document.getElementById('platformSelector');
+            selector.innerHTML = '';
+            Object.keys(platformNames).forEach(platform => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'platform-btn';
+                btn.onclick = (e) => selectPlatform(platform, e);
+
+                const gradient = platformGradients[platform];
+                const colorMatch = gradient.match(/#[0-9A-F]{6}/gi);
+                const glowColor = colorMatch ? colorMatch[0] : '#00ffc8';
+
+                btn.style.setProperty('--bg-gradient', gradient);
+                btn.style.setProperty('--glow-color', glowColor + '80');
+
+                btn.innerHTML = `
+                    <img src="${platformLogos[platform]}" alt="${platformNames[platform]}" onerror="this.src='${platformLogosSmall[platform]}'">
+                    <span>${platformNames[platform]} ✨</span>
+                `;
+                selector.appendChild(btn);
+            });
+            // [عدّاد الأرقام] badge-count
+            const cnt = document.getElementById('platformCount');
+            if (cnt) cnt.textContent = Object.keys(platformNames).length;
+        }
+
+        function updateBadges() {
+            const newCount = document.querySelectorAll('#otpHistory .otp-item').length;
+            const oldItems = document.querySelectorAll('#oldOtpHistory .old-otp-item').length;
+            const oldBadge = document.getElementById('oldCount');
+            if (oldBadge) {
+                oldBadge.textContent = oldItems;
+                oldBadge.style.display = oldItems > 0 ? 'inline-flex' : 'none';
+            }
+        }
+
+        // ============ [ميزة 4] تبديل الوضع الليلي/النهاري ============
+        function toggleTheme() {
+            document.body.classList.toggle('light-mode');
+            const btn = document.getElementById('themeBtn');
+            const isLight = document.body.classList.contains('light-mode');
+            btn.textContent = isLight ? '☀️' : '🌙';
+            btn.classList.toggle('active', isLight);
+            localStorage.setItem('theme', isLight ? 'light' : 'dark');
+        }
+        // استرجاع الوضع المحفوظ
+        (function() {
+            const saved = localStorage.getItem('theme');
+            if (saved === 'light') {
+                document.body.classList.add('light-mode');
+                document.addEventListener('DOMContentLoaded', () => {
+                    const btn = document.getElementById('themeBtn');
+                    btn.textContent = '☀️'; btn.classList.add('active');
+                });
+            }
         })();
 
-        // ========== القائمة ==========
+        // ============ [ميزة 1] صوت تنبيه Web Audio API ============
+        const notificationSound = (function() {
+            let audioCtx = null;
+            function getCtx() {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                return audioCtx;
+            }
+            return function play() {
+                try {
+                    const ctx = getCtx();
+                    // نغمة 1
+                    const osc1 = ctx.createOscillator();
+                    const gain1 = ctx.createGain();
+                    osc1.connect(gain1); gain1.connect(ctx.destination);
+                    osc1.frequency.value = 880;
+                    osc1.type = 'sine';
+                    gain1.gain.setValueAtTime(0, ctx.currentTime);
+                    gain1.gain.linearRampToValueAtTime(0.25, ctx.currentTime + 0.05);
+                    gain1.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.2);
+                    osc1.start(ctx.currentTime);
+                    osc1.stop(ctx.currentTime + 0.2);
+                    // نغمة 2
+                    const osc2 = ctx.createOscillator();
+                    const gain2 = ctx.createGain();
+                    osc2.connect(gain2); gain2.connect(ctx.destination);
+                    osc2.frequency.value = 1320;
+                    osc2.type = 'sine';
+                    gain2.gain.setValueAtTime(0, ctx.currentTime + 0.15);
+                    gain2.gain.linearRampToValueAtTime(0.25, ctx.currentTime + 0.2);
+                    gain2.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.4);
+                    osc2.start(ctx.currentTime + 0.15);
+                    osc2.stop(ctx.currentTime + 0.4);
+                } catch (e) { console.log('Audio failed:', e); }
+            };
+        })();
+
         function toggleMenu() {
             document.getElementById('contactMenu').classList.toggle('show');
         }
@@ -794,90 +1440,42 @@ main_html = """
             }
         });
 
-        // ========== ثيم ==========
-        function toggleTheme() {
-            const isLight = document.body.classList.toggle('light');
-            document.getElementById('themeToggle').textContent = isLight ? '☀️' : '🌙';
-            localStorage.setItem('theme', isLight ? 'light' : 'dark');
-        }
-        function loadTheme() {
-            if (localStorage.getItem('theme') === 'light') {
-                document.body.classList.add('light');
-                document.getElementById('themeToggle').textContent = '☀️';
-            }
-        }
-        loadTheme();
-
-        // ========== نسخ ==========
         async function copyNumber() {
             const num = document.getElementById('numberDisplay').textContent;
             await navigator.clipboard.writeText(num);
-            const btn = event.target;
-            const orig = btn.textContent;
-            btn.textContent = '✅ تم النسخ';
-            setTimeout(() => btn.textContent = orig, 1500);
-        }
-        function copyText(text, btn) {
-            navigator.clipboard.writeText(text);
-            if (btn) {
-                const orig = btn.textContent;
-                btn.textContent = '✅';
-                setTimeout(()=>btn.textContent = orig, 1500);
-            }
+            showToast('✅ تم نسخ الرقم! ' + num);
         }
 
-        // ========== المنصات ==========
+        function showToast(msg) {
+            const t = document.createElement('div');
+            t.textContent = msg;
+            t.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#00ff88,#00d2ff);color:#000;padding:14px 28px;border-radius:14px;font-weight:bold;z-index:9999;box-shadow:0 0 30px rgba(0,255,136,0.6);animation:slideIn 0.4s;';
+            document.body.appendChild(t);
+            setTimeout(() => t.remove(), 2500);
+        }
+
         let currentPlatform = '';
         let currentNumber = '';
         let monitorInterval = null;
-        let timerInterval = null;
-        let timeLeft = OTP_VALID_SECONDS;
-        let usedSounds = [false, false, false];
-        let soundIdx = 0;
 
-        function pickSound() {
-            // يختار الصوت اللي ما استخدمته قبل (عشان كل مرة صوت مختلف)
-            for (let i = 0; i < usedSounds.length; i++) {
-                if (!usedSounds[i]) {
-                    usedSounds[i] = true;
-                    soundIdx = i;
-                    // بعد فترة يرجع متاح
-                    setTimeout(()=>{ usedSounds[i] = false; }, 30000);
-                    return i;
-                }
-            }
-            return Math.floor(Math.random() * 3);
-        }
+        // ============ [ميزة 2] تخزين العدادات التنازلية ============
+        const otpCountdowns = new Map();
 
-        function playNotif() {
-            const idx = pickSound();
-            const ids = ['notifSoundA','notifSoundB','notifSoundC'];
-            const a = document.getElementById(ids[idx]);
-            a.currentTime = 0;
-            a.volume = 0.7;
-            a.play().catch(()=>{});
-        }
-
-        function initPlatformSelector() {
-            const selector = document.getElementById('platformSelector');
-            // أضف event listeners للأزرار الموجودة من السيرفر
-            selector.querySelectorAll('.platform-btn').forEach(btn => {
-                const platform = btn.getAttribute('data-platform');
-                btn.onclick = () => selectPlatform(platform, btn);
-            });
-        }
-
-        function selectPlatform(platform, btn) {
+        function selectPlatform(platform, event) {
             currentPlatform = platform;
-            document.querySelectorAll('.platform-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.platform-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            const btn = event.currentTarget || event.target.closest('.platform-btn');
             btn.classList.add('active');
             loadCountries();
         }
 
         async function loadCountries() {
+            const platform = currentPlatform;
             const countrySelect = document.getElementById('country');
-            if (!currentPlatform) {
-                countrySelect.innerHTML = '<option value="">-- اختر المنصة أولاً --</option>';
+            if (!platform) {
+                countrySelect.innerHTML = '<option value="">🚀 -- اختر المنصة أولاً -- 🚀</option>';
                 countrySelect.disabled = true;
                 document.getElementById('numberContainer').style.display = 'none';
                 document.getElementById('getNumberBtn').disabled = true;
@@ -885,222 +1483,227 @@ main_html = """
                 return;
             }
             countrySelect.disabled = true;
-            countrySelect.innerHTML = '<option value="">جاري التحميل...</option>';
-            const res = await fetch('/api/countries', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform:currentPlatform}));
+            countrySelect.innerHTML = '<option value="">⏳ جاري التحميل...</option>';
+            const res = await fetch('/api/countries', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform})});
             const data = await res.json();
-            let options = '<option value="">-- اختر الدولة --</option>';
+            let options = '<option value="">🌍 -- اختر الدولة -- 🌍</option>';
             data.forEach(c => { options += `<option value="${c.code}">${c.flag} ${c.name}</option>`; });
             countrySelect.innerHTML = options;
             countrySelect.disabled = false;
         }
 
         document.getElementById('country').addEventListener('change', function() {
-            const has = this.value !== '';
-            document.getElementById('getNumberBtn').disabled = !has;
-            document.getElementById('refreshBtn').disabled = !has;
+            const hasSelection = this.value !== '';
+            document.getElementById('getNumberBtn').disabled = !hasSelection;
+            document.getElementById('refreshBtn').disabled = !hasSelection;
         });
 
         async function getNumber() {
+            const platform = currentPlatform;
             const country = document.getElementById('country').value;
-            if (!currentPlatform || !country) {
-                document.getElementById('status').textContent = '⚠️ يرجى اختيار المنصة والدولة';
+            if (!platform || !country) {
+                document.getElementById('status').innerHTML = '<span class="icon">⚠️</span>يرجى اختيار المنصة والدولة';
                 return;
             }
-            document.getElementById('status').textContent = '⏳ جاري جلب رقم...';
-            const res = await fetch('/api/get_number', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform:currentPlatform, country})});
+            document.getElementById('status').innerHTML = '<span class="icon">⏳</span>جاري جلب رقم...';
+            const res = await fetch('/api/get_number', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform, country})});
             const data = await res.json();
             if (data.number) {
-                showNumber(data.number);
-                document.getElementById('status').textContent = '✅ الرقم جاهز! اضغط بدء السحب';
+                currentNumber = data.number;
+                document.getElementById('numberDisplay').textContent = '+' + data.number;
+                document.getElementById('numberContainer').style.display = 'block';
+                document.getElementById('status').innerHTML = '<span class="icon">✅</span>الرقم جاهز!';
+                showToast('🎉 تم جلب رقم جديد!');
             } else {
-                document.getElementById('status').textContent = '❌ لا توجد أرقام متاحة';
+                document.getElementById('status').innerHTML = '<span class="icon">❌</span>لا توجد أرقام متاحة.';
             }
         }
 
         async function refreshNumber() {
+            const platform = currentPlatform;
             const country = document.getElementById('country').value;
-            if (!currentPlatform || !country) return;
-            document.getElementById('status').textContent = '⏳ جاري التبديل...';
-            const res = await fetch('/api/get_number', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform:currentPlatform, country})});
+            if (!platform || !country) return;
+            document.getElementById('status').innerHTML = '<span class="icon">⏳</span>جاري تبديل الرقم...';
+            const res = await fetch('/api/get_number', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform, country})});
             const data = await res.json();
             if (data.number && data.number !== currentNumber) {
-                showNumber(data.number);
-                document.getElementById('status').textContent = '🔄 تم التبديل!';
+                currentNumber = data.number;
+                document.getElementById('numberDisplay').textContent = '+' + data.number;
+                document.getElementById('status').innerHTML = '<span class="icon">🔄</span>تم تبديل الرقم!';
+                showToast('🔄 تم التبديل!');
             }
         }
 
-        function showNumber(num) {
-            currentNumber = num;
-            // تلوين بطاقة الرقم بلون المنصة
-            const card = document.getElementById('numberCard');
-            const color = platformColors[currentPlatform] || '#3fb950';
-            card.style.setProperty('--num-glow', color);
-            card.style.setProperty('--num-color', color);
-            card.style.setProperty('--num-glow-shadow', color + '55');
-            // عرض الرقم بطريقة مميزة
-            const display = document.getElementById('numberDisplay');
-            display.textContent = '';
-            const full = '+' + num;
-            // أنيميشن ظهور الأرقام واحد واحد
-            [...full].forEach((ch, i) => {
-                const span = document.createElement('span');
-                span.textContent = ch;
-                span.style.display = 'inline-block';
-                span.style.opacity = '0';
-                span.style.transform = 'translateY(-20px) rotate(20deg)';
-                span.style.transition = `all 0.4s cubic-bezier(0.34,1.56,0.64,1) ${i*0.05}s`;
-                display.appendChild(span);
-                setTimeout(() => {
-                    span.style.opacity = '1';
-                    span.style.transform = 'translateY(0) rotate(0)';
-                }, 50);
-            });
-            document.getElementById('numberPlatform').textContent = '🎯 ' + (platformNames[currentPlatform] || '');
-            document.getElementById('numberContainer').style.display = 'block';
-
-            // ✅ إعادة تشغيل العداد مع كل رقم جديد
-            startTimer();
-        }
-
-        function startTimer() {
-            // مسح المؤقت السابق
-            if (timerInterval) {
-                clearInterval(timerInterval);
-                timerInterval = null;
-            }
-
-            const timerEl = document.getElementById('otpTimer');
-            const countEl = document.getElementById('timerCount');
-            const bar = document.getElementById('progressBar');
-            timerEl.style.display = 'block';
-            timerEl.classList.remove('expired');
-            timerEl.classList.remove('urgent');
-            timeLeft = OTP_VALID_SECONDS;
-            countEl.textContent = timeLeft;
-            bar.style.width = '100%';
-            bar.style.background = 'linear-gradient(90deg, #1f6feb, #3fb950)';
-
-            timerInterval = setInterval(() => {
-                timeLeft--;
-                countEl.textContent = timeLeft;
-                const pct = (timeLeft / OTP_VALID_SECONDS) * 100;
-                bar.style.width = pct + '%';
-
-                if (timeLeft <= 15) {
-                    timerEl.classList.add('urgent');
-                    bar.style.background = 'linear-gradient(90deg, #f85149, #f0b429)';
-                }
-
-                if (timeLeft <= 0) {
-                    clearInterval(timerInterval);
-                    timerInterval = null;
-                    timerEl.classList.remove('urgent');
+        // ============ [ميزة 2] تحديث العداد التنازلي ============
+        function updateCountdowns() {
+            const now = Date.now();
+            otpCountdowns.forEach((endTime, otpId) => {
+                const timerEl = document.getElementById('timer-' + otpId);
+                if (!timerEl) return;
+                const remaining = Math.max(0, Math.floor((endTime - now) / 1000));
+                if (remaining <= 0) {
+                    timerEl.textContent = '⏱️ منتهي';
                     timerEl.classList.add('expired');
-                    countEl.textContent = '0';
-                    document.getElementById('status').textContent = '⏰ انتهت صلاحية الكود - أعد جلب رقم';
-                    stopMonitoring();
+                    timerEl.classList.remove('warning');
+                    // [ميزة 2] نقل الكود لقسم الأكواد القديمة
+                    moveToOld(otpId);
+                } else {
+                    timerEl.textContent = '⏱️ ' + remaining + 'ث';
+                    timerEl.classList.remove('expired');
+                    if (remaining <= 10) timerEl.classList.add('warning');
+                    else timerEl.classList.remove('warning');
                 }
-            }, 1000);
+            });
+        }
+        setInterval(updateCountdowns, 1000);
+
+        // ============ [ميزة 3] إضافة كود - الجديد في الأعلى ============
+        function addOtpToHistory(otp, platform, number, timestamp) {
+            const container = document.getElementById('otpHistory');
+            
+            // تنظيف رسالة "في انتظار"
+            if (container.children.length === 1 && container.textContent.includes('في انتظار')) {
+                container.innerHTML = '';
+            }
+
+            const div = document.createElement('div');
+            div.className = 'otp-item';
+            const otpId = 'otp-' + Date.now() + '-' + Math.random().toString(36).substr(2,5);
+            div.id = otpId;
+            
+            // [ميزة 2] عداد تنازلي 60 ثانية
+            otpCountdowns.set(otpId, Date.now() + 60000);
+
+            div.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:6px;">
+                    <strong style="color:#00ff88;">🔑 ${otp}</strong>
+                    <div style="display:flex; gap:6px; align-items:center;">
+                        <span class="countdown-timer" id="timer-${otpId}">⏱️ 60ث</span>
+                        <button class="copy-btn" onclick="copyText('${otp}')">📋 نسخ</button>
+                    </div>
+                </div>
+                <span class="info">📞 +${number} • 📱 ${platform} • 🕒 ${timestamp}</span>
+            `;
+            // [ميزة 3] الجديد في الأعلى
+            container.prepend(div);
+            // أقصى عدد 25 كود
+            while (container.children.length > 25) container.removeChild(container.lastChild);
         }
 
+        // ============ [ميزة 2] نقل كود منتهي لقسم الأكواد القديمة ============
+        function moveToOld(otpId) {
+            const el = document.getElementById(otpId);
+            if (!el || el.classList.contains('old-otp-item')) return;
+            otpCountdowns.delete(otpId);
+            const newContainer = document.getElementById('oldOtpHistory');
+            document.getElementById('oldSectionTitle').style.display = 'flex';
+            document.getElementById('oldOtpHistory').style.display = 'block';
+            // تنظيف رسالة "لا توجد أكواد قديمة" إن وُجدت
+            if (newContainer.textContent.includes('لا توجد أكواد قديمة')) {
+                newContainer.innerHTML = '';
+            }
+            el.classList.add('old-otp-item');
+            const timerEl = el.querySelector('.countdown-timer');
+            if (timerEl) {
+                timerEl.classList.add('expired');
+                timerEl.classList.remove('warning');
+                timerEl.textContent = '⏱️ منتهي';
+            }
+            // [ميزة 3] الجديد في الأعلى
+            newContainer.prepend(el);
+        }
+
+        function copyText(text) {
+            navigator.clipboard.writeText(text);
+            showToast('✅ تم نسخ الكود!');
+        }
+
+        // ============ [تحسين أداء المراقبة] مراقب عام يفحص الأكواد الجديدة بدون polling متعدد ============
+        // بدلاً من تشغيل setInterval لكل زبون، نتحقق من آخر كود في القاعدة
+        let lastSeenOtpId = 0;
+        let globalMonitorInterval = null;
+        let globalMonitorFailures = 0;
+        async function checkForNewOtps() {
+            try {
+                const res = await fetch('/api/latest_otp?since_id=' + lastSeenOtpId);
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const data = await res.json();
+                globalMonitorFailures = 0;
+                if (data.id && data.id > lastSeenOtpId) {
+                    lastSeenOtpId = data.id;
+                    // أضف الكود ما لم يكن للرقم الحالي (أضيف بالفعل من startMonitoring)
+                    if (data.number !== currentNumber || !monitorInterval) {
+                        const now = new Date().toLocaleString('ar-YE', { timeZone: 'Asia/Aden' });
+                        addOtpToHistory(data.otp, data.platform || 'غير معروف', data.number, now);
+                        // [إشعارات فورية] تنبيه فوري
+                        notificationSound();
+                        showInstantNotif('🔑 كود جديد: ' + data.otp);
+                        showToast('🎉 كود جديد: ' + data.otp);
+                    }
+                }
+            } catch (e) {
+                // [تحسين أداء] في حالة الفشل، نمد الفترة ديناميكياً
+                globalMonitorFailures++;
+                console.log('monitor fail', globalMonitorFailures, e);
+            }
+        }
+        function startGlobalMonitor() {
+            if (globalMonitorInterval) clearInterval(globalMonitorInterval);
+            // أول فحص فوري
+            checkForNewOtps();
+            // فحص كل 4 ثواني (موفر أكثر من polling متعدد)
+            globalMonitorInterval = setInterval(checkForNewOtps, 4000);
+        }
+
+        // ============ سحب الأكواد ============
         function startMonitoring() {
             if (!currentNumber) return;
             if (monitorInterval) clearInterval(monitorInterval);
-            startTimer();
-            document.getElementById('status').textContent = '🔄 جاري المراقبة...';
+            document.getElementById('status').innerHTML = '<span class="icon">🔄</span>بدأ السحب التلقائي...';
+            showInstantNotif('📡 بدأ السحب للرقم +' + currentNumber);
+
             monitorInterval = setInterval(() => {
-                fetch('/api/get_otp', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({number: currentNumber})
-                })
-                .then(res => res.json())
-                .then(data => {
+                fetch('/api/get_otp', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({number:currentNumber})})
+                .then(res => res.json()).then(data => {
                     if (data.otp) {
                         const now = new Date().toLocaleString('ar-YE', {timeZone: 'Asia/Aden'});
-                        addOtpToHistory(currentNumber, data.otp, now, currentPlatform);
-                        document.getElementById('status').textContent = '✅ تم العثور على كود!';
-                        playNotif();
-                        if (timerInterval) {
-                            clearInterval(timerInterval);
-                            timerInterval = null;
-                        }
-                        document.getElementById('otpTimer').classList.add('expired');
+                        addOtpToHistory(data.otp, 'واتساب', currentNumber, now);
+                        document.getElementById('status').innerHTML = '<span class="icon">✅</span>تم العثور على كود!';
+                        // [ميزة 1] تشغيل صوت التنبيه + [إشعارات فورية]
+                        notificationSound();
+                        showInstantNotif('🔑 كود جديد: ' + data.otp);
                         stopMonitoring();
                     }
                 });
             }, 5000);
+            showToast('📡 بدأ المراقبة!');
         }
 
         function stopMonitoring() {
-            if (monitorInterval) { clearInterval(monitorInterval); monitorInterval = null; }
-            if (!document.getElementById('status').textContent.includes('كود')) {
-                document.getElementById('status').textContent = '⏹️ تم الإيقاف';
+            if (monitorInterval) {
+                clearInterval(monitorInterval);
+                monitorInterval = null;
             }
+            document.getElementById('status').innerHTML = '<span class="icon">⏹️</span>تم إيقاف السحب.';
         }
 
-        function addOtpToHistory(number, otp, timestamp, platform) {
-            const container = document.getElementById('otpHistory');
-            if (container.querySelector('.empty-state')) container.innerHTML = '';
-            const div = document.createElement('div');
-            div.className = 'otp-item fresh';
-            const color = platformColors[platform] || '#3fb950';
-            const icon = platformLogos[platform] || '';
-            div.innerHTML = `
-                <div style="flex:1;">
-                    <div class="otp-code" style="color:${color};text-shadow:0 0 8px ${color};">🔑 ${otp}</div>
-                    <div class="otp-info">📞 +${number}  •  🕒 ${timestamp}  •  ${icon} ${platformNames[platform] || ''}</div>
-                </div>
-                <button class="copy-btn">نسخ</button>
-            `;
-            const btn = div.querySelector('.copy-btn');
-            btn.onclick = () => copyText(otp, btn);
-            container.prepend(div);
-            if (container.children.length > 30) container.removeChild(container.lastChild);
-            // إزالة الـ fresh بعد فترة
-            setTimeout(()=>div.classList.remove('fresh'), 4000);
-        }
-
-        // تحميل أولي للأكواد الموجودة
-        async function loadInitialOtps() {
-            try {
-                const res = await fetch('/api/all_otps');
-                const list = await res.json();
-                if (list && list.length) {
-                    const container = document.getElementById('otpHistory');
-                    container.innerHTML = '';
-                    list.slice(0, 30).forEach(item => {
-                        const div = document.createElement('div');
-                        div.className = 'otp-item';
-                        const platform = (item.platform || '').toLowerCase();
-                        const color = platformColors[platform] || '#3fb950';
-                        const icon = platformLogos[platform] || '';
-                        const pname = platformNames[platform] || item.platform || '';
-                        div.innerHTML = `
-                            <div style="flex:1;">
-                                <div class="otp-code" style="color:${color};text-shadow:0 0 8px ${color};">🔑 ${item.otp}</div>
-                                <div class="otp-info">📞 ${item.number}  •  🕒 ${item.timestamp}  •  ${icon} ${pname}</div>
-                            </div>
-                            <button class="copy-btn">نسخ</button>
-                        `;
-                        const btn = div.querySelector('.copy-btn');
-                        btn.onclick = () => copyText(item.otp, btn);
-                        container.appendChild(div);
-                    });
-                }
-            } catch(e) { /* ignore */ }
-        }
-
+        // تحديث العدّاد بعد إضافة أي كود
+        const _origAddOtp = window.addOtpToHistory;
+        const _watcher = new MutationObserver(updateBadges);
         document.addEventListener('DOMContentLoaded', () => {
             initPlatformSelector();
-            loadInitialOtps();
+            startGlobalMonitor();
+            // راقب الأكواد القديمة لتحديث الـ badge
+            const oldContainer = document.getElementById('oldOtpHistory');
+            if (oldContainer) _watcher.observe(oldContainer, { childList: true, subtree: true });
+            const newContainer = document.getElementById('otpHistory');
+            if (newContainer) _watcher.observe(newContainer, { childList: true, subtree: true });
         });
     </script>
 </body>
 </html>
 """
 
-# ========== صفحة الأدمن ==========
 admin_html = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -1154,6 +1757,7 @@ h3 { color:#cbd5e1; margin-bottom:12px; margin-top:18px; }
     background: linear-gradient(135deg, #ef4444, #b91c1c);
     color:#fff; cursor:pointer; margin-top:10px; 
     font-weight:800; font-size:15px; font-family:'Cairo',sans-serif;
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
     transition:all 0.3s;
 }
 .btn-danger:hover { transform:translateY(-2px); }
@@ -1223,24 +1827,7 @@ hr { border: 1px solid rgba(255,255,255,0.1); margin: 20px 0; }
 </html>
 """
 
-@app.route('/')
-def home():
-    return render_template_string(
-        main_html,
-        owner_link=OWNER_LINK,
-        wa_group=WHATSAPP_GROUP_LINK,
-        owner_phone=OWNER_PHONE,
-        platform_logos=PLATFORM_LOGOS,
-        platform_logos_small=PLATFORM_LOGOS,
-        platform_names=platform_names,
-        platform_gradients=PLATFORM_GRADIENTS,
-        platform_colors=platform_colors,
-        otp_seconds=OTP_VALID_SECONDS,
-        contacts=get_contacts(),
-        groups=get_groups(),
-        platforms_list=list(platform_names.keys())
-    )
-
+# ========== المسارات ==========
 def get_all_combos_list():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -1248,6 +1835,23 @@ def get_all_combos_list():
     rows = c.fetchall()
     conn.close()
     return rows
+
+@app.route('/')
+def home():
+    # [نظام المستخدمين] تتبع الزائر الحالي
+    ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+    if ip and ',' in ip:
+        ip = ip.split(',')[0].strip()
+    track_visitor(ip)
+    return render_template_string(
+        main_html,
+        owner_link=OWNER_LINK,
+        wa_group=WHATSAPP_GROUP_LINK,
+        platform_logos=PLATFORM_LOGOS,
+        platform_logos_small=PLATFORM_LOGOS_SMALL,
+        platform_names=platform_names,
+        platform_gradients=PLATFORM_GRADIENTS
+    )
 
 @app.route('/admin', methods=['GET', 'POST'])
 def admin():
@@ -1298,65 +1902,46 @@ def api_get_otp():
     num = request.json.get('number')
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    # جلب أحدث كود للرقم خلال آخر دقيقتين فقط
-    c.execute("SELECT otp FROM otp_logs WHERE number=? AND timestamp >= datetime('now', '-2 minutes') ORDER BY id DESC LIMIT 1", (num,))
+    # جلب آخر كود للرقم الحالي
+    c.execute("SELECT otp, timestamp FROM otp_logs WHERE number = ? ORDER BY id DESC LIMIT 1", (num,))
     row = c.fetchone()
-    if not row:
-        # fallback: أي كود حديث للرقم
-        c.execute("SELECT otp FROM otp_logs WHERE number=? ORDER BY id DESC LIMIT 1", (num,))
-        row = c.fetchone()
     conn.close()
-    return jsonify({'otp': row[0] if row else None})
+    if row:
+        # إذا مر أكثر من 5 دقائق على الكود، اعتبره منتهي
+        from datetime import datetime, timedelta
+        timestamp = datetime.strptime(row[1], "%Y-%m-%d %H:%M:%S")
+        if datetime.now() - timestamp < timedelta(minutes=5):
+            return jsonify({'otp': row[0]})
+    return jsonify({'otp': None})
 
-# ========== API جميع الأكواد (مع caching) ==========
-_otp_cache = {'data': None, 'time': 0}
-CACHE_DURATION = 30
-
-@app.route('/api/all_otps', methods=['GET'])
-def api_all_otps():
-    now = time.time()
-    if _otp_cache['data'] is not None and (now - _otp_cache['time']) < CACHE_DURATION:
-        return jsonify(_otp_cache['data'])
+# ========== [نظام الإشعارات الفورية + سجل المستخدم] APIs جديدة ==========
+@app.route('/api/latest_otp')
+def api_latest_otp():
+    """[إشعارات فورية] يجلب آخر كود منذ ID معين - polling خفيف"""
+    since_id = request.args.get('since_id', 0, type=int)
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT id, number, otp, timestamp, platform FROM otp_logs ORDER BY id DESC LIMIT 50")
-    rows = c.fetchall()
+    c.execute("SELECT id, number, otp, timestamp, platform FROM otp_logs WHERE id > ? ORDER BY id DESC LIMIT 1", (since_id,))
+    row = c.fetchone()
     conn.close()
-    result = [{
-        'id': r[0], 'number': r[1], 'otp': r[2], 'timestamp': r[3], 'platform': r[4] or 'Unknown'
-    } for r in rows]
-    _otp_cache['data'] = result
-    _otp_cache['time'] = now
-    return jsonify(result)
+    if row:
+        return jsonify({'id': row[0], 'number': row[1], 'otp': row[2], 'timestamp': row[3], 'platform': row[4]})
+    return jsonify({})
 
-# ========== API إدارة جهات الاتصال والمجموعات ==========
-@app.route('/api/contacts', methods=['GET', 'POST'])
-def api_contacts():
-    if request.method == 'POST':
-        data = request.json
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute("INSERT INTO contacts (name, link, icon) VALUES (?, ?, ?)",
-                  (data.get('name'), data.get('link'), data.get('icon', '📞')))
-        conn.commit()
-        conn.close()
-        return jsonify({'ok': True})
-    return jsonify(get_contacts())
+@app.route('/api/user_otps')
+def api_user_otps():
+    """[سجل الأكواد] سجل أكواد الزائر الحالي"""
+    ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+    if ip and ',' in ip:
+        ip = ip.split(',')[0].strip()
+    return jsonify(get_user_otps(ip, 30))
 
-@app.route('/api/groups', methods=['GET', 'POST'])
-def api_groups():
-    if request.method == 'POST':
-        data = request.json
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute("INSERT INTO groups (name, link, icon) VALUES (?, ?, ?)",
-                  (data.get('name'), data.get('link'), data.get('icon', '👥')))
-        conn.commit()
-        conn.close()
-        return jsonify({'ok': True})
-    return jsonify(get_groups())
+@app.route('/api/site_stats')
+def api_site_stats():
+    """[إحصائيات] إحصائيات سريعة للموقع"""
+    return jsonify(get_site_stats())
 
-# ========== مراقب القناة (نفس منطق الكود الأصلي) ==========
+# ========== مراقب قناة تيليجرام ==========
 def monitor_channel():
     last_update_id = 0
     while True:
@@ -1377,17 +1962,23 @@ def monitor_channel():
                             
                             clean = re.sub(r'[\u200B-\u200F\u202A-\u202E‏‎]', '', text)
                             lines = clean.split('\n')
+                            full_text = ' '.join(lines)
                             
+                            # =============================================
+                            # 🧠 الذكاء 1: استخراج الرقم (أي شكل)
+                            # =============================================
                             user_number = None
                             last_digits = None
                             country_code = None
                             
+                            # 1️⃣ البحث عن أرقام مخفية بصيغة 9567•••••966
                             hidden_match = re.search(r'(\d{3,4})[•*]{2,6}(\d{3,4})', clean)
                             if hidden_match:
                                 user_number = hidden_match.group(1) + hidden_match.group(2)
                                 last_digits = user_number[-4:]
                                 country_code = user_number[:3] if len(user_number) > 3 else None
                             
+                            # 2️⃣ البحث عن أي رقم طويل (8-15 رقم)
                             if not user_number:
                                 all_numbers = re.findall(r'\b\d{8,15}\b', clean)
                                 if all_numbers:
@@ -1395,6 +1986,7 @@ def monitor_channel():
                                     last_digits = user_number[-4:]
                                     country_code = user_number[:3] if len(user_number) > 3 else None
                             
+                            # 3️⃣ البحث عن أرقام بصيغة 966*****0038
                             if not user_number:
                                 star_match = re.search(r'(\d{3})\*{2,6}(\d{3,4})', clean)
                                 if star_match:
@@ -1402,6 +1994,7 @@ def monitor_channel():
                                     last_digits = user_number[-4:]
                                     country_code = user_number[:3]
                             
+                            # 4️⃣ البحث عن أرقام بعد الاختصار (WA | 216•••••4642)
                             if not user_number:
                                 pipe_match = re.search(r'[A-Z]{2,4}\s*[|]\s*(\d{3,4})[•*]{2,6}(\d{3,4})', clean)
                                 if pipe_match:
@@ -1409,6 +2002,7 @@ def monitor_channel():
                                     last_digits = user_number[-4:]
                                     country_code = user_number[:3]
                             
+                            # 5️⃣ البحث عن أرقام بصيغة #رقم
                             if not user_number:
                                 hash_num = re.search(r'#\s*(\d{8,12})', clean)
                                 if hash_num:
@@ -1416,23 +2010,32 @@ def monitor_channel():
                                     last_digits = user_number[-4:]
                                     country_code = user_number[:3]
                             
+                            # =============================================
+                            # 🧠 الذكاء 2: استخراج الكود (أي شكل)
+                            # =============================================
                             otp = None
+                            
+                            # 1️⃣ البحث عن كود بصيغة 303-441
                             dash_code = re.search(r'(\d{3})-(\d{3,4})', clean)
                             if dash_code:
                                 otp = dash_code.group(1) + dash_code.group(2)
                             
+                            # 2️⃣ البحث عن كود مكون من 4-8 أرقام (ذكي)
                             if not otp:
                                 all_codes = re.findall(r'\b\d{4,8}\b', clean)
                                 if all_codes:
                                     for c in all_codes:
+                                        # تجاهل الأرقام التي تشبه الرقم المستخدم
                                         if last_digits and c.endswith(last_digits):
                                             continue
                                         if country_code and c.startswith(country_code):
                                             continue
+                                        # تجاهل الأرقام القصيرة جداً
                                         if len(c) >= 4:
                                             otp = c
                                             break
                             
+                            # 3️⃣ البحث عن كود بعد "كود" أو "رمز"
                             if not otp:
                                 patterns = [
                                     r'(?:كود|رمز|code|otp|verification)[:\s\-]*[‎]?(\d{3,8})',
@@ -1449,6 +2052,7 @@ def monitor_channel():
                                             otp = match.group(1)
                                         break
                             
+                            # 4️⃣ البحث عن أي أرقام طويلة (6-8 أرقام) بعد السطر الأول
                             if not otp:
                                 for line in lines[1:]:
                                     nums = re.findall(r'\b\d{6,8}\b', line)
@@ -1459,6 +2063,7 @@ def monitor_channel():
                                             otp = n
                                             break
                                 if not otp:
+                                    # البحث في كل النص
                                     all_long = re.findall(r'\b\d{6,8}\b', clean)
                                     if all_long:
                                         for n in all_long:
@@ -1467,18 +2072,21 @@ def monitor_channel():
                                             otp = n
                                             break
                             
+                            # =============================================
+                            # 🧠 الذكاء 3: تحديد المنصة
+                            # =============================================
                             platform = "غير معروف"
                             text_lower = clean.lower()
                             
                             platforms = {
-                                "whatsapp": ["wa", "whatsapp", "واتساب"],
-                                "facebook": ["fb", "facebook", "فيسبوك"],
-                                "telegram": ["tg", "telegram", "تيليجرام", "تلجرام"],
-                                "tiktok": ["tt", "tiktok", "تيك توك"],
-                                "instagram": ["ig", "instagram", "انستقرام"],
-                                "snapchat": ["sc", "snapchat", "سناب"],
-                                "google": ["gg", "google", "جوجل"],
-                                "twitter": ["tw", "twitter", "تويتر", "x.com"]
+                                "واتساب": ["wa", "whatsapp", "واتساب"],
+                                "فيسبوك": ["fb", "facebook", "فيسبوك"],
+                                "تيليجرام": ["tg", "telegram", "تيليجرام", "تلجرام"],
+                                "تيك توك": ["tt", "tiktok", "تيك توك"],
+                                "انستقرام": ["ig", "instagram", "انستقرام"],
+                                "سناب شات": ["sc", "snapchat", "سناب"],
+                                "جوجل": ["gg", "google", "جوجل"],
+                                "تويتر": ["tw", "twitter", "تويتر", "x.com"]
                             }
                             
                             for name, keywords in platforms.items():
@@ -1489,9 +2097,24 @@ def monitor_channel():
                                 if platform != "غير معروف":
                                     break
                             
+                            # محاولة استخراج المنصة من الاختصار الأول
+                            if platform == "غير معروف" and lines:
+                                first_line = lines[0]
+                                platform_match = re.search(r'([A-Z]{2,4})\s*[|]', first_line)
+                                if platform_match:
+                                    short = platform_match.group(1).upper()
+                                    short_map = {
+                                        "WA": "واتساب", "FB": "فيسبوك", "TG": "تيليجرام",
+                                        "TT": "تيك توك", "IG": "انستقرام", "SC": "سناب شات",
+                                        "GG": "جوجل", "TW": "تويتر", "OT": "اخرى"
+                                    }
+                                    platform = short_map.get(short, short)
+                            
+                            # =============================================
+                            # 🧠 الذكاء 4: حفظ الكود
+                            # =============================================
                             if otp:
                                 conn = sqlite3.connect(DB_PATH)
-                                # تخزين الرقم كامل (نزيل آخر 4 بس للتوافق)
                                 if last_digits:
                                     conn.cursor().execute(
                                         "INSERT INTO otp_logs (number, otp, timestamp, platform) VALUES (?, ?, ?, ?)",
@@ -1506,8 +2129,6 @@ def monitor_channel():
                                     print(f"✅ [{platform}] {otp} | بدون رقم")
                                 conn.commit()
                                 conn.close()
-                                # مسح الكاش
-                                _otp_cache['data'] = None
                                 
         except Exception as e:
             print(f"❌ خطأ: {e}")
