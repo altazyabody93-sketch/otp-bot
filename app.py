@@ -767,7 +767,15 @@ hr { border: 1px solid rgba(255,255,255,0.1); margin: 20px 0; }
 # ======================
 
 def home():
-    return render_template_string(main_html, owner_link=OWNER_LINK, wa_group=WHATSAPP_GROUP_LINK, platform_logos=PLATFORM_LOGOS, platform_names=platform_names, platform_colors=platform_colors)
+    return render_template_string(
+        main_html,
+        owner_link=OWNER_LINK,
+        wa_group=WHATSAPP_GROUP_LINK,
+        platform_logos=PLATFORM_LOGOS,
+        platform_logos_small=PLATFORM_LOGOS,
+        platform_names=platform_names,
+        platform_gradients=PLATFORM_GRADIENTS
+    )
 
 # ========== الحصول على قائمة الكومبوهات للحذف ==========
 def get_all_combos_list():
