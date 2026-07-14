@@ -1015,5 +1015,200 @@ def api_get_otp():
     conn.close()
     return jsonify({'otp': row[0] if row else None})
 
+def monitor_channel():
+    last_update_id = 0
+    while True:
+        try:
+            url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
+            params = {"timeout": 10, "offset": last_update_id + 1}
+            r = requests.get(url, params=params, timeout=15)
+            
+            if r.status_code == 200:
+                data = r.json()
+                if data.get('ok'):
+                    for upd in data.get('result', []):
+                        last_update_id = upd['update_id']
+                        if 'channel_post' in upd:
+                            text = upd['channel_post'].get('text', '')
+                            if not text:
+                                continue
+                            
+                            clean = re.sub(r'[\u200B-\u200F\u202A-\u202E‏‎]', '', text)
+                            lines = clean.split('\n')
+                            full_text = ' '.join(lines)
+                            
+                            # =============================================
+                            # 🧠 الذكاء 1: استخراج الرقم (أي شكل)
+                            # =============================================
+                            user_number = None
+                            last_digits = None
+                            country_code = None
+                            
+                            # 1️⃣ البحث عن أرقام مخفية بصيغة 9567•••••966
+                            hidden_match = re.search(r'(\d{3,4})[•*]{2,6}(\d{3,4})', clean)
+                            if hidden_match:
+                                user_number = hidden_match.group(1) + hidden_match.group(2)
+                                last_digits = user_number[-4:]
+                                country_code = user_number[:3] if len(user_number) > 3 else None
+                            
+                            # 2️⃣ البحث عن أي رقم طويل (8-15 رقم)
+                            if not user_number:
+                                all_numbers = re.findall(r'\b\d{8,15}\b', clean)
+                                if all_numbers:
+                                    user_number = max(all_numbers, key=len)
+                                    last_digits = user_number[-4:]
+                                    country_code = user_number[:3] if len(user_number) > 3 else None
+                            
+                            # 3️⃣ البحث عن أرقام بصيغة 966*****0038
+                            if not user_number:
+                                star_match = re.search(r'(\d{3})\*{2,6}(\d{3,4})', clean)
+                                if star_match:
+                                    user_number = star_match.group(1) + star_match.group(2)
+                                    last_digits = user_number[-4:]
+                                    country_code = user_number[:3]
+                            
+                            # 4️⃣ البحث عن أرقام بعد الاختصار (WA | 216•••••4642)
+                            if not user_number:
+                                pipe_match = re.search(r'[A-Z]{2,4}\s*[|]\s*(\d{3,4})[•*]{2,6}(\d{3,4})', clean)
+                                if pipe_match:
+                                    user_number = pipe_match.group(1) + pipe_match.group(2)
+                                    last_digits = user_number[-4:]
+                                    country_code = user_number[:3]
+                            
+                            # 5️⃣ البحث عن أرقام بصيغة #رقم
+                            if not user_number:
+                                hash_num = re.search(r'#\s*(\d{8,12})', clean)
+                                if hash_num:
+                                    user_number = hash_num.group(1)
+                                    last_digits = user_number[-4:]
+                                    country_code = user_number[:3]
+                            
+                            # =============================================
+                            # 🧠 الذكاء 2: استخراج الكود (أي شكل)
+                            # =============================================
+                            otp = None
+                            
+                            # 1️⃣ البحث عن كود بصيغة 303-441
+                            dash_code = re.search(r'(\d{3})-(\d{3,4})', clean)
+                            if dash_code:
+                                otp = dash_code.group(1) + dash_code.group(2)
+                            
+                            # 2️⃣ البحث عن كود مكون من 4-8 أرقام (ذكي)
+                            if not otp:
+                                all_codes = re.findall(r'\b\d{4,8}\b', clean)
+                                if all_codes:
+                                    for c in all_codes:
+                                        # تجاهل الأرقام التي تشبه الرقم المستخدم
+                                        if last_digits and c.endswith(last_digits):
+                                            continue
+                                        if country_code and c.startswith(country_code):
+                                            continue
+                                        # تجاهل الأرقام القصيرة جداً
+                                        if len(c) >= 4:
+                                            otp = c
+                                            break
+                            
+                            # 3️⃣ البحث عن كود بعد "كود" أو "رمز"
+                            if not otp:
+                                patterns = [
+                                    r'(?:كود|رمز|code|otp|verification)[:\s\-]*[‎]?(\d{3,8})',
+                                    r'#(\d{3,8})',
+                                    r'(\d{3,4})[-\s](\d{3,4})',
+                                    r'(\d{6,8})\s*(?:هو|هذا|كود|رمز)',
+                                ]
+                                for pattern in patterns:
+                                    match = re.search(pattern, clean, re.IGNORECASE)
+                                    if match:
+                                        if len(match.groups()) > 1:
+                                            otp = ''.join(match.groups())
+                                        else:
+                                            otp = match.group(1)
+                                        break
+                            
+                            # 4️⃣ البحث عن أي أرقام طويلة (6-8 أرقام) بعد السطر الأول
+                            if not otp:
+                                for line in lines[1:]:
+                                    nums = re.findall(r'\b\d{6,8}\b', line)
+                                    if nums:
+                                        for n in nums:
+                                            if last_digits and n.endswith(last_digits):
+                                                continue
+                                            otp = n
+                                            break
+                                if not otp:
+                                    # البحث في كل النص
+                                    all_long = re.findall(r'\b\d{6,8}\b', clean)
+                                    if all_long:
+                                        for n in all_long:
+                                            if last_digits and n.endswith(last_digits):
+                                                continue
+                                            otp = n
+                                            break
+                            
+                            # =============================================
+                            # 🧠 الذكاء 3: تحديد المنصة
+                            # =============================================
+                            platform = "غير معروف"
+                            text_lower = clean.lower()
+                            
+                            platforms = {
+                                "واتساب": ["wa", "whatsapp", "واتساب"],
+                                "فيسبوك": ["fb", "facebook", "فيسبوك"],
+                                "تيليجرام": ["tg", "telegram", "تيليجرام", "تلجرام"],
+                                "تيك توك": ["tt", "tiktok", "تيك توك"],
+                                "انستقرام": ["ig", "instagram", "انستقرام"],
+                                "سناب شات": ["sc", "snapchat", "سناب"],
+                                "جوجل": ["gg", "google", "جوجل"],
+                                "تويتر": ["tw", "twitter", "تويتر", "x.com"]
+                            }
+                            
+                            for name, keywords in platforms.items():
+                                for kw in keywords:
+                                    if kw in text_lower:
+                                        platform = name
+                                        break
+                                if platform != "غير معروف":
+                                    break
+                            
+                            # محاولة استخراج المنصة من الاختصار الأول
+                            if platform == "غير معروف" and lines:
+                                first_line = lines[0]
+                                platform_match = re.search(r'([A-Z]{2,4})\s*[|]', first_line)
+                                if platform_match:
+                                    short = platform_match.group(1).upper()
+                                    short_map = {
+                                        "WA": "واتساب", "FB": "فيسبوك", "TG": "تيليجرام",
+                                        "TT": "تيك توك", "IG": "انستقرام", "SC": "سناب شات",
+                                        "GG": "جوجل", "TW": "تويتر", "OT": "اخرى"
+                                    }
+                                    platform = short_map.get(short, short)
+                            
+                            # =============================================
+                            # 🧠 الذكاء 4: حفظ الكود
+                            # =============================================
+                            if otp:
+                                conn = sqlite3.connect(DB_PATH)
+                                if last_digits:
+                                    conn.cursor().execute(
+                                        "INSERT INTO otp_logs (number, otp, timestamp, platform) VALUES (?, ?, ?, ?)",
+                                        (last_digits, otp, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), platform)
+                                    )
+                                    print(f"✅ [{platform}] {otp} | الرقم: {last_digits}")
+                                else:
+                                    conn.cursor().execute(
+                                        "INSERT INTO otp_logs (number, otp, timestamp, platform) VALUES (?, ?, ?, ?)",
+                                        ("0000", otp, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), platform)
+                                    )
+                                    print(f"✅ [{platform}] {otp} | بدون رقم")
+                                conn.commit()
+                                conn.close()
+                                
+        except Exception as e:
+            print(f"❌ خطأ: {e}")
+        time.sleep(5)
+
+threading.Thread(target=monitor_channel, daemon=True).start()
+
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
