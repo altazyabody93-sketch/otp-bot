@@ -7,7 +7,7 @@ import re
 import requests
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 app = Flask(__name__)
 DB_PATH = "bot.db"
@@ -25,75 +25,11 @@ def init_db():
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS combos (id INTEGER PRIMARY KEY AUTOINCREMENT, platform TEXT, country_code TEXT, country_name TEXT, country_flag TEXT, numbers TEXT, UNIQUE(platform, country_code))''')
     c.execute('''CREATE TABLE IF NOT EXISTS otp_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, number TEXT, otp TEXT, timestamp TEXT, platform TEXT)''')
-    # [نظام المستخدمين] تتبع المستخدمين وأرقامهم - feature: user tracking
-    c.execute('''CREATE TABLE IF NOT EXISTS visitors (id INTEGER PRIMARY KEY AUTOINCREMENT, ip TEXT, last_visit TEXT, UNIQUE(ip))''')
-    # [سجل الأكواد للمستخدم] الأكواد التي استلمها كل مستخدم - feature: user otp history
-    c.execute('''CREATE TABLE IF NOT EXISTS user_otps (id INTEGER PRIMARY KEY AUTOINCREMENT, ip TEXT, number TEXT, otp TEXT, platform TEXT, timestamp TEXT)''')
-    # [إحصائيات] عداد الزيارات اليومي - feature: stats
-    c.execute('''CREATE TABLE IF NOT EXISTS daily_stats (date TEXT PRIMARY KEY, otp_count INTEGER DEFAULT 0, visitor_count INTEGER DEFAULT 0)''')
     conn.commit()
     conn.close()
 init_db()
 
-# ========== [نظام المستخدمين + إحصائيات] ==========
-def track_visitor(ip):
-    """تتبع الزائر وتحديث آخر زيارة"""
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        c.execute("INSERT OR IGNORE INTO visitors (ip, last_visit) VALUES (?, ?)", (ip, now))
-        c.execute("UPDATE visitors SET last_visit=? WHERE ip=?", (now, ip))
-        # تحديث إحصائيات اليوم
-        today = datetime.now().strftime("%Y-%m-%d")
-        c.execute("INSERT OR IGNORE INTO daily_stats (date) VALUES (?)", (today,))
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        print(f"track_visitor: {e}")
-
-def log_user_otp(ip, number, otp, platform):
-    """حفظ الكود في سجل المستخدم - feature: user otp history"""
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        c.execute("INSERT INTO user_otps (ip, number, otp, platform, timestamp) VALUES (?, ?, ?, ?, ?)",
-                  (ip, number, otp, platform, now))
-        # زيادة عداد أكواد اليوم
-        today = datetime.now().strftime("%Y-%m-%d")
-        c.execute("UPDATE daily_stats SET otp_count = otp_count + 1 WHERE date=?", (today,))
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        print(f"log_user_otp: {e}")
-
-def get_user_otps(ip, limit=50):
-    """جلب سجل الأكواد الخاص بالمستخدم - feature: user otp history"""
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT number, otp, platform, timestamp FROM user_otps WHERE ip=? ORDER BY id DESC LIMIT ?", (ip, limit))
-    rows = c.fetchall()
-    conn.close()
-    return [{'number': r[0], 'otp': r[1], 'platform': r[2], 'timestamp': r[3]} for r in rows]
-
-def get_site_stats():
-    """إحصائيات الموقع - feature: stats"""
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT COUNT(*) FROM otp_logs")
-    total = c.fetchone()[0]
-    today = datetime.now().strftime("%Y-%m-%d")
-    c.execute("SELECT COUNT(*) FROM otp_logs WHERE timestamp LIKE ?", (f"{today}%",))
-    today_count = c.fetchone()[0]
-    c.execute("SELECT COUNT(*) FROM visitors")
-    users = c.fetchone()[0]
-    c.execute("SELECT COUNT(DISTINCT country_code) FROM combos")
-    countries = c.fetchone()[0]
-    conn.close()
-    return {'total': total, 'today': today_count, 'users': users, 'countries': countries}
-
-# ========== جميع دول العالم ==========
+# ========== جميع دول العالم (أكثر من 195 دولة) ==========
 COUNTRY_DATA = {
     "966": {"n": "السعودية", "f": "🇸🇦"},
     "971": {"n": "الإمارات", "f": "🇦🇪"},
@@ -153,7 +89,7 @@ COUNTRY_DATA = {
     "36": {"n": "المجر", "f": "🇭🇺"},
     "420": {"n": "التشيك", "f": "🇨🇿"},
     "421": {"n": "سلوفاكيا", "f": "🇸🇰"},
-    "380": {"n": "أوكرانيا", "f": "🇺🇦"},
+    "380": {"n": "أوكرانिया", "f": "🇺🇦"},
     "381": {"n": "صربيا", "f": "🇷🇸"},
     "385": {"n": "كرواتيا", "f": "🇭🇷"},
     "386": {"n": "سلوفينيا", "f": "🇸🇮"},
@@ -189,7 +125,7 @@ COUNTRY_DATA = {
     "356": {"n": "مالطا", "f": "🇲🇹"},
     "357": {"n": "قبرص", "f": "🇨🇾"},
     "358": {"n": "فنلندا", "f": "🇫🇮"},
-    "359": {"n": "بلغاريا", "f": "🇧🇬"},
+    "359": {"n": "بلغارיה", "f": "🇧🇬"},
     "350": {"n": "جبل طارق", "f": "🇬🇮"},
     "352": {"n": "لوكسمبورغ", "f": "🇱🇺"},
     "423": {"n": "ليختنشتاين", "f": "🇱🇮"},
@@ -234,8 +170,17 @@ COUNTRY_DATA = {
     "850": {"n": "كوريا الشمالية", "f": "🇰🇵"},
     "852": {"n": "هونغ كونغ", "f": "🇭🇰"},
     "853": {"n": "ماكاو", "f": "🇲🇴"},
+    "855": {"n": "كمبوديا", "f": "🇰🇭"},
+    "856": {"n": "لاوس", "f": "🇱🇦"},
     "880": {"n": "بنغلاديش", "f": "🇧🇩"},
     "886": {"n": "تايوان", "f": "🇹🇼"},
+    "960": {"n": "جزر المالديف", "f": "🇲🇻"},
+    "961": {"n": "لبنان", "f": "🇱🇧"},
+    "962": {"n": "الأردن", "f": "🇯🇴"},
+    "963": {"n": "سوريا", "f": "🇸🇾"},
+    "964": {"n": "العراق", "f": "🇮🇶"},
+    "965": {"n": "الكويت", "f": "🇰🇼"},
+    "967": {"n": "اليمن", "f": "🇾🇪"},
 }
 
 def get_country_info(code):
@@ -310,702 +255,217 @@ platform_names = {
     'twitter': 'تويتر/X'
 }
 
+# ألوان المنصات (hex) لاستخدامها في CSS/JavaScript
+platform_colors = {
+    'whatsapp': '#25D366',
+    'telegram': '#0088cc',
+    'tiktok': '#000000',
+    'facebook': '#1877f2',
+    'instagram': '#E4405F',
+    'snapchat': '#FFFC00',
+    'google': '#4285F4',
+    'twitter': '#1DA1F2'
+}
+
 main_html = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
-    <title>🚀 موقع المطري OTP 🚀</title>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <title>المطري OTP</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
     <style>
-        /* ============ [ميزة 4] متغيرات الوضع الليلي/النهاري ============ */
-        :root {
-            --bg-base: #0a0e1a;
-            --bg-container: rgba(17, 24, 39, 0.85);
-            --bg-card: rgba(31, 41, 55, 0.7);
-            --text-main: #fff;
-            --text-muted: #cbd5e1;
-            --text-soft: #94a3b8;
-            --border-soft: rgba(255,255,255,0.1);
-            --accent: #00ffc8;
-            --accent-2: #8b5cf6;
-            --accent-3: #ec4899;
-            --otp-glow: rgba(0, 255, 136, 0.4);
-            --star-color: #fff;
-        }
-        body.light-mode {
-            --bg-base: #f0f4f8;
-            --bg-container: rgba(255, 255, 255, 0.85);
-            --bg-card: rgba(255, 255, 255, 0.9);
-            --text-main: #0f172a;
-            --text-muted: #475569;
-            --text-soft: #64748b;
-            --border-soft: rgba(0,0,0,0.1);
-            --accent: #0891b2;
-            --accent-2: #7c3aed;
-            --accent-3: #db2777;
-            --otp-glow: rgba(8, 145, 178, 0.3);
-            --star-color: #facc15;
-        }
-
         * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-        html, body { font-family:'Cairo',sans-serif; background:var(--bg-base); color:var(--text-main); overflow-x:hidden; transition: background 0.5s, color 0.5s; }
-        
-        /* ============ [ميزة 6] خلفية متحركة + نجوم ============ */
-        body::before {
-            content:''; position:fixed; inset:0; z-index:-2;
-            background: radial-gradient(circle at 20% 20%, rgba(0, 255, 200, 0.15), transparent 40%),
-                        radial-gradient(circle at 80% 70%, rgba(139, 92, 246, 0.15), transparent 40%),
-                        radial-gradient(circle at 50% 50%, rgba(236, 72, 153, 0.1), transparent 50%);
-            animation: bgShift 12s ease-in-out infinite alternate;
-        }
-        body.light-mode::before {
-            background: radial-gradient(circle at 20% 20%, rgba(8, 145, 178, 0.15), transparent 40%),
-                        radial-gradient(circle at 80% 70%, rgba(124, 58, 237, 0.15), transparent 40%),
-                        radial-gradient(circle at 50% 50%, rgba(219, 39, 119, 0.1), transparent 50%);
-        }
-        @keyframes bgShift { 0%{ transform:scale(1) rotate(0deg);} 100%{ transform:scale(1.1) rotate(5deg);} }
-        
-        .stars { position:fixed; inset:0; z-index:-1; pointer-events:none; }
-        .star { position:absolute; background:var(--star-color); border-radius:50%; animation: twinkle 3s infinite; box-shadow: 0 0 8px var(--star-color); }
-        @keyframes twinkle { 0%,100%{ opacity:0; transform:scale(0);} 50%{ opacity:1; transform:scale(1);} }
-        
-        .container { background:var(--bg-container); backdrop-filter:blur(20px); padding:25px 18px 40px; width:100%; min-height:100vh; border-inline:1px solid rgba(139, 92, 246, 0.3); transition: background 0.5s; }
-        
-        .top-bar { display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; position:relative; }
-        .top-actions { display:flex; gap:8px; }
-        .menu-btn, .theme-btn { 
-            background:linear-gradient(135deg, #1f2937, #374151); border:1px solid rgba(0,255,200,0.4);
-            border-radius:12px; padding:10px 16px; color:var(--accent); font-size:20px; cursor:pointer;
-            box-shadow: 0 0 15px rgba(0,255,200,0.3);
-            transition:all 0.3s;
-        }
-        body.light-mode .menu-btn, body.light-mode .theme-btn {
-            background:linear-gradient(135deg, #ffffff, #e0f2fe); border-color: rgba(8, 145, 178, 0.4);
-            box-shadow: 0 0 15px rgba(8, 145, 178, 0.2);
-        }
-        .menu-btn:hover, .theme-btn:hover { box-shadow: 0 0 25px rgba(0,255,200,0.6); transform:translateY(-2px); }
-        .theme-btn.active { background: var(--accent); color: #0a0e1a; }
-        .dropdown-menu { 
-            display:none; position:absolute; top:55px; right:0; 
-            background:var(--bg-container); backdrop-filter:blur(15px);
-            border:1px solid rgba(0,255,200,0.3); border-radius:14px; padding:8px; 
-            min-width:180px; z-index:100; box-shadow:0 5px 25px rgba(0,255,200,0.3); 
-        }
-        .dropdown-menu a { 
-            display:flex; align-items:center; gap:10px; color:var(--text-main); text-decoration:none; 
-            padding:10px 14px; border-radius:10px; font-weight:600; transition:all 0.3s; 
-        }
-        .dropdown-menu a:hover { background:rgba(0,255,200,0.15); color:var(--accent); transform:translateX(-5px); }
-        .dropdown-menu.show { display:block; animation: slideDown 0.3s ease; }
-        @keyframes slideDown { from{ opacity:0; transform:translateY(-10px);} to{ opacity:1; transform:translateY(0);} }
-        
-        .header { text-align:center; margin:20px 0 30px; position:relative; }
-        .header h1 { 
-            font-size:30px; font-weight:900; 
-            background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--accent-3), var(--accent));
-            background-size: 300% 300%;
-            -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
-            animation: glow 4s ease infinite;
-            text-shadow: 0 0 30px rgba(0,255,200,0.5);
-            margin-bottom:8px;
-        }
-        @keyframes glow { 0%,100%{ background-position:0% 50%; } 50%{ background-position:100% 50%; } }
-        .header p { color:var(--text-muted); font-size:15px; font-weight:600; }
-        .header p .crown { display:inline-block; animation: bounce 1.5s infinite; }
-        @keyframes bounce { 0%,100%{ transform:translateY(0);} 50%{ transform:translateY(-5px);} }
-        
-        .section-title { 
-            display:flex; align-items:center; gap:10px; margin:25px 0 15px; 
-            color:var(--accent); font-size:17px; font-weight:700;
-        }
-        .section-title .emoji { font-size:22px; animation: pulse 2s infinite; }
-        @keyframes pulse { 0%,100%{ transform:scale(1);} 50%{ transform:scale(1.2);} }
-        .section-title::after { content:''; flex:1; height:2px; background:linear-gradient(90deg, var(--accent), transparent); border-radius:2px; }
-        
-        .platform-selector { display:grid; grid-template-columns:repeat(2, 1fr); gap:12px; margin-bottom:10px; }
+        html, body { font-family:'Cairo',sans-serif; background:#0e1217; color:#e6e6e6; overflow-x:hidden; }
+        body { min-height:100vh; }
+
+        .app { max-width:480px; margin:0 auto; background:#161b22; min-height:100vh; display:flex; flex-direction:column; }
+
+        /* ============= HEADER ============= */
+        .top-bar { background:#161b22; padding:14px 16px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #21262d; position:sticky; top:0; z-index:50; }
+        .brand { display:flex; align-items:center; gap:10px; }
+        .brand-icon { width:36px; height:36px; border-radius:10px; background:linear-gradient(135deg, #1f6feb, #388bfd); display:flex; align-items:center; justify-content:center; font-size:18px; }
+        .brand-text { font-size:16px; font-weight:700; color:#fff; }
+        .menu-btn { background:transparent; border:none; color:#8b949e; font-size:22px; cursor:pointer; padding:4px 8px; }
+        .dropdown-menu { display:none; position:absolute; top:55px; left:16px; right:16px; background:#1c2128; border:1px solid #30363d; border-radius:10px; padding:6px; z-index:100; box-shadow:0 8px 24px rgba(0,0,0,0.5); }
+        .dropdown-menu.show { display:block; }
+        .dropdown-menu a { display:flex; align-items:center; gap:10px; color:#e6e6e6; text-decoration:none; padding:10px 12px; border-radius:8px; font-size:14px; font-weight:600; }
+        .dropdown-menu a:hover { background:#21262d; color:#58a6ff; }
+
+        /* ============= MAIN CONTENT ============= */
+        .main { padding:16px; flex:1; }
+
+        .hero { text-align:center; padding:24px 12px 20px; }
+        .hero h1 { font-size:24px; font-weight:800; color:#fff; margin-bottom:6px; }
+        .hero p { font-size:14px; color:#8b949e; line-height:1.5; }
+        .hero p .crown { display:inline-block; animation:bounce 1.5s infinite; }
+        @keyframes bounce { 0%,100%{ transform:translateY(0);} 50%{ transform:translateY(-3px);} }
+
+        .section-title { font-size:15px; font-weight:700; color:#fff; margin:18px 4px 12px; display:flex; align-items:center; gap:8px; }
+        .section-title .icon { color:#58a6ff; }
+
+        /* ============= PLATFORMS GRID ============= */
+        .platforms { display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; margin-bottom:8px; }
         .platform-btn {
-            display:flex; align-items:center; gap:12px; padding:14px 12px;
-            border:2px solid var(--border-soft); border-radius:16px;
-            background:var(--bg-card); color:var(--text-main);
-            cursor:pointer; transition:all 0.4s cubic-bezier(0.4, 0, 0.2, 1); 
-            font-size:14px; font-weight:700; font-family:'Cairo',sans-serif;
-            position:relative; overflow:hidden;
+            display:flex; align-items:center; gap:10px; padding:12px 14px;
+            background:#1c2128; border:1px solid #30363d; border-radius:10px;
+            color:#e6e6e6; cursor:pointer; transition:all 0.15s ease;
+            font-size:14px; font-weight:600; font-family:'Cairo',sans-serif;
         }
-        .platform-btn::before {
-            content:''; position:absolute; inset:0; opacity:0; transition:opacity 0.4s;
-            background:var(--bg-gradient);
-            z-index:0;
-        }
-        .platform-btn:hover { 
-            transform:translateY(-3px) scale(1.02); 
-            border-color:transparent;
-            box-shadow: 0 8px 25px rgba(0,0,0,0.5);
-        }
-        .platform-btn:hover::before { opacity:1; }
-        .platform-btn.active { 
-            border-color:transparent;
-            box-shadow: 0 0 25px var(--glow-color), 0 0 50px var(--glow-color);
-            transform:translateY(-2px);
-        }
-        .platform-btn.active::before { opacity:1; }
-        .platform-btn img { 
-            width:42px; height:42px; object-fit:contain; 
-            border-radius:12px;
-            position:relative; z-index:1;
-            box-shadow: 0 4px 14px rgba(0,0,0,0.4);
-            transition:transform 0.4s;
-            background: rgba(255,255,255,0.95);
-            padding: 3px;
-        }
-        .platform-btn.active img { transform: rotate(360deg) scale(1.15); }
-        .platform-btn span { position:relative; z-index:1; }
-        
-        .form-group { margin-bottom:18px; }
-        .form-group label { display:flex; align-items:center; gap:8px; margin-bottom:10px; color:var(--text-muted); font-weight:700; font-size:14px; }
-        .form-control { 
-            width:100%; padding:14px 16px; border-radius:14px; 
-            border:2px solid var(--border-soft); 
-            background:var(--bg-card); color:var(--text-main); 
-            outline:none; font-family:'Cairo',sans-serif; font-size:15px; font-weight:600;
-            transition:all 0.3s;
-        }
-        .form-control:focus { 
-            border-color:var(--accent); 
-            box-shadow: 0 0 20px var(--otp-glow);
-            background:rgba(31, 41, 55, 0.9);
-        }
-        body.light-mode .form-control:focus { background:rgba(255, 255, 255, 1); }
-        .form-control:disabled { opacity:0.4; cursor:not-allowed; }
-        
-        /* ============ [ميزة 6] أزرار نيون ============ */
-        .btn-primary { 
-            width:100%; padding:16px; border:none; border-radius:16px; 
-            background: linear-gradient(135deg, #00ff88, #00d2ff);
-            color:#0a0e1a; font-size:18px; font-weight:900;
-            cursor:pointer; margin-top:12px; 
-            font-family:'Cairo',sans-serif;
-            box-shadow: 0 0 25px rgba(0, 255, 136, 0.6), 0 0 50px rgba(0, 255, 136, 0.3);
-            transition:all 0.3s;
-            position:relative; overflow:hidden;
-        }
-        .btn-primary::before {
-            content:''; position:absolute; top:0; left:-100%;
-            width:100%; height:100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
-            transition:left 0.6s;
-        }
-        .btn-primary:hover::before { left:100%; }
-        .btn-primary:hover { transform:translateY(-3px); box-shadow: 0 5px 35px rgba(0, 255, 136, 0.8), 0 0 60px rgba(0, 255, 136, 0.5); }
-        .btn-primary:disabled { opacity:0.4; cursor:not-allowed; box-shadow:none; transform:none; }
-        
-        .btn-blue { 
-            width:100%; padding:16px; border:none; border-radius:16px; 
-            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
-            color:#fff; font-size:16px; font-weight:800;
-            cursor:pointer; margin-top:10px; 
-            font-family:'Cairo',sans-serif;
-            box-shadow: 0 0 20px rgba(59, 130, 246, 0.6), 0 0 40px rgba(59, 130, 246, 0.3);
-            transition:all 0.3s;
-            display:flex; align-items:center; justify-content:center; gap:8px;
-        }
-        .btn-blue:hover { transform:translateY(-3px); box-shadow: 0 5px 30px rgba(59, 130, 246, 0.8), 0 0 50px rgba(59, 130, 246, 0.5); }
-        .btn-blue:disabled { opacity:0.4; cursor:not-allowed; }
-        
-        .btn-danger { 
-            background: linear-gradient(135deg, #ef4444, #b91c1c) !important;
-            box-shadow: 0 0 20px rgba(239, 68, 68, 0.6), 0 0 40px rgba(239, 68, 68, 0.3) !important;
-        }
-        .btn-danger:hover { box-shadow: 0 5px 30px rgba(239, 68, 68, 0.8), 0 0 50px rgba(239, 68, 68, 0.5) !important; }
-        
-        .number-box { 
-            display:flex; align-items:center; justify-content:space-between; 
-            background: linear-gradient(135deg, #000, #0f172a);
-            border:2px solid #00ff88; border-radius:16px; padding:16px; margin:18px 0;
-            box-shadow: 0 0 30px var(--otp-glow), inset 0 0 20px rgba(0, 255, 136, 0.1);
-            animation: glowPulse 2s infinite;
-        }
-        @keyframes glowPulse { 0%,100%{ box-shadow: 0 0 30px var(--otp-glow), inset 0 0 20px rgba(0, 255, 136, 0.1);} 50%{ box-shadow: 0 0 40px rgba(0, 255, 136, 0.7), inset 0 0 30px rgba(0, 255, 136, 0.2);} }
-        .number-box .number { 
-            font-family:'Courier New',monospace; font-size:22px; 
-            color:#00ff88; flex-grow:1; text-align:center; font-weight:bold;
-            text-shadow: 0 0 10px #00ff88;
-            letter-spacing:1px;
-        }
-        .copy-number-btn { 
-            background:rgba(0, 255, 136, 0.15); border:1px solid #00ff88;
-            border-radius:10px; padding:8px 12px; color:#00ff88; 
-            cursor:pointer; font-size:18px; margin-right:10px;
-            transition:all 0.3s;
-        }
-        .copy-number-btn:hover { background:#00ff88; color:#000; transform:rotate(15deg); }
-        
-        .otp-container { 
-            margin-top:20px; max-height:380px; overflow-y:auto; 
-            border:1px solid rgba(139, 92, 246, 0.3); border-radius:16px; padding:12px; 
-            background:rgba(15, 23, 42, 0.5);
-        }
-        body.light-mode .otp-container { background:rgba(255, 255, 255, 0.6); }
-        .otp-container::-webkit-scrollbar { width:6px; }
-        .otp-container::-webkit-scrollbar-track { background:rgba(255,255,255,0.05); border-radius:10px; }
-        .otp-container::-webkit-scrollbar-thumb { background:linear-gradient(180deg, var(--accent), var(--accent-2)); border-radius:10px; }
-        .otp-item { 
-            background: linear-gradient(135deg, #0f172a, #1e293b);
-            border:1px solid #00ff88; border-radius:14px; 
-            padding:14px; margin-bottom:12px; 
-            font-family:'Courier New'; font-size:15px; 
-            color:#00ff88; line-height:1.7;
-            box-shadow: 0 0 15px var(--otp-glow);
-            animation: slideIn 0.4s ease;
-            position:relative;
-        }
-        body.light-mode .otp-item {
-            background: linear-gradient(135deg, #ffffff, #e0f2fe);
-            color:#0891b2;
-        }
-        @keyframes slideIn { from{opacity:0; transform:translateX(20px);} to{opacity:1; transform:translateX(0);} }
-        .otp-item .copy-btn { 
-            background:rgba(0, 255, 136, 0.2); border:1px solid #00ff88;
-            border-radius:8px; padding:5px 12px; color:#00ff88; 
-            cursor:pointer; font-size:12px; font-weight:bold;
-            transition:all 0.3s;
-        }
-        .otp-item .copy-btn:hover { background:#00ff88; color:#000; }
-        .otp-item .info { color:var(--text-soft); font-size:12px; display:block; margin-top:6px; }
-        
-        /* ============ [ميزة 2] عداد تنازلي 60 ثانية ============ */
-        .countdown-timer {
-            display:inline-block; margin-right:10px; padding:3px 10px;
-            background:rgba(0, 255, 136, 0.15); border:1px solid #00ff88;
-            border-radius:20px; font-size:12px; font-weight:bold;
-            color:#00ff88; font-family:'Courier New', monospace;
-        }
-        .countdown-timer.expired {
-            background:rgba(239, 68, 68, 0.15); border-color:#ef4444; color:#ef4444;
-        }
-        .countdown-timer.warning {
-            background:rgba(245, 158, 11, 0.15); border-color:#f59e0b; color:#f59e0b;
-        }
+        .platform-btn:hover { background:#21262d; border-color:#484f58; }
+        .platform-btn:active { transform:scale(0.98); }
+        .platform-btn.active { background:#1f6feb; border-color:#1f6feb; color:#fff; }
+        .platform-btn img { width:32px; height:32px; object-fit:contain; border-radius:8px; background:#fff; padding:2px; }
 
-        /* ============ [ميزة 2] قسم الأكواد القديمة ============ */
-        .old-otp-item {
-            opacity:0.6;
-            background: linear-gradient(135deg, #1a1f2e, #0f172a) !important;
-            border:1px solid #475569 !important;
-            color:#94a3b8 !important;
+        /* ============= SELECT & BUTTONS ============= */
+        .select-wrap { position:relative; }
+        .form-control {
+            width:100%; padding:14px 16px; border-radius:10px;
+            border:1px solid #30363d; background:#0d1117; color:#e6e6e6;
+            outline:none; font-family:'Cairo',sans-serif; font-size:14px; font-weight:600;
+            appearance:none; -webkit-appearance:none;
+            background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='%238b949e' d='M6 9L1 4h10z'/></svg>");
+            background-repeat:no-repeat; background-position:left 16px center; padding-left:40px;
         }
-        body.light-mode .old-otp-item {
-            background: linear-gradient(135deg, #f1f5f9, #e2e8f0) !important;
-            color:#64748b !important;
-        }
-        .old-otp-item .countdown-timer { display:none; }
-        .old-section-title { color:#94a3b8 !important; }
-        .old-section-title::after { background: linear-gradient(90deg, #94a3b8, transparent) !important; }
-        body.light-mode .old-section-title { color:#64748b !important; }
-        body.light-mode .old-section-title::after { background: linear-gradient(90deg, #64748b, transparent) !important; }
+        .form-control:focus { border-color:#1f6feb; }
+        .form-control:disabled { opacity:0.5; cursor:not-allowed; }
 
-        .status { 
-            background: linear-gradient(135deg, rgba(31, 41, 55, 0.7), rgba(15, 23, 42, 0.7));
-            padding:14px; border-radius:14px; text-align:center; 
-            margin-top:20px; color:var(--text-muted); font-size:14px; font-weight:600;
-            border:1px solid var(--border-soft);
+        .btn-primary {
+            width:100%; padding:14px; border:none; border-radius:10px;
+            background:#238636; color:#fff; font-size:15px; font-weight:700;
+            cursor:pointer; margin-top:10px; font-family:'Cairo',sans-serif;
+            transition:all 0.15s ease;
         }
-        body.light-mode .status {
-            background: linear-gradient(135deg, #ffffff, #e0f2fe);
-        }
-        .status .icon { font-size:18px; margin-left:8px; }
-        
-        .pulse-emoji { display:inline-block; animation: pulse 1.5s infinite; }
-        .spin-emoji { display:inline-block; animation: spin 3s linear infinite; }
-        @keyframes spin { from{transform:rotate(0);} to{transform:rotate(360deg);} }
+        .btn-primary:hover:not(:disabled) { background:#2ea043; }
+        .btn-primary:active:not(:disabled) { transform:scale(0.98); }
+        .btn-primary:disabled { opacity:0.5; cursor:not-allowed; }
 
-        /* ============ [تحسينات بصرية] ============ */
-        /* [1] خلفية canvas مع نجوم ديناميكية + shooting stars */
-        #starCanvas { position:fixed; inset:0; z-index:-1; pointer-events:none; }
-        /* [3] شعار طائر - class="logo-float" */
-        .logo-float {
-            display:inline-block;
-            animation: logoFloat 3.5s ease-in-out infinite;
-            filter: drop-shadow(0 0 10px rgba(0,255,200,0.6));
+        .btn-blue {
+            width:100%; padding:14px; border:none; border-radius:10px;
+            background:#1f6feb; color:#fff; font-size:15px; font-weight:700;
+            cursor:pointer; margin-top:8px; font-family:'Cairo',sans-serif;
+            transition:all 0.15s ease;
         }
-        @keyframes logoFloat {
-            0%,100% { transform: translateY(0) rotate(-3deg) scale(1); }
-            25%     { transform: translateY(-12px) rotate(2deg) scale(1.05); }
-            50%     { transform: translateY(-6px) rotate(-2deg) scale(1.02); }
-            75%     { transform: translateY(-14px) rotate(3deg) scale(1.06); }
+        .btn-blue:hover { background:#388bfd; }
+
+        /* ============= NUMBER BOX ============= */
+        .number-card {
+            background:#0d1117; border:1px solid #238636; border-radius:12px;
+            padding:18px; margin:16px 0; text-align:center;
         }
-        /* [4] أيقونات نابضة - class="icon-pulse" */
-        .icon-pulse {
-            display:inline-block;
-            animation: iconPulse 1.8s ease-in-out infinite;
-            transform-origin: center;
+        .number-card .number { font-family:'Courier New',monospace; font-size:24px; font-weight:bold; color:#3fb950; letter-spacing:1px; }
+        .copy-btn-mini { background:transparent; border:1px solid #30363d; color:#8b949e; padding:6px 10px; border-radius:8px; cursor:pointer; font-size:12px; margin-top:8px; }
+
+        /* ============= OTP LIST ============= */
+        .otp-list { display:flex; flex-direction:column; gap:8px; margin-top:12px; }
+        .otp-item {
+            background:#1c2128; border:1px solid #30363d; border-radius:10px;
+            padding:12px 14px; display:flex; justify-content:space-between; align-items:center;
         }
-        @keyframes iconPulse {
-            0%,100% { transform: scale(1); filter: drop-shadow(0 0 4px currentColor); }
-            50%     { transform: scale(1.2); filter: drop-shadow(0 0 12px currentColor) brightness(1.3); }
-        }
-        /* [2] أزرار نيون @keyframes neonPulse */
-        .neon-btn {
-            position: relative;
-            animation: neonPulse 2s ease-in-out infinite;
-        }
-        @keyframes neonPulse {
-            0%,100% {
-                box-shadow:
-                    0 0 20px rgba(0, 255, 136, 0.5),
-                    0 0 40px rgba(0, 255, 136, 0.3),
-                    0 0 60px rgba(0, 255, 136, 0.15);
-            }
-            50% {
-                box-shadow:
-                    0 0 30px rgba(0, 255, 136, 0.8),
-                    0 0 60px rgba(0, 255, 136, 0.5),
-                    0 0 90px rgba(0, 255, 136, 0.25);
-            }
-        }
-        .neon-btn-blue {
-            position: relative;
-            animation: neonPulseBlue 2s ease-in-out infinite;
-        }
-        @keyframes neonPulseBlue {
-            0%,100% {
-                box-shadow:
-                    0 0 20px rgba(59, 130, 246, 0.5),
-                    0 0 40px rgba(59, 130, 246, 0.3),
-                    0 0 60px rgba(59, 130, 246, 0.15);
-            }
-            50% {
-                box-shadow:
-                    0 0 30px rgba(59, 130, 246, 0.8),
-                    0 0 60px rgba(59, 130, 246, 0.5),
-                    0 0 90px rgba(59, 130, 246, 0.25);
-            }
-        }
-        /* [6] بطاقات متحركة @keyframes slideIn (محسّن) */
-        .slide-in-card {
-            animation: slideInUp 0.6s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        @keyframes slideInUp {
-            from { opacity: 0; transform: translateY(20px) scale(0.95); }
-            to   { opacity: 1; transform: translateY(0) scale(1); }
-        }
-        /* [7] عدّاد الأرقام - class="badge-count" */
-        .badge-count {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            min-width: 22px;
-            height: 22px;
-            padding: 0 7px;
-            border-radius: 12px;
-            background: linear-gradient(135deg, #ef4444, #dc2626);
-            color: #fff;
-            font-size: 11px;
-            font-weight: 900;
-            font-family: 'Courier New', monospace;
-            box-shadow: 0 0 10px rgba(239, 68, 68, 0.7), 0 0 20px rgba(239, 68, 68, 0.4);
-            animation: badgeBounce 2s ease-in-out infinite;
-            margin-right: 6px;
-        }
-        @keyframes badgeBounce {
-            0%,100% { transform: scale(1); }
-            50%     { transform: scale(1.15); }
-        }
-        /* [2] تأثير زجاجي محسّن - Glassmorphism */
-        .glass {
-            background: rgba(17, 24, 39, 0.6) !important;
-            backdrop-filter: blur(20px) saturate(180%);
-            -webkit-backdrop-filter: blur(20px) saturate(180%);
-            border: 1px solid rgba(255, 255, 255, 0.1) !important;
-            box-shadow:
-                0 8px 32px rgba(0, 0, 0, 0.3),
-                inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
-        }
-        body.light-mode .glass {
-            background: rgba(255, 255, 255, 0.7) !important;
-            border: 1px solid rgba(0, 0, 0, 0.08) !important;
-            box-shadow:
-                0 8px 32px rgba(0, 0, 0, 0.1),
-                inset 0 1px 0 rgba(255, 255, 255, 0.5) !important;
-        }
-        /* [8] ظل متوهج للأرقام */
-        .number-glow {
-            text-shadow:
-                0 0 10px #00ff88,
-                0 0 20px #00ff88,
-                0 0 40px rgba(0, 255, 136, 0.5);
-        }
-        /* شريط إشعارات فورية منبثقة */
-        #instantNotif {
-            position: fixed;
-            top: 80px;
-            left: 50%;
-            transform: translateX(-50%) translateY(-30px);
-            background: linear-gradient(135deg, #00ff88, #00d2ff);
-            color: #0a0e1a;
-            padding: 12px 24px;
-            border-radius: 14px;
-            font-weight: 900;
-            font-family: 'Cairo', sans-serif;
-            box-shadow: 0 0 30px rgba(0,255,136,0.7);
-            z-index: 99999;
-            opacity: 0;
-            transition: all 0.4s ease;
-            pointer-events: none;
-        }
-        #instantNotif.show {
-            opacity: 1;
-            transform: translateX(-50%) translateY(0);
-        }
-        /* تأثير صحن طائر في الخلفية */
-        .flying-ufo {
-            position: fixed;
-            top: 15%;
-            left: -100px;
-            font-size: 32px;
-            z-index: -1;
-            pointer-events: none;
-            animation: flyUfo 25s linear infinite;
-            opacity: 0.5;
-        }
-        @keyframes flyUfo {
-            0%   { transform: translateX(0) translateY(0) rotate(-5deg); }
-            50%  { transform: translateX(110vw) translateY(-30px) rotate(5deg); }
-            100% { transform: translateX(110vw) translateY(-30px) rotate(5deg); }
-        }
-        /* ============ [الفوتر] شريط أخبار بسيط وأنيق ============ */
-        .site-footer {
-            margin-top: 30px;
-            padding: 0;
-            border-radius: 16px;
-            background: linear-gradient(135deg, rgba(31, 41, 55, 0.5), rgba(15, 23, 42, 0.7));
-            border: 1px solid var(--border-soft);
-            position: relative;
-            overflow: hidden;
-        }
-        body.light-mode .site-footer {
-            background: linear-gradient(135deg, #ffffff, #e0f2fe);
-        }
-        /* ===== شريط الأخبار البسيط ===== */
-        .news-ticker {
-            display: flex;
-            align-items: center;
-            height: 42px;
-            position: relative;
-            overflow: hidden;
-        }
-        .ticker-wrap {
-            flex: 1;
-            overflow: hidden;
-            position: relative;
-            height: 100%;
-            display: flex;
-            align-items: center;
-        }
-        /* ضباب خفيف على الأطراف */
-        .ticker-wrap::before,
-        .ticker-wrap::after {
-            content: '';
-            position: absolute;
-            top: 0; bottom: 0;
-            width: 30px;
-            z-index: 3;
-            pointer-events: none;
-        }
-        .ticker-wrap::before {
-            left: 0;
-            background: linear-gradient(90deg, rgba(15, 23, 42, 0.9), transparent);
-        }
-        .ticker-wrap::after {
-            right: 0;
-            background: linear-gradient(270deg, rgba(15, 23, 42, 0.9), transparent);
-        }
-        body.light-mode .ticker-wrap::before {
-            background: linear-gradient(90deg, rgba(255,255,255,0.9), transparent);
-        }
-        body.light-mode .ticker-wrap::after {
-            background: linear-gradient(270deg, rgba(255,255,255,0.9), transparent);
-        }
-        /* الشريط اللي يمشي بسلاسة */
-        .ticker-track {
-            display: inline-flex;
-            align-items: center;
-            white-space: nowrap;
-            animation: tickerSlide 60s linear infinite;
-            will-change: transform;
-        }
-        .ticker-track:hover { animation-play-state: paused; }
-        @keyframes tickerSlide {
-            0%   { transform: translateX(100%); }
-            100% { transform: translateX(-100%); }
-        }
-        /* عنصر الخبر — نظيف وبسيط */
-        .ticker-item {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 0 22px;
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--text-muted);
-        }
-        .ticker-item .ti-name {
-            font-weight: 700;
-            color: var(--text-main);
-        }
-        .ticker-item .ti-heart {
-            color: #ef4444;
-            display: inline-block;
-        }
-        /* فاصل بسيط */
-        .ticker-sep {
-            display: inline-block;
-            color: var(--text-soft);
-            opacity: 0.5;
-            padding: 0 6px;
-        }
-        .footer-sub {
-            margin-top: 0;
-            padding: 8px 12px;
-            font-size: 11px;
-            color: var(--text-soft);
-            opacity: 0.6;
-            text-align: center;
-            border-top: 1px solid var(--border-soft);
-        }
-        
-        @media (min-width: 768px) {
-            .container { max-width:480px; margin:0 auto; min-height:100vh; }
-            .platform-selector { grid-template-columns:repeat(2, 1fr); }
-        }
-        @media (max-width: 380px) {
-            .header h1 { font-size:24px; }
-            .platform-btn img { width:32px; height:32px; }
-            .platform-btn span { font-size:12px; }
+        .otp-item .otp-code { font-family:'Courier New',monospace; font-size:16px; font-weight:bold; color:#3fb950; }
+        .otp-item .otp-info { font-size:11px; color:#8b949e; margin-top:2px; }
+        .otp-item .copy-btn { background:transparent; border:1px solid #30363d; color:#58a6ff; padding:4px 10px; border-radius:6px; cursor:pointer; font-size:11px; font-weight:600; }
+
+        .empty-state { text-align:center; padding:30px 16px; color:#8b949e; font-size:13px; }
+        .empty-state .icon { font-size:36px; margin-bottom:8px; opacity:0.6; }
+
+        /* ============= STATUS BAR ============= */
+        .status { background:#1c2128; border:1px solid #30363d; border-radius:10px; padding:12px 16px; text-align:center; margin-top:14px; color:#8b949e; font-size:13px; font-weight:600; }
+
+        /* ============= THEME TOGGLE ============= */
+        .theme-toggle { background:transparent; border:1px solid #30363d; color:#8b949e; padding:6px 10px; border-radius:8px; cursor:pointer; font-size:14px; }
+        .theme-toggle:hover { color:#58a6ff; }
+
+        /* ============= LIGHT MODE ============= */
+        body.light { background:#f6f8fa !important; color:#1f2328 !important; }
+        body.light .app { background:#ffffff !important; }
+        body.light .top-bar { background:#ffffff !important; border-bottom-color:#d0d7de !important; }
+        body.light .brand-text, body.light .hero h1, body.light .section-title { color:#1f2328 !important; }
+        body.light .hero p, body.light .status, body.light .empty-state { color:#656d76 !important; }
+        body.light .platform-btn { background:#f6f8fa; border-color:#d0d7de; color:#1f2328; }
+        body.light .platform-btn:hover { background:#eaeef2; }
+        body.light .form-control { background:#ffffff; border-color:#d0d7de; color:#1f2328; }
+        body.light .otp-item { background:#f6f8fa; border-color:#d0d7de; }
+        body.light .otp-item .otp-code { color:#1a7f37; }
+        body.light .dropdown-menu { background:#ffffff; border-color:#d0d7de; }
+        body.light .dropdown-menu a { color:#1f2328; }
+        body.light .status { background:#f6f8fa; border-color:#d0d7de; }
+        body.light .number-card { background:#f6f8fa; border-color:#1a7f37; }
+        body.light .number-card .number { color:#1a7f37; }
+
+        .footer { text-align:center; padding:20px 16px; color:#484f58; font-size:12px; border-top:1px solid #21262d; }
+        body.light .footer { color:#656d76; border-top-color:#d0d7de; }
+
+        /* ============= RESPONSIVE ============= */
+        @media (max-width:380px) {
+            .hero h1 { font-size:20px; }
+            .platform-btn { font-size:13px; padding:10px 12px; }
         }
     </style>
 </head>
 <body>
-    <div class="stars" id="stars"></div>
-    <canvas id="starCanvas"></canvas>
-    <div class="flying-ufo">🛸</div>
-    <div id="instantNotif"></div>
-    
-    <div class="container glass slide-in-card">
+    <div class="app">
+        <!-- HEADER -->
         <div class="top-bar">
-            <div class="top-actions">
-                <!-- [ميزة 4] زر تبديل الوضع الليلي/النهاري -->
-                <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="تبديل الوضع">🌙</button>
+            <div class="brand">
+                <div class="brand-icon">🚀</div>
+                <div class="brand-text">المطري OTP</div>
             </div>
-            <button class="menu-btn" onclick="toggleMenu()">☰</button>
-            <div class="dropdown-menu" id="contactMenu">
-                <a href="{{ owner_link }}" target="_blank">📞 تواصل معي</a>
-                <a href="{{ wa_group }}" target="_blank">💬 جروب واتساب</a>
-            </div>
-        </div>
-
-        <div class="header">
-            <h1><span class="logo-float">🚀</span> موقع المطري OTP <span class="logo-float">🚀</span></h1>
-            <p><span class="crown icon-pulse">👑</span> أرقام واتساب سحب أكواد تطوير مطري <span class="crown icon-pulse">👑</span></p>
-        </div>
-
-        <div class="section-title">
-            <span class="emoji icon-pulse">🎯</span>
-            <span>اختر المنصة</span>
-            <span class="badge-count" id="platformCount">0</span>
-        </div>
-        <div class="form-group">
-            <div class="platform-selector" id="platformSelector"></div>
-        </div>
-
-        <div class="section-title">
-            <span class="emoji icon-pulse">🌍</span>
-            <span>اختر الدولة</span>
-        </div>
-        <div class="form-group">
-            <select id="country" class="form-control" disabled>
-                <option value="">🚀 -- اختر المنصة أولاً -- 🚀</option>
-            </select>
-        </div>
-
-        <button class="btn-primary neon-btn" id="getNumberBtn" onclick="getNumber()" disabled>
-            🚀 جلب رقم
-        </button>
-        <button class="btn-blue neon-btn-blue" id="refreshBtn" onclick="refreshNumber()" disabled>
-            🔄 تبديل
-        </button>
-
-        <div id="numberContainer" style="display:none;">
-            <div class="number-box">
-                <button class="copy-number-btn" onclick="copyNumber()" title="نسخ">📋</button>
-                <div class="number" id="numberDisplay">+</div>
-            </div>
-            <div style="display:flex; gap:10px; margin-top:12px;">
-                <button class="btn-primary neon-btn" onclick="startMonitoring()">📡 بدء السحب</button>
-                <button class="btn-blue btn-danger" onclick="stopMonitoring()">⏹️ إيقاف</button>
-            </div>
-        </div>
-
-        <div class="otp-container" id="otpHistory">
-            <div style="text-align:center; color:#64748b; padding:25px;">
-                <div style="font-size:40px; margin-bottom:10px;">⏳</div>
-                <div>في انتظار الأكواد...</div>
-            </div>
-        </div>
-
-        <!-- [ميزة 2] قسم الأكواد القديمة -->
-        <div class="section-title old-section-title" id="oldSectionTitle" style="display:none;">
-            <span class="emoji icon-pulse">📜</span>
-            <span>الأكواد القديمة (منتهية الصلاحية)</span>
-            <span class="badge-count" id="oldCount" style="display:none;">0</span>
-        </div>
-        <div class="otp-container" id="oldOtpHistory" style="display:none; max-height:250px;">
-            <div style="text-align:center; color:#64748b; padding:25px;">
-                <div style="font-size:40px; margin-bottom:10px;">📭</div>
-                <div>لا توجد أكواد قديمة بعد</div>
-            </div>
-        </div>
-
-        <div class="status" id="status">
-            <span class="icon">⚡</span>
-            اختر المنصة والدولة للبدء
-        </div>
-
-        <!-- [الفوتر] شريط أخبار بسيط وأنيق -->
-        <div class="site-footer">
-            <div class="news-ticker">
-                <div class="ticker-wrap">
-                    <div class="ticker-track">
-                        <span class="ticker-item">
-                            صُنع بحب <span class="ti-heart">❤</span> بواسطة <span class="ti-name">المطري</span>
-                        </span>
-                        <span class="ticker-sep">•</span>
-                        <span class="ticker-item">
-                            تطوير <span class="ti-name">المطري</span>
-                        </span>
-                        <span class="ticker-sep">•</span>
-                        <span class="ticker-item">
-                            موقع <span class="ti-name">المطري OTP</span> — الأسرع والأفضل
-                        </span>
-                        <span class="ticker-sep">•</span>
-                        <span class="ticker-item">
-                            صُنع بحب <span class="ti-heart">❤</span> بواسطة <span class="ti-name">المطري</span>
-                        </span>
-                        <span class="ticker-sep">•</span>
-                        <span class="ticker-item">
-                            تطوير <span class="ti-name">المطري</span>
-                        </span>
-                        <span class="ticker-sep">•</span>
-                        <span class="ticker-item">
-                            موقع <span class="ti-name">المطري OTP</span> — الأسرع والأفضل
-                        </span>
-                        <span class="ticker-sep">•</span>
-                    </div>
+            <div style="display:flex; gap:6px; position:relative;">
+                <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">🌙</button>
+                <button class="menu-btn" onclick="toggleMenu()">☰</button>
+                <div class="dropdown-menu" id="contactMenu">
+                    <a href="{{ owner_link }}" target="_blank">📞 تواصل معي</a>
+                    <a href="{{ wa_group }}" target="_blank">💬 جروب واتساب</a>
                 </div>
             </div>
-            <div class="footer-sub">© <span id="footerYear"></span> المطري OTP</div>
+        </div>
+
+        <!-- MAIN -->
+        <div class="main">
+            <div class="hero">
+                <h1>🚀 موقع المطري OTP</h1>
+                <p><span class="crown">👑</span> أرقام واتساب سحب أكواد تطوير مطري <span class="crown">👑</span></p>
+            </div>
+
+            <div class="section-title"><span class="icon">🎯</span> اختر المنصة</div>
+            <div class="platforms" id="platformSelector"></div>
+
+            <div class="section-title"><span class="icon">🌍</span> اختر الدولة</div>
+            <div class="select-wrap">
+                <select id="country" class="form-control" disabled>
+                    <option value="">-- اختر المنصة أولاً --</option>
+                </select>
+            </div>
+
+            <button class="btn-primary" id="getNumberBtn" onclick="getNumber()" disabled>🚀 جلب رقم</button>
+            <button class="btn-blue" id="refreshBtn" onclick="refreshNumber()" disabled>🔄 تبديل</button>
+
+            <div id="numberContainer" style="display:none;">
+                <div class="number-card">
+                    <div class="number" id="numberDisplay">+</div>
+                    <button class="copy-btn-mini" onclick="copyNumber()">📋 نسخ الرقم</button>
+                </div>
+                <div style="display:flex; gap:8px;">
+                    <button class="btn-primary" onclick="startMonitoring()">📡 بدء السحب</button>
+                    <button class="btn-blue" onclick="stopMonitoring()" style="background:#da3633;">⏹️ إيقاف</button>
+                </div>
+            </div>
+
+            <div class="section-title" style="margin-top:24px;"><span class="icon">📜</span> الأكواد المسحوبة</div>
+            <div class="otp-list" id="otpHistory">
+                <div class="empty-state">
+                    <div class="icon">⏳</div>
+                    <div>في انتظار الأكواد...</div>
+                </div>
+            </div>
+
+            <div class="status" id="status">⚡ اختر المنصة والدولة للبدء</div>
+        </div>
+
+        <div class="footer">
+            💎 صُنع بحب ⚡ بواسطة المطري
         </div>
     </div>
 
@@ -1014,207 +474,6 @@ main_html = """
         const platformLogosSmall = {{ platform_logos_small | tojson }};
         const platformNames = {{ platform_names | tojson }};
         const platformGradients = {{ platform_gradients | tojson }};
-
-        function createStars() {
-            const stars = document.getElementById('stars');
-            for(let i=0; i<40; i++) {
-                const star = document.createElement('div');
-                star.className = 'star';
-                const size = Math.random() * 3 + 1;
-                star.style.width = size + 'px';
-                star.style.height = size + 'px';
-                star.style.left = Math.random() * 100 + '%';
-                star.style.top = Math.random() * 100 + '%';
-                star.style.animationDelay = Math.random() * 3 + 's';
-                star.style.opacity = Math.random() * 0.7 + 0.3;
-                stars.appendChild(star);
-            }
-        }
-        createStars();
-
-        // ============ [خلفية canvas] نجوم ديناميكية حقيقية + shooting stars ============
-        (function initStarCanvas() {
-            const canvas = document.getElementById('starCanvas');
-            if (!canvas) return;
-            const ctx = canvas.getContext('2d');
-            let W = canvas.width = window.innerWidth;
-            let H = canvas.height = window.innerHeight;
-            const stars = [];
-            const numStars = Math.min(150, Math.floor((W * H) / 12000));
-            for (let i = 0; i < numStars; i++) {
-                stars.push({
-                    x: Math.random() * W,
-                    y: Math.random() * H,
-                    r: Math.random() * 1.4 + 0.3,
-                    vx: (Math.random() - 0.5) * 0.3,
-                    vy: (Math.random() - 0.5) * 0.3,
-                    alpha: Math.random() * 0.6 + 0.4,
-                    pulse: Math.random() * 0.02 + 0.005
-                });
-            }
-            const shootingStars = [];
-            function spawnShooting() {
-                if (Math.random() < 0.012) {
-                    shootingStars.push({
-                        x: Math.random() * W,
-                        y: Math.random() * H * 0.4,
-                        len: Math.random() * 60 + 40,
-                        vx: 6 + Math.random() * 3,
-                        vy: 2 + Math.random() * 2,
-                        life: 1
-                    });
-                }
-            }
-            function draw() {
-                ctx.clearRect(0, 0, W, H);
-                const isLight = document.body.classList.contains('light-mode');
-                for (let s of stars) {
-                    s.x += s.vx; s.y += s.vy;
-                    s.alpha += s.pulse;
-                    if (s.alpha > 1 || s.alpha < 0.3) s.pulse = -s.pulse;
-                    if (s.x < 0) s.x = W; if (s.x > W) s.x = 0;
-                    if (s.y < 0) s.y = H; if (s.y > H) s.y = 0;
-                    ctx.beginPath();
-                    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-                    ctx.fillStyle = isLight
-                        ? `rgba(8, 145, 178, ${s.alpha})`
-                        : `rgba(255, 255, 255, ${s.alpha})`;
-                    ctx.shadowBlur = 8;
-                    ctx.shadowColor = isLight ? 'rgba(8, 145, 178, 0.8)' : 'rgba(255,255,255,0.8)';
-                    ctx.fill();
-                }
-                ctx.shadowBlur = 0;
-                spawnShooting();
-                for (let i = shootingStars.length - 1; i >= 0; i--) {
-                    const sh = shootingStars[i];
-                    const grad = ctx.createLinearGradient(sh.x, sh.y, sh.x - sh.len, sh.y - sh.len/2);
-                    grad.addColorStop(0, isLight ? 'rgba(124, 58, 237, 1)' : 'rgba(0,255,200,1)');
-                    grad.addColorStop(1, 'rgba(0,0,0,0)');
-                    ctx.strokeStyle = grad;
-                    ctx.lineWidth = 2;
-                    ctx.beginPath();
-                    ctx.moveTo(sh.x, sh.y);
-                    ctx.lineTo(sh.x - sh.len, sh.y - sh.len/2);
-                    ctx.stroke();
-                    sh.x += sh.vx; sh.y += sh.vy; sh.life -= 0.015;
-                    if (sh.life <= 0) shootingStars.splice(i, 1);
-                }
-                requestAnimationFrame(draw);
-            }
-            draw();
-            window.addEventListener('resize', () => {
-                W = canvas.width = window.innerWidth;
-                H = canvas.height = window.innerHeight;
-            });
-        })();
-
-        // ============ [إشعارات فورية] تظهر في أعلى الصفحة ============
-        function showInstantNotif(msg) {
-            const n = document.getElementById('instantNotif');
-            n.textContent = msg;
-            n.classList.add('show');
-            clearTimeout(n._t);
-            n._t = setTimeout(() => n.classList.remove('show'), 3500);
-        }
-
-        // سنة الفوتر
-        document.getElementById('footerYear').textContent = new Date().getFullYear();
-
-        function initPlatformSelector() {
-            const selector = document.getElementById('platformSelector');
-            selector.innerHTML = '';
-            Object.keys(platformNames).forEach(platform => {
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = 'platform-btn';
-                btn.onclick = (e) => selectPlatform(platform, e);
-
-                const gradient = platformGradients[platform];
-                const colorMatch = gradient.match(/#[0-9A-F]{6}/gi);
-                const glowColor = colorMatch ? colorMatch[0] : '#00ffc8';
-
-                btn.style.setProperty('--bg-gradient', gradient);
-                btn.style.setProperty('--glow-color', glowColor + '80');
-
-                btn.innerHTML = `
-                    <img src="${platformLogos[platform]}" alt="${platformNames[platform]}" onerror="this.src='${platformLogosSmall[platform]}'">
-                    <span>${platformNames[platform]} ✨</span>
-                `;
-                selector.appendChild(btn);
-            });
-            // [عدّاد الأرقام] badge-count
-            const cnt = document.getElementById('platformCount');
-            if (cnt) cnt.textContent = Object.keys(platformNames).length;
-        }
-
-        function updateBadges() {
-            const newCount = document.querySelectorAll('#otpHistory .otp-item').length;
-            const oldItems = document.querySelectorAll('#oldOtpHistory .old-otp-item').length;
-            const oldBadge = document.getElementById('oldCount');
-            if (oldBadge) {
-                oldBadge.textContent = oldItems;
-                oldBadge.style.display = oldItems > 0 ? 'inline-flex' : 'none';
-            }
-        }
-
-        // ============ [ميزة 4] تبديل الوضع الليلي/النهاري ============
-        function toggleTheme() {
-            document.body.classList.toggle('light-mode');
-            const btn = document.getElementById('themeBtn');
-            const isLight = document.body.classList.contains('light-mode');
-            btn.textContent = isLight ? '☀️' : '🌙';
-            btn.classList.toggle('active', isLight);
-            localStorage.setItem('theme', isLight ? 'light' : 'dark');
-        }
-        // استرجاع الوضع المحفوظ
-        (function() {
-            const saved = localStorage.getItem('theme');
-            if (saved === 'light') {
-                document.body.classList.add('light-mode');
-                document.addEventListener('DOMContentLoaded', () => {
-                    const btn = document.getElementById('themeBtn');
-                    btn.textContent = '☀️'; btn.classList.add('active');
-                });
-            }
-        })();
-
-        // ============ [ميزة 1] صوت تنبيه Web Audio API ============
-        const notificationSound = (function() {
-            let audioCtx = null;
-            function getCtx() {
-                if (!audioCtx) {
-                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                }
-                return audioCtx;
-            }
-            return function play() {
-                try {
-                    const ctx = getCtx();
-                    // نغمة 1
-                    const osc1 = ctx.createOscillator();
-                    const gain1 = ctx.createGain();
-                    osc1.connect(gain1); gain1.connect(ctx.destination);
-                    osc1.frequency.value = 880;
-                    osc1.type = 'sine';
-                    gain1.gain.setValueAtTime(0, ctx.currentTime);
-                    gain1.gain.linearRampToValueAtTime(0.25, ctx.currentTime + 0.05);
-                    gain1.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.2);
-                    osc1.start(ctx.currentTime);
-                    osc1.stop(ctx.currentTime + 0.2);
-                    // نغمة 2
-                    const osc2 = ctx.createOscillator();
-                    const gain2 = ctx.createGain();
-                    osc2.connect(gain2); gain2.connect(ctx.destination);
-                    osc2.frequency.value = 1320;
-                    osc2.type = 'sine';
-                    gain2.gain.setValueAtTime(0, ctx.currentTime + 0.15);
-                    gain2.gain.linearRampToValueAtTime(0.25, ctx.currentTime + 0.2);
-                    gain2.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.4);
-                    osc2.start(ctx.currentTime + 0.15);
-                    osc2.stop(ctx.currentTime + 0.4);
-                } catch (e) { console.log('Audio failed:', e); }
-            };
-        })();
 
         function toggleMenu() {
             document.getElementById('contactMenu').classList.toggle('show');
@@ -1227,42 +486,60 @@ main_html = """
             }
         });
 
+        function toggleTheme() {
+            const isLight = document.body.classList.toggle('light');
+            document.getElementById('themeToggle').textContent = isLight ? '☀️' : '🌙';
+            localStorage.setItem('theme', isLight ? 'light' : 'dark');
+        }
+        function loadTheme() {
+            if (localStorage.getItem('theme') === 'light') {
+                document.body.classList.add('light');
+                document.getElementById('themeToggle').textContent = '☀️';
+            }
+        }
+        loadTheme();
+
         async function copyNumber() {
             const num = document.getElementById('numberDisplay').textContent;
             await navigator.clipboard.writeText(num);
-            showToast('✅ تم نسخ الرقم! ' + num);
+            const btn = event.target;
+            const orig = btn.textContent;
+            btn.textContent = '✅ تم النسخ';
+            setTimeout(() => btn.textContent = orig, 1500);
         }
 
-        function showToast(msg) {
-            const t = document.createElement('div');
-            t.textContent = msg;
-            t.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#00ff88,#00d2ff);color:#000;padding:14px 28px;border-radius:14px;font-weight:bold;z-index:9999;box-shadow:0 0 30px rgba(0,255,136,0.6);animation:slideIn 0.4s;';
-            document.body.appendChild(t);
-            setTimeout(() => t.remove(), 2500);
+        function copyText(text) {
+            navigator.clipboard.writeText(text);
         }
 
         let currentPlatform = '';
         let currentNumber = '';
         let monitorInterval = null;
 
-        // ============ [ميزة 2] تخزين العدادات التنازلية ============
-        const otpCountdowns = new Map();
-
-        function selectPlatform(platform, event) {
-            currentPlatform = platform;
-            document.querySelectorAll('.platform-btn').forEach(btn => {
-                btn.classList.remove('active');
+        function initPlatformSelector() {
+            const selector = document.getElementById('platformSelector');
+            selector.innerHTML = '';
+            Object.keys(platformNames).forEach(platform => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'platform-btn';
+                btn.onclick = () => selectPlatform(platform, btn);
+                btn.innerHTML = `<img src="${platformLogos[platform]}" alt="${platformNames[platform]}" onerror="this.src='${platformLogosSmall[platform]}'"><span>${platformNames[platform]}</span>`;
+                selector.appendChild(btn);
             });
-            const btn = event.currentTarget || event.target.closest('.platform-btn');
+        }
+
+        function selectPlatform(platform, btn) {
+            currentPlatform = platform;
+            document.querySelectorAll('.platform-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             loadCountries();
         }
 
         async function loadCountries() {
-            const platform = currentPlatform;
             const countrySelect = document.getElementById('country');
-            if (!platform) {
-                countrySelect.innerHTML = '<option value="">🚀 -- اختر المنصة أولاً -- 🚀</option>';
+            if (!currentPlatform) {
+                countrySelect.innerHTML = '<option value="">-- اختر المنصة أولاً --</option>';
                 countrySelect.disabled = true;
                 document.getElementById('numberContainer').style.display = 'none';
                 document.getElementById('getNumberBtn').disabled = true;
@@ -1270,222 +547,92 @@ main_html = """
                 return;
             }
             countrySelect.disabled = true;
-            countrySelect.innerHTML = '<option value="">⏳ جاري التحميل...</option>';
-            const res = await fetch('/api/countries', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform})});
+            countrySelect.innerHTML = '<option value="">جاري التحميل...</option>';
+            const res = await fetch('/api/countries', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform:currentPlatform})});
             const data = await res.json();
-            let options = '<option value="">🌍 -- اختر الدولة -- 🌍</option>';
+            let options = '<option value="">-- اختر الدولة --</option>';
             data.forEach(c => { options += `<option value="${c.code}">${c.flag} ${c.name}</option>`; });
             countrySelect.innerHTML = options;
             countrySelect.disabled = false;
         }
 
         document.getElementById('country').addEventListener('change', function() {
-            const hasSelection = this.value !== '';
-            document.getElementById('getNumberBtn').disabled = !hasSelection;
-            document.getElementById('refreshBtn').disabled = !hasSelection;
+            const has = this.value !== '';
+            document.getElementById('getNumberBtn').disabled = !has;
+            document.getElementById('refreshBtn').disabled = !has;
         });
 
         async function getNumber() {
-            const platform = currentPlatform;
             const country = document.getElementById('country').value;
-            if (!platform || !country) {
-                document.getElementById('status').innerHTML = '<span class="icon">⚠️</span>يرجى اختيار المنصة والدولة';
+            if (!currentPlatform || !country) {
+                document.getElementById('status').textContent = '⚠️ يرجى اختيار المنصة والدولة';
                 return;
             }
-            document.getElementById('status').innerHTML = '<span class="icon">⏳</span>جاري جلب رقم...';
-            const res = await fetch('/api/get_number', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform, country})});
+            document.getElementById('status').textContent = '⏳ جاري جلب رقم...';
+            const res = await fetch('/api/get_number', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform:currentPlatform, country})});
             const data = await res.json();
             if (data.number) {
                 currentNumber = data.number;
                 document.getElementById('numberDisplay').textContent = '+' + data.number;
                 document.getElementById('numberContainer').style.display = 'block';
-                document.getElementById('status').innerHTML = '<span class="icon">✅</span>الرقم جاهز!';
-                showToast('🎉 تم جلب رقم جديد!');
+                document.getElementById('status').textContent = '✅ الرقم جاهز!';
             } else {
-                document.getElementById('status').innerHTML = '<span class="icon">❌</span>لا توجد أرقام متاحة.';
+                document.getElementById('status').textContent = '❌ لا توجد أرقام متاحة';
             }
         }
 
         async function refreshNumber() {
-            const platform = currentPlatform;
             const country = document.getElementById('country').value;
-            if (!platform || !country) return;
-            document.getElementById('status').innerHTML = '<span class="icon">⏳</span>جاري تبديل الرقم...';
-            const res = await fetch('/api/get_number', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform, country})});
+            if (!currentPlatform || !country) return;
+            document.getElementById('status').textContent = '⏳ جاري التبديل...';
+            const res = await fetch('/api/get_number', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform:currentPlatform, country})});
             const data = await res.json();
             if (data.number && data.number !== currentNumber) {
                 currentNumber = data.number;
                 document.getElementById('numberDisplay').textContent = '+' + data.number;
-                document.getElementById('status').innerHTML = '<span class="icon">🔄</span>تم تبديل الرقم!';
-                showToast('🔄 تم التبديل!');
+                document.getElementById('status').textContent = '🔄 تم التبديل!';
             }
         }
 
-        // ============ [ميزة 2] تحديث العداد التنازلي ============
-        function updateCountdowns() {
-            const now = Date.now();
-            otpCountdowns.forEach((endTime, otpId) => {
-                const timerEl = document.getElementById('timer-' + otpId);
-                if (!timerEl) return;
-                const remaining = Math.max(0, Math.floor((endTime - now) / 1000));
-                if (remaining <= 0) {
-                    timerEl.textContent = '⏱️ منتهي';
-                    timerEl.classList.add('expired');
-                    timerEl.classList.remove('warning');
-                    // [ميزة 2] نقل الكود لقسم الأكواد القديمة
-                    moveToOld(otpId);
-                } else {
-                    timerEl.textContent = '⏱️ ' + remaining + 'ث';
-                    timerEl.classList.remove('expired');
-                    if (remaining <= 10) timerEl.classList.add('warning');
-                    else timerEl.classList.remove('warning');
-                }
-            });
-        }
-        setInterval(updateCountdowns, 1000);
-
-        // ============ [ميزة 3] إضافة كود - الجديد في الأعلى ============
-        function addOtpToHistory(otp, platform, number, timestamp) {
-            const container = document.getElementById('otpHistory');
-            
-            // تنظيف رسالة "في انتظار"
-            if (container.children.length === 1 && container.textContent.includes('في انتظار')) {
-                container.innerHTML = '';
-            }
-
-            const div = document.createElement('div');
-            div.className = 'otp-item';
-            const otpId = 'otp-' + Date.now() + '-' + Math.random().toString(36).substr(2,5);
-            div.id = otpId;
-            
-            // [ميزة 2] عداد تنازلي 60 ثانية
-            otpCountdowns.set(otpId, Date.now() + 60000);
-
-            div.innerHTML = `
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:6px;">
-                    <strong style="color:#00ff88;">🔑 ${otp}</strong>
-                    <div style="display:flex; gap:6px; align-items:center;">
-                        <span class="countdown-timer" id="timer-${otpId}">⏱️ 60ث</span>
-                        <button class="copy-btn" onclick="copyText('${otp}')">📋 نسخ</button>
-                    </div>
-                </div>
-                <span class="info">📞 +${number} • 📱 ${platform} • 🕒 ${timestamp}</span>
-            `;
-            // [ميزة 3] الجديد في الأعلى
-            container.prepend(div);
-            // أقصى عدد 25 كود
-            while (container.children.length > 25) container.removeChild(container.lastChild);
-        }
-
-        // ============ [ميزة 2] نقل كود منتهي لقسم الأكواد القديمة ============
-        function moveToOld(otpId) {
-            const el = document.getElementById(otpId);
-            if (!el || el.classList.contains('old-otp-item')) return;
-            otpCountdowns.delete(otpId);
-            const newContainer = document.getElementById('oldOtpHistory');
-            document.getElementById('oldSectionTitle').style.display = 'flex';
-            document.getElementById('oldOtpHistory').style.display = 'block';
-            // تنظيف رسالة "لا توجد أكواد قديمة" إن وُجدت
-            if (newContainer.textContent.includes('لا توجد أكواد قديمة')) {
-                newContainer.innerHTML = '';
-            }
-            el.classList.add('old-otp-item');
-            const timerEl = el.querySelector('.countdown-timer');
-            if (timerEl) {
-                timerEl.classList.add('expired');
-                timerEl.classList.remove('warning');
-                timerEl.textContent = '⏱️ منتهي';
-            }
-            // [ميزة 3] الجديد في الأعلى
-            newContainer.prepend(el);
-        }
-
-        function copyText(text) {
-            navigator.clipboard.writeText(text);
-            showToast('✅ تم نسخ الكود!');
-        }
-
-        // ============ [تحسين أداء المراقبة] مراقب عام يفحص الأكواد الجديدة بدون polling متعدد ============
-        // بدلاً من تشغيل setInterval لكل زبون، نتحقق من آخر كود في القاعدة
-        let lastSeenOtpId = 0;
-        let globalMonitorInterval = null;
-        let globalMonitorFailures = 0;
-        async function checkForNewOtps() {
-            try {
-                const res = await fetch('/api/latest_otp?since_id=' + lastSeenOtpId);
-                if (!res.ok) throw new Error('HTTP ' + res.status);
-                const data = await res.json();
-                globalMonitorFailures = 0;
-                if (data.id && data.id > lastSeenOtpId) {
-                    lastSeenOtpId = data.id;
-                    // أضف الكود ما لم يكن للرقم الحالي (أضيف بالفعل من startMonitoring)
-                    if (data.number !== currentNumber || !monitorInterval) {
-                        const now = new Date().toLocaleString('ar-YE', { timeZone: 'Asia/Aden' });
-                        addOtpToHistory(data.otp, data.platform || 'غير معروف', data.number, now);
-                        // [إشعارات فورية] تنبيه فوري
-                        notificationSound();
-                        showInstantNotif('🔑 كود جديد: ' + data.otp);
-                        showToast('🎉 كود جديد: ' + data.otp);
-                    }
-                }
-            } catch (e) {
-                // [تحسين أداء] في حالة الفشل، نمد الفترة ديناميكياً
-                globalMonitorFailures++;
-                console.log('monitor fail', globalMonitorFailures, e);
-            }
-        }
-        function startGlobalMonitor() {
-            if (globalMonitorInterval) clearInterval(globalMonitorInterval);
-            // أول فحص فوري
-            checkForNewOtps();
-            // فحص كل 4 ثواني (موفر أكثر من polling متعدد)
-            globalMonitorInterval = setInterval(checkForNewOtps, 4000);
-        }
-
-        // ============ سحب الأكواد ============
         function startMonitoring() {
             if (!currentNumber) return;
             if (monitorInterval) clearInterval(monitorInterval);
-            document.getElementById('status').innerHTML = '<span class="icon">🔄</span>بدأ السحب التلقائي...';
-            showInstantNotif('📡 بدأ السحب للرقم +' + currentNumber);
-
+            document.getElementById('status').textContent = '🔄 جاري المراقبة...';
             monitorInterval = setInterval(() => {
                 fetch('/api/get_otp', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({number:currentNumber})})
                 .then(res => res.json()).then(data => {
                     if (data.otp) {
-                        const now = new Date().toLocaleString('ar-YE', {timeZone: 'Asia/Aden'});
-                        addOtpToHistory(data.otp, 'واتساب', currentNumber, now);
-                        document.getElementById('status').innerHTML = '<span class="icon">✅</span>تم العثور على كود!';
-                        // [ميزة 1] تشغيل صوت التنبيه + [إشعارات فورية]
-                        notificationSound();
-                        showInstantNotif('🔑 كود جديد: ' + data.otp);
+                        const now = new Date().toLocaleString('ar-YE', {timeZone:'Asia/Aden'});
+                        addOtpToHistory(currentNumber, data.otp, now);
+                        document.getElementById('status').textContent = '✅ تم العثور على كود!';
                         stopMonitoring();
                     }
                 });
             }, 5000);
-            showToast('📡 بدأ المراقبة!');
         }
 
         function stopMonitoring() {
-            if (monitorInterval) {
-                clearInterval(monitorInterval);
-                monitorInterval = null;
-            }
-            document.getElementById('status').innerHTML = '<span class="icon">⏹️</span>تم إيقاف السحب.';
+            if (monitorInterval) { clearInterval(monitorInterval); monitorInterval = null; }
+            document.getElementById('status').textContent = '⏹️ تم الإيقاف';
         }
 
-        // تحديث العدّاد بعد إضافة أي كود
-        const _origAddOtp = window.addOtpToHistory;
-        const _watcher = new MutationObserver(updateBadges);
-        document.addEventListener('DOMContentLoaded', () => {
-            initPlatformSelector();
-            startGlobalMonitor();
-            // راقب الأكواد القديمة لتحديث الـ badge
-            const oldContainer = document.getElementById('oldOtpHistory');
-            if (oldContainer) _watcher.observe(oldContainer, { childList: true, subtree: true });
-            const newContainer = document.getElementById('otpHistory');
-            if (newContainer) _watcher.observe(newContainer, { childList: true, subtree: true });
-        });
+        function addOtpToHistory(number, otp, timestamp) {
+            const container = document.getElementById('otpHistory');
+            if (container.querySelector('.empty-state')) container.innerHTML = '';
+            const div = document.createElement('div');
+            div.className = 'otp-item';
+            div.innerHTML = `
+                <div>
+                    <div class="otp-code">🔑 ${otp}</div>
+                    <div class="otp-info">📞 +${number}  •  🕒 ${timestamp}</div>
+                </div>
+                <button class="copy-btn" onclick="copyText('${otp}'); this.textContent='✅'; setTimeout(()=>this.textContent='نسخ',1500);">نسخ</button>
+            `;
+            container.prepend(div);
+            if (container.children.length > 20) container.removeChild(container.lastChild);
+        }
+
+        document.addEventListener('DOMContentLoaded', initPlatformSelector);
     </script>
 </body>
 </html>
@@ -1543,7 +690,7 @@ h3 { color:#cbd5e1; margin-bottom:12px; margin-top:18px; }
     width:100%; padding:14px; border:none; border-radius:12px; 
     background: linear-gradient(135deg, #ef4444, #b91c1c);
     color:#fff; cursor:pointer; margin-top:10px; 
-    font-weight:800; font-size:15px; font-family:'Cairo',sans-serif;
+    font-weight:800; font-size:15px; font-family:'Cairo',sans-serif';
     box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
     transition:all 0.3s;
 }
@@ -1614,7 +761,15 @@ hr { border: 1px solid rgba(255,255,255,0.1); margin: 20px 0; }
 </html>
 """
 
-# ========== المسارات ==========
+@app.route('/')
+# ======================
+# 🔹 استبدل من هنا 👇
+# ======================
+
+def home():
+    return render_template_string(main_html, owner_link=OWNER_LINK, wa_group=WHATSAPP_GROUP_LINK, platform_logos=PLATFORM_LOGOS, platform_names=platform_names, platform_colors=platform_colors)
+
+# ========== الحصول على قائمة الكومبوهات للحذف ==========
 def get_all_combos_list():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -1623,26 +778,11 @@ def get_all_combos_list():
     conn.close()
     return rows
 
-@app.route('/')
-def home():
-    # [نظام المستخدمين] تتبع الزائر الحالي
-    ip = request.headers.get('X-Forwarded-For', request.remote_addr)
-    if ip and ',' in ip:
-        ip = ip.split(',')[0].strip()
-    track_visitor(ip)
-    return render_template_string(
-        main_html,
-        owner_link=OWNER_LINK,
-        wa_group=WHATSAPP_GROUP_LINK,
-        platform_logos=PLATFORM_LOGOS,
-        platform_logos_small=PLATFORM_LOGOS_SMALL,
-        platform_names=platform_names,
-        platform_gradients=PLATFORM_GRADIENTS
-    )
-
+# ========== صفحة الأدمن الجديدة ==========
 @app.route('/admin', methods=['GET', 'POST'])
 def admin():
     if request.method == 'POST':
+        # ===== حذف كومبو =====
         if request.form.get('action') == 'delete':
             platform = request.form.get('platform')
             country_code = request.form.get('country_code')
@@ -1653,6 +793,8 @@ def admin():
                 conn.commit()
                 conn.close()
                 return redirect(url_for('admin'))
+
+        # ===== رفع كومبو =====
         else:
             platform = request.form.get('platform')
             file = request.files.get('file')
@@ -1671,6 +813,8 @@ def admin():
                         name, flag = get_country_info(cc)
                         save_combo(platform, cc, name, flag, numbers)
                         return redirect(url_for('home'))
+    
+    # جلب قائمة الكومبوهات الحالية
     combos = get_all_combos_list()
     return render_template_string(admin_html, combos=combos)
 
@@ -1689,46 +833,33 @@ def api_get_otp():
     num = request.json.get('number')
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    # جلب آخر كود للرقم الحالي
-    c.execute("SELECT otp, timestamp FROM otp_logs WHERE number = ? ORDER BY id DESC LIMIT 1", (num,))
+    c.execute("SELECT otp FROM otp_logs WHERE number LIKE ? ORDER BY id DESC LIMIT 1", (f"%{num[-4:]}",))
     row = c.fetchone()
     conn.close()
-    if row:
-        # إذا مر أكثر من 5 دقائق على الكود، اعتبره منتهي
-        from datetime import datetime, timedelta
-        timestamp = datetime.strptime(row[1], "%Y-%m-%d %H:%M:%S")
-        if datetime.now() - timestamp < timedelta(minutes=5):
-            return jsonify({'otp': row[0]})
-    return jsonify({'otp': None})
+    return jsonify({'otp': row[0] if row else None})
 
-# ========== [نظام الإشعارات الفورية + سجل المستخدم] APIs جديدة ==========
-@app.route('/api/latest_otp')
-def api_latest_otp():
-    """[إشعارات فورية] يجلب آخر كود منذ ID معين - polling خفيف"""
-    since_id = request.args.get('since_id', 0, type=int)
+# ========== ✅ API واحد فقط: جلب جميع الأكواد مرة واحدة (مع caching في المتصفح) ==========
+_otp_cache = {'data': None, 'time': 0}
+CACHE_DURATION = 30  # ثواني
+
+@app.route('/api/all_otps', methods=['GET'])
+def api_all_otps():
+    now = time.time()
+    if _otp_cache['data'] is not None and (now - _otp_cache['time']) < CACHE_DURATION:
+        return jsonify(_otp_cache['data'])
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT id, number, otp, timestamp, platform FROM otp_logs WHERE id > ? ORDER BY id DESC LIMIT 1", (since_id,))
-    row = c.fetchone()
+    c.execute("SELECT id, number, otp, timestamp, platform, country_code, country_flag FROM otp_logs ORDER BY id DESC LIMIT 100")
+    rows = c.fetchall()
     conn.close()
-    if row:
-        return jsonify({'id': row[0], 'number': row[1], 'otp': row[2], 'timestamp': row[3], 'platform': row[4]})
-    return jsonify({})
+    result = [{
+        'id': r[0], 'number': r[1], 'otp': r[2], 'timestamp': r[3],
+        'platform': r[4] or 'Unknown', 'country_code': r[5] or '', 'country_flag': r[6] or '🌍'
+    } for r in rows]
+    _otp_cache['data'] = result
+    _otp_cache['time'] = now
+    return jsonify(result)
 
-@app.route('/api/user_otps')
-def api_user_otps():
-    """[سجل الأكواد] سجل أكواد الزائر الحالي"""
-    ip = request.headers.get('X-Forwarded-For', request.remote_addr)
-    if ip and ',' in ip:
-        ip = ip.split(',')[0].strip()
-    return jsonify(get_user_otps(ip, 30))
-
-@app.route('/api/site_stats')
-def api_site_stats():
-    """[إحصائيات] إحصائيات سريعة للموقع"""
-    return jsonify(get_site_stats())
-
-# ========== مراقب قناة تيليجرام ==========
 def monitor_channel():
     last_update_id = 0
     while True:
