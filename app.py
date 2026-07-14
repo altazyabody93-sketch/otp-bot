@@ -614,7 +614,13 @@ main_html = """
             </div>
 
             <div class="section-title"><span class="icon">🎯</span> اختر المنصة</div>
-            <div class="platforms" id="platformSelector"></div>
+            <div class="platforms" id="platformSelector">
+                {% for p in platforms_list %}
+                <button type="button" class="platform-btn" data-platform="{{ p }}" style="--glow: {{ platform_colors[p] }};">
+                    <img src="{{ platform_logos[p] }}" alt="{{ platform_names[p] }}"><span>{{ platform_names[p] }}</span>
+                </button>
+                {% endfor %}
+            </div>
 
             <div class="section-title"><span class="icon">🌍</span> اختر الدولة</div>
             <div class="select-wrap">
@@ -691,55 +697,61 @@ main_html = """
 
         // ========== Matrix Rain (أرقام متساقطة) ==========
         (function initMatrix() {
-            const canvas = document.getElementById('matrixCanvas');
-            const ctx = canvas.getContext('2d');
-            let w, h, cols, drops;
-            function resize() {
-                w = canvas.width = window.innerWidth;
-                h = canvas.height = window.innerHeight;
-                cols = Math.floor(w / 18);
-                drops = Array(cols).fill(0).map(()=>Math.random()*-50);
-            }
-            resize();
-            window.addEventListener('resize', resize);
-            const chars = '0123456789';
-            function draw() {
-                ctx.fillStyle = 'rgba(10, 14, 20, 0.08)';
-                ctx.fillRect(0, 0, w, h);
-                ctx.font = '16px monospace';
-                for (let i = 0; i < drops.length; i++) {
-                    const text = chars[Math.floor(Math.random()*chars.length)];
-                    const brightness = Math.random();
-                    if (brightness > 0.95) {
-                        ctx.fillStyle = '#ffffff';
-                    } else if (brightness > 0.7) {
-                        ctx.fillStyle = '#3fb950';
-                    } else {
-                        ctx.fillStyle = '#1f6feb';
-                    }
-                    ctx.fillText(text, i*18, drops[i]*18);
-                    if (drops[i]*18 > h && Math.random() > 0.975) drops[i] = 0;
-                    drops[i]++;
+            try {
+                const canvas = document.getElementById('matrixCanvas');
+                if (!canvas) return;
+                const ctx = canvas.getContext('2d');
+                let w, h, cols, drops;
+                function resize() {
+                    w = canvas.width = window.innerWidth;
+                    h = canvas.height = window.innerHeight;
+                    cols = Math.floor(w / 18);
+                    drops = Array(cols).fill(0).map(()=>Math.random()*-50);
                 }
-                requestAnimationFrame(draw);
-            }
-            draw();
+                resize();
+                window.addEventListener('resize', resize);
+                const chars = '0123456789';
+                function draw() {
+                    try {
+                        ctx.fillStyle = 'rgba(10, 14, 20, 0.08)';
+                        ctx.fillRect(0, 0, w, h);
+                        ctx.font = '16px monospace';
+                        for (let i = 0; i < drops.length; i++) {
+                            const text = chars[Math.floor(Math.random()*chars.length)];
+                            const brightness = Math.random();
+                            if (brightness > 0.95) ctx.fillStyle = '#ffffff';
+                            else if (brightness > 0.7) ctx.fillStyle = '#3fb950';
+                            else ctx.fillStyle = '#1f6feb';
+                            ctx.fillText(text, i*18, drops[i]*18);
+                            if (drops[i]*18 > h && Math.random() > 0.975) drops[i] = 0;
+                            drops[i]++;
+                        }
+                    } catch(e) { return; }
+                    requestAnimationFrame(draw);
+                }
+                draw();
+            } catch(e) { console.warn('Matrix init failed:', e); }
         })();
 
         // ========== إيموجيات طايرة بالخلفية ==========
         (function spawnEmojis() {
-            const layer = document.getElementById('emojiLayer');
-            const emojis = ['🚀','⚡','💎','🔑','👑','🎯','🔥','💫','✨','🌟','📱','🌍'];
-            setInterval(() => {
-                const el = document.createElement('div');
-                el.className = 'emoji-float';
-                el.textContent = emojis[Math.floor(Math.random()*emojis.length)];
-                el.style.left = Math.random()*100 + '%';
-                el.style.fontSize = (16 + Math.random()*16) + 'px';
-                el.style.animationDuration = (8 + Math.random()*8) + 's';
-                layer.appendChild(el);
-                setTimeout(()=>el.remove(), 16000);
-            }, 1200);
+            try {
+                const layer = document.getElementById('emojiLayer');
+                if (!layer) return;
+                const emojis = ['🚀','⚡','💎','🔑','👑','🎯','🔥','💫','✨','🌟','📱','🌍'];
+                setInterval(() => {
+                    try {
+                        const el = document.createElement('div');
+                        el.className = 'emoji-float';
+                        el.textContent = emojis[Math.floor(Math.random()*emojis.length)];
+                        el.style.left = Math.random()*100 + '%';
+                        el.style.fontSize = (16 + Math.random()*16) + 'px';
+                        el.style.animationDuration = (8 + Math.random()*8) + 's';
+                        layer.appendChild(el);
+                        setTimeout(()=>el.remove(), 16000);
+                    } catch(e) {}
+                }, 1500);
+            } catch(e) { console.warn('Emoji init failed:', e); }
         })();
 
         // ========== القائمة ==========
@@ -820,15 +832,10 @@ main_html = """
 
         function initPlatformSelector() {
             const selector = document.getElementById('platformSelector');
-            selector.innerHTML = '';
-            Object.keys(platformNames).forEach(platform => {
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = 'platform-btn';
-                btn.style.setProperty('--glow', platformColors[platform]);
+            // أضف event listeners للأزرار الموجودة من السيرفر
+            selector.querySelectorAll('.platform-btn').forEach(btn => {
+                const platform = btn.getAttribute('data-platform');
                 btn.onclick = () => selectPlatform(platform, btn);
-                btn.innerHTML = `<img src="${platformLogos[platform]}" alt="${platformNames[platform]}"><span>${platformNames[platform]}</span>`;
-                selector.appendChild(btn);
             });
         }
 
@@ -1182,7 +1189,8 @@ def home():
         platform_colors=platform_colors,
         otp_seconds=OTP_VALID_SECONDS,
         contacts=get_contacts(),
-        groups=get_groups()
+        groups=get_groups(),
+        platforms_list=list(platform_names.keys())
     )
 
 def get_all_combos_list():
