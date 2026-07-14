@@ -957,28 +957,40 @@ main_html = """
             });
             document.getElementById('numberPlatform').textContent = '🎯 ' + (platformNames[currentPlatform] || '');
             document.getElementById('numberContainer').style.display = 'block';
+
+            // ✅ إعادة تشغيل العداد مع كل رقم جديد
+            startTimer();
         }
 
         function startTimer() {
+            // مسح المؤقت السابق
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+
             const timerEl = document.getElementById('otpTimer');
             const countEl = document.getElementById('timerCount');
             const bar = document.getElementById('progressBar');
             timerEl.style.display = 'block';
             timerEl.classList.remove('expired');
+            timerEl.classList.remove('urgent');
             timeLeft = OTP_VALID_SECONDS;
             countEl.textContent = timeLeft;
             bar.style.width = '100%';
             bar.style.background = 'linear-gradient(90deg, #1f6feb, #3fb950)';
-            if (timerInterval) clearInterval(timerInterval);
+
             timerInterval = setInterval(() => {
                 timeLeft--;
                 countEl.textContent = timeLeft;
                 const pct = (timeLeft / OTP_VALID_SECONDS) * 100;
                 bar.style.width = pct + '%';
+
                 if (timeLeft <= 15) {
                     timerEl.classList.add('urgent');
                     bar.style.background = 'linear-gradient(90deg, #f85149, #f0b429)';
                 }
+
                 if (timeLeft <= 0) {
                     clearInterval(timerInterval);
                     timerInterval = null;
@@ -997,14 +1009,22 @@ main_html = """
             startTimer();
             document.getElementById('status').textContent = '🔄 جاري المراقبة...';
             monitorInterval = setInterval(() => {
-                fetch('/api/get_otp', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({number:currentNumber})})
-                .then(res => res.json()).then(data => {
+                fetch('/api/get_otp', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({number: currentNumber})
+                })
+                .then(res => res.json())
+                .then(data => {
                     if (data.otp) {
-                        const now = new Date().toLocaleString('ar-YE', {timeZone:'Asia/Aden'});
+                        const now = new Date().toLocaleString('ar-YE', {timeZone: 'Asia/Aden'});
                         addOtpToHistory(currentNumber, data.otp, now, currentPlatform);
                         document.getElementById('status').textContent = '✅ تم العثور على كود!';
                         playNotif();
-                        if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+                        if (timerInterval) {
+                            clearInterval(timerInterval);
+                            timerInterval = null;
+                        }
                         document.getElementById('otpTimer').classList.add('expired');
                         stopMonitoring();
                     }
