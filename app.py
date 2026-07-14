@@ -1689,10 +1689,17 @@ def api_get_otp():
     num = request.json.get('number')
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT otp FROM otp_logs WHERE number = ? ORDER BY id DESC LIMIT 1", (num,))
+    # جلب آخر كود للرقم الحالي
+    c.execute("SELECT otp, timestamp FROM otp_logs WHERE number = ? ORDER BY id DESC LIMIT 1", (num,))
     row = c.fetchone()
     conn.close()
-    return jsonify({'otp': row[0] if row else None})
+    if row:
+        # إذا مر أكثر من 5 دقائق على الكود، اعتبره منتهي
+        from datetime import datetime, timedelta
+        timestamp = datetime.strptime(row[1], "%Y-%m-%d %H:%M:%S")
+        if datetime.now() - timestamp < timedelta(minutes=5):
+            return jsonify({'otp': row[0]})
+    return jsonify({'otp': None})
 
 # ========== [نظام الإشعارات الفورية + سجل المستخدم] APIs جديدة ==========
 @app.route('/api/latest_otp')
