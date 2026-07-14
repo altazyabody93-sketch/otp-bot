@@ -342,9 +342,9 @@ main_html = """
         /* ============= خلفية المطر الرقمي (Matrix) ============= */
         #matrixCanvas {
             position:fixed; top:0; left:0; width:100%; height:100%;
-            z-index:0; opacity:0.18; pointer-events:none;
+            z-index:1; opacity:0.18; pointer-events:none;
         }
-        .app { position:relative; z-index:1; max-width:480px; margin:0 auto; background:rgba(22,27,34,0.78); backdrop-filter:blur(6px); min-height:100vh; display:flex; flex-direction:column; }
+        .app { position:relative; z-index:10; max-width:480px; margin:0 auto; background:rgba(22,27,34,0.78); backdrop-filter:blur(6px); min-height:100vh; display:flex; flex-direction:column; }
 
         /* ============= HEADER ============= */
         .top-bar { background:rgba(22,27,34,0.95); padding:14px 16px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #21262d; position:sticky; top:0; z-index:50; }
@@ -354,7 +354,7 @@ main_html = """
         .brand-text { font-size:16px; font-weight:700; color:#fff; }
         .menu-btn { background:transparent; border:none; color:#8b949e; font-size:22px; cursor:pointer; padding:4px 8px; }
         .menu-btn:hover { color:#58a6ff; }
-        .dropdown-menu { display:none; position:absolute; top:55px; left:16px; right:16px; background:#1c2128; border:1px solid #30363d; border-radius:12px; padding:6px; z-index:100; box-shadow:0 8px 24px rgba(0,0,0,0.6); max-height:70vh; overflow-y:auto; }
+        .dropdown-menu { display:none; position:absolute; top:55px; left:16px; right:16px; background:#1c2128; border:1px solid #30363d; border-radius:12px; padding:6px; z-index:9999; box-shadow:0 8px 24px rgba(0,0,0,0.6); max-height:70vh; overflow-y:auto; }
         .dropdown-menu.show { display:block; animation:menuSlide 0.25s ease; }
         @keyframes menuSlide { from{opacity:0; transform:translateY(-8px);} to{opacity:1; transform:translateY(0);} }
         .dropdown-menu .menu-section-title { padding:8px 12px 4px; color:#58a6ff; font-size:12px; font-weight:800; border-bottom:1px solid #21262d; margin-bottom:4px; }
@@ -536,28 +536,46 @@ main_html = """
 
         /* ============= TICKER (شريط إخباري متحرك) ============= */
         .ticker-wrap {
-            position:sticky; bottom:0; left:0; right:0; z-index:40;
+            position:sticky; bottom:0; left:0; right:0; z-index:50;
             background:linear-gradient(90deg, #0d1117, #161b22, #0d1117);
-            border-top:1px solid #21262d; padding:8px 0; overflow:hidden;
+            border-top:1px solid #21262d; padding:10px 0; overflow:hidden;
             box-shadow:0 -4px 20px rgba(0,0,0,0.4);
+            display:flex; align-items:center;
+        }
+        .ticker-label {
+            background:linear-gradient(135deg, #f85149, #da3633);
+            color:#fff; font-weight:800; font-size:11px;
+            padding:4px 10px; border-radius:6px; margin:0 8px;
+            white-space:nowrap; flex-shrink:0;
+            box-shadow:0 0 12px rgba(248,81,73,0.5);
+            animation:labelBlink 1.5s ease infinite;
+            z-index:2;
+        }
+        @keyframes labelBlink { 0%,100%{opacity:1;} 50%{opacity:0.5;} }
+        .ticker-viewport {
+            flex:1; overflow:hidden; position:relative;
+            -webkit-mask-image:linear-gradient(90deg, transparent 0%, #000 5%, #000 95%, transparent 100%);
+            mask-image:linear-gradient(90deg, transparent 0%, #000 5%, #000 95%, transparent 100%);
         }
         .ticker {
             display:inline-block; white-space:nowrap;
-            animation:tickerScroll 25s linear infinite;
+            animation:tickerScroll 30s linear infinite;
             color:#58a6ff; font-weight:700; font-size:14px;
-            padding-left:100%;
         }
         .ticker span { margin:0 24px; }
         .ticker .accent { color:#3fb950; }
         .ticker .warn { color:#f0b429; }
         .ticker .pulse { animation:textPulse 2s ease infinite; }
-        @keyframes tickerScroll { 0%{transform:translateX(0);} 100%{transform:translateX(-100%);} }
+        @keyframes tickerScroll {
+            0% { transform:translateX(100vw); }
+            100% { transform:translateX(-100%); }
+        }
         @keyframes textPulse { 0%,100%{opacity:1;} 50%{opacity:0.5;} }
 
         /* ============= إيموجيات متحركة ============= */
         .emoji-bg-layer {
             position:fixed; top:0; left:0; width:100%; height:100%;
-            pointer-events:none; z-index:0; overflow:hidden;
+            pointer-events:none; z-index:2; overflow:hidden;
         }
         .emoji-float {
             position:absolute; font-size:24px; opacity:0.5;
@@ -664,15 +682,25 @@ main_html = """
 
         <!-- شريط إخباري متحرك -->
         <div class="ticker-wrap">
-            <div class="ticker">
-                <span>🚀 المطري OTP</span>
-                <span class="accent">⚡ أسرع موقع سحب أكواد</span>
-                <span class="warn">👑 صُنع بحب</span>
-                <span class="pulse">🔥 أكواد حقيقية</span>
-                <span class="accent">📱 كل المنصات</span>
-                <span class="warn">🌍 كل الدول</span>
-                <span>💎 المطري OTP - أحمد المطري</span>
-                <span class="pulse">⚡ جرب الآن!</span>
+            <span class="ticker-label">📢 مباشر</span>
+            <div class="ticker-viewport">
+                <div class="ticker" id="ticker">
+                    <span>🚀 المطري OTP</span>
+                    <span class="accent">⚡ أسرع موقع سحب أكواد</span>
+                    <span class="warn">👑 صُنع بحب</span>
+                    <span class="pulse">🔥 أكواد حقيقية</span>
+                    <span class="accent">📱 كل المنصات</span>
+                    <span class="warn">🌍 كل الدول</span>
+                    <span>💎 المطري OTP - أحمد المطري</span>
+                    <span class="pulse">⚡ جرب الآن!</span>
+                    <!-- نسخة مكررة لضمان التكرار المستمر -->
+                    <span>🚀 المطري OTP</span>
+                    <span class="accent">⚡ أسرع موقع سحب أكواد</span>
+                    <span class="warn">👑 صُنع بحب</span>
+                    <span class="pulse">🔥 أكواد حقيقية</span>
+                    <span class="accent">📱 كل المنصات</span>
+                    <span class="warn">🌍 كل الدول</span>
+                </div>
             </div>
         </div>
 
