@@ -1689,7 +1689,7 @@ def api_get_otp():
     num = request.json.get('number')
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT otp FROM otp_logs WHERE number LIKE ? ORDER BY id DESC LIMIT 1", (f"%{num[-4:]}",))
+    c.execute("SELECT otp FROM otp_logs WHERE number = ? ORDER BY id DESC LIMIT 1", (num,))
     row = c.fetchone()
     conn.close()
     return jsonify({'otp': row[0] if row else None})
