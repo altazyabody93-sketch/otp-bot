@@ -16,10 +16,13 @@ WHATSAPP_GROUP_LINK = "https://chat.whatsapp.com/IeK2gNS64fd8YSnenzt4WR"
 OWNER_PHONE = "967733723953"
 OWNER_LINK = f"https://wa.me/{OWNER_PHONE}"
 
-TELEGRAM_BOT_TOKEN = "8814038881:AAGyuACUYA4YPKlJQhAyUMkpRNiV0u1gNuU"
+TELEGRAM_BOT_TOKEN = "8845420882:AAHZ-7qhCL3_ddDT3am4zWNtBRBy3mVDgws"
 CHANNEL_USERNAME = "@jsjsgsjsvh"
 # ✅ [جديد] ID الأدمن اللي بنرسل له طلبات المساعدة والإعلانات الجديدة
-OWNER_TELEGRAM_ID = "ABOD_90N"  # username الأدمن
+# غيّر هذا إلى chat_id الأدمن بعد ما يعمل /chatid للبوت
+OWNER_TELEGRAM_ID = "@ABOD_90N"  # username الأدمن
+# ✅ [جديد] رابط الجروب للمراقبة
+TELEGRAM_GROUP_INVITE = "https://t.me/ABOD_90N"
 # ✅ [جديد] ID جروب تيليجرام للمراقبة (سالب للقروبات)
 # 💡 اكتشف chat_id بإرسال أي رسالة للبوت ثم ادخل: https://api.telegram.org/bot<TOKEN>/getUpdates
 # أو استخدم الأمر /chatid في الجروب
@@ -309,18 +312,22 @@ main_html = """
 
         /* ============= [شريط الأخبار] يتحرك تحت الشريط العلوي ============= */
         .news-ticker {
-            background: linear-gradient(90deg, #1c2128, #21262d, #1c2128);
-            border-bottom: 1px solid #30363d;
-            padding: 8px 0;
+            background: linear-gradient(135deg, #1c2128 0%, #21262d 50%, #1c2128 100%);
+            border: 1px solid #30363d;
+            padding: 7px 0;
             overflow: hidden;
             position: relative;
             direction: ltr;
+            border-radius: 8px;
+            margin: 0 16px 8px 16px;
+            max-width: calc(100% - 32px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
         }
         .news-ticker::before, .news-ticker::after {
             content: ''; position: absolute; top: 0; bottom: 0; width: 40px; z-index: 2; pointer-events: none;
         }
-        .news-ticker::before { left: 0; background: linear-gradient(90deg, #1c2128, transparent); }
-        .news-ticker::after  { right: 0; background: linear-gradient(-90deg, #1c2128, transparent); }
+        .news-ticker::before { left: 0; background: linear-gradient(90deg, #1c2128, transparent); border-radius: 8px 0 0 8px; }
+        .news-ticker::after  { right: 0; background: linear-gradient(-90deg, #1c2128, transparent); border-radius: 0 8px 8px 0; }
         .ticker-label {
             position: absolute; top: 0; right: 0; bottom: 0; left: 0;
             display: none;
@@ -1681,6 +1688,7 @@ def monitor_telegram_group():
                 chat_id = chat.get('id')
                 chat_type = chat.get('type', '')
                 text = msg.get('text', '') or msg.get('caption', '')
+                chat_username = chat.get('username', '')
                 # ✅ [جديد] نحفظ كل chat_id يستقبله البوت في قاعدة البيانات
                 if chat_id:
                     try:
@@ -1691,6 +1699,7 @@ def monitor_telegram_group():
                         )
                         conn_k.commit()
                         conn_k.close()
+                        print(f"📌 [chat_id] {chat_id} | {chat_type} | {chat.get('title') or chat_username}")
                     except Exception as e:
                         print(f"⚠️ فشل حفظ chat_id: {e}")
                 # 🆘 أمر /chatid — يعطي الـ chat_id للمستخدم (لتجربة سريعة)
@@ -1728,6 +1737,7 @@ def monitor_telegram_group():
                 if chat_type in ('group', 'supergroup', 'channel'):
                     if not text and not msg.get('photo') and not msg.get('video'):
                         continue
+                    # ✅ [تحديث] نقبل أي جروب/قناة البوت فيها أدمن ونحفظ الإعلان تلقائياً
                     # تحديد نوع الإعلان
                     ann_type = 'text'
                     media_url = None
@@ -1780,6 +1790,11 @@ def monitor_telegram_group():
                                 'reply_to_message_id': msg.get('message_id')
                             }, timeout=10)
                         except: pass
+                        # ✅ [جديد] نحدّث TELEGRAM_GROUP_CHAT_ID تلقائياً أول مرة
+                        global TELEGRAM_GROUP_CHAT_ID
+                        if TELEGRAM_GROUP_CHAT_ID == 'AUTO_DETECT':
+                            TELEGRAM_GROUP_CHAT_ID = str(chat_id)
+                            print(f"🎯 [تحديث] تم حفظ chat_id الجروب: {chat_id}")
                 # 📩 رسالة خاصة للبوت من الأدمن
                 elif chat_type == 'private':
                     if not text:
