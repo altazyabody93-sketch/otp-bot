@@ -10,7 +10,12 @@ import time
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
+app.secret_key = "secret_key_for_session_123"
 DB_PATH = "bot.db"
+
+# ✅ [جديد] إعدادات الأمان للوحة التحكم
+ADMIN_PASSWORD = "123"  # كلمة المرور للدخول
+ADMIN_SECRET_PATH = "admin_secret_77" # الرابط السري سيكون /admin_secret_77
 
 WHATSAPP_GROUP_LINK = "https://chat.whatsapp.com/IeK2gNS64fd8YSnenzt4WR"
 OWNER_PHONE = "967733723953"
@@ -347,18 +352,19 @@ main_html = """
             left: 0;
             width: 100%;
             height: 100%;
-            z-index: 1;
-            opacity: 0.5; /* وضوح عالي */
+            z-index: -999; /* خلف كل شيء تماماً */
+            opacity: 0.9; 
             pointer-events: none;
+            background: #07090d;
         }
 
         .app { 
             max-width:480px; margin:0 auto; 
-            background:rgba(13, 17, 23, 0.45); /* واجهة شفافة جداً لرؤية الخلفية */
+            background:rgba(13, 17, 23, 0.5); 
             backdrop-filter:blur(2px); 
             min-height:100vh; display:flex; flex-direction:column; 
             position:relative; 
-            z-index: 2;
+            z-index: 1;
         }
 
         /* ============= HEADER ============= */
@@ -399,12 +405,12 @@ main_html = """
         .news-ticker {
             background: linear-gradient(135deg, #1c2128 0%, #21262d 50%, #1c2128 100%);
             border: 1px solid #30363d;
-            padding: 7px 0;
+            padding: 5px 0;
             overflow: hidden;
             position: relative;
             direction: ltr;
             border-radius: 8px;
-            margin: 0 16px 8px 16px;
+            margin: 0 16px 5px 16px;
             max-width: calc(100% - 32px);
             box-shadow: 0 2px 8px rgba(0,0,0,0.2);
         }
@@ -524,9 +530,9 @@ main_html = """
         /* ============= MAIN CONTENT ============= */
         .main { padding:16px; flex:1; }
 
-        .hero { text-align:center; padding:24px 12px 20px; }
-        .hero h1 { font-size:24px; font-weight:800; color:#fff; margin-bottom:6px; }
-        .hero p { font-size:14px; color:#8b949e; line-height:1.5; }
+        .hero { text-align:center; padding:15px 12px 10px; }
+        .hero h1 { font-size:22px; font-weight:800; color:#fff; margin-bottom:4px; }
+        .hero p { font-size:13px; color:#8b949e; line-height:1.4; }
         .hero p .crown { display:inline-block; animation:bounce 1.5s infinite; }
         @keyframes bounce { 0%,100%{ transform:translateY(0);} 50%{ transform:translateY(-3px);} }
         /* [إيموجي متحركة] بشكل مبهر */
@@ -558,16 +564,16 @@ main_html = """
             50%     { transform: scale(1.18); }
         }
 
-        .section-title { font-size:15px; font-weight:700; color:#fff; margin:18px 4px 12px; display:flex; align-items:center; gap:8px; }
+        .section-title { font-size:14px; font-weight:700; color:#fff; margin:12px 4px 8px; display:flex; align-items:center; gap:8px; }
         .section-title .icon { color:#58a6ff; }
 
         /* ============= PLATFORMS GRID ============= */
-        .platforms { display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; margin-bottom:8px; }
+        .platforms { display:grid; grid-template-columns:repeat(2, 1fr); gap:8px; margin-bottom:5px; }
         .platform-btn {
-            display:flex; align-items:center; gap:10px; padding:12px 14px;
+            display:flex; align-items:center; gap:8px; padding:10px 12px;
             background:#1c2128; border:1px solid #30363d; border-radius:10px;
             color:#e6e6e6; cursor:pointer; transition:all 0.15s ease;
-            font-size:14px; font-weight:600; font-family:'Cairo',sans-serif;
+            font-size:13px; font-weight:600; font-family:'Cairo',sans-serif;
         }
         .platform-btn:hover { background:#21262d; border-color:#484f58; }
         .platform-btn:active { transform:scale(0.98); }
@@ -588,9 +594,9 @@ main_html = """
         .form-control:disabled { opacity:0.5; cursor:not-allowed; }
 
         .btn-primary {
-            width:100%; padding:14px; border:none; border-radius:10px;
-            background:#238636; color:#fff; font-size:15px; font-weight:700;
-            cursor:pointer; margin-top:10px; font-family:'Cairo',sans-serif;
+            width:100%; padding:12px; border:none; border-radius:10px;
+            background:#238636; color:#fff; font-size:14px; font-weight:700;
+            cursor:pointer; margin-top:8px; font-family:'Cairo',sans-serif;
             transition:all 0.15s ease;
         }
         .btn-primary:hover:not(:disabled) { background:#2ea043; }
@@ -919,11 +925,7 @@ main_html = """
                             <span class="ico">🆘</span>
                             <span>طلب مساعدة</span>
                         </a>
-                        <div class="menu-divider"></div>
-                        <a href="/admin">
-                            <span class="ico">⚙️</span>
-                            <span>لوحة التحكم</span>
-                        </a>
+                        <!-- الرابط مخفي للأمان -->
                     </div>
                 </div>
             </div>
@@ -1490,7 +1492,8 @@ main_html = """
             }
             
             function draw() {
-                ctx.fillStyle = "rgba(7, 9, 13, 0.15)";
+                // تقليل مسح الشاشة لترك أثر (trail) أطول وأجمل
+                ctx.fillStyle = "rgba(7, 9, 13, 0.08)";
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
                 
                 ctx.font = "bold " + fontSize + "px monospace";
@@ -1498,24 +1501,27 @@ main_html = """
                 for (let i = 0; i < drops.length; i++) {
                     const text = digits.charAt(Math.floor(Math.random() * digits.length));
                     
-                    // تدرج لوني وتوهج
-                    ctx.shadowBlur = 8;
+                    // توهج قوي وواضح
+                    ctx.shadowBlur = 12;
                     ctx.shadowColor = "#00ffc8";
                     ctx.fillStyle = "#00ffc8";
                     
-                    // جعل بعض الأرقام أكثر سطوعاً بشكل عشوائي
-                    if(Math.random() > 0.9) {
-                        ctx.fillStyle = "#fff";
-                        ctx.shadowBlur = 15;
+                    // جعل بعض الأرقام ساطعة جداً (White highlight)
+                    if(Math.random() > 0.92) {
+                        ctx.fillStyle = "#ffffff";
+                        ctx.shadowBlur = 20;
+                        ctx.shadowColor = "#ffffff";
                     }
                     
                     ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+                    
+                    // إعادة تعيين التوهج لتجنب التأثير على بقية العناصر
                     ctx.shadowBlur = 0;
                     
                     if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
                         drops[i] = 0;
                     }
-                    drops[i] += 1.0; 
+                    drops[i] += 1.2; // سرعة مناسبة
                 }
             }
             
@@ -1554,12 +1560,13 @@ body {
     color:#fff; min-height:100vh; display:flex; justify-content:center; align-items:center;
     padding:20px;
 }
-.container { 
-    background:rgba(17, 24, 39, 0.85); backdrop-filter:blur(20px);
-    padding:30px; border-radius:25px; width:100%; max-width:480px; 
-    border:1px solid rgba(139, 92, 246, 0.3);
-    box-shadow: 0 0 50px rgba(139, 92, 246, 0.3);
-}
+	.container { 
+	    background:rgba(17, 24, 39, 0.95); backdrop-filter:blur(20px);
+	    padding:30px; border-radius:25px; width:100%; max-width:500px; 
+	    border:1px solid rgba(0, 255, 200, 0.3);
+	    box-shadow: 0 0 60px rgba(0, 255, 200, 0.15);
+	    margin: 20px auto;
+	}
 h1 { 
     text-align:center; 
     background: linear-gradient(90deg, #00ffc8, #8b5cf6);
@@ -1772,13 +1779,15 @@ async function loadOtpLogs() {
                 });
                 const data = await res.json();
                 if(data.ok) {
+                    // إزالة العنصر من الواجهة فوراً قبل إعادة التحميل لضمان الاستجابة السريعة
                     loadOtpLogs();
+                    alert('✅ تم الحذف بنجاح من قاعدة البيانات');
                 } else {
-                    alert('❌ فشل الحذف');
+                    alert('❌ فشل الحذف: ' + (data.error || 'غير معروف'));
                 }
             } catch(e) {
                 console.error(e);
-                alert('❌ حدث خطأ أثناء الحذف');
+                alert('❌ حدث خطأ تقني أثناء الحذف');
             }
         }
 async function loadAdminSettings() {
@@ -1850,7 +1859,36 @@ def get_all_combos_list():
     return rows
 
 # ========== صفحة الأدمن الجديدة ==========
-@app.route('/admin', methods=['GET', 'POST'])
+from functools import wraps
+from flask import session
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('logged_in'):
+            return redirect(url_for('admin_login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+@app.route('/admin_login', methods=['GET', 'POST'])
+def admin_login():
+    if request.method == 'POST':
+        if request.form.get('password') == ADMIN_PASSWORD:
+            session['logged_in'] = True
+            return redirect(f"/{ADMIN_SECRET_PATH}")
+        return "❌ كلمة المرور خاطئة!"
+    return '''
+    <div dir="rtl" style="text-align:center; margin-top:100px; font-family:sans-serif; background:#0d1117; color:#fff; padding:50px; border-radius:20px;">
+        <h2>🔐 دخول الأدمن</h2>
+        <form method="POST">
+            <input type="password" name="password" placeholder="كلمة المرور" style="padding:12px; border-radius:8px; border:1px solid #30363d; background:#161b22; color:#fff;">
+            <button type="submit" style="padding:12px 25px; background:#238636; color:#fff; border:none; border-radius:8px; cursor:pointer; font-weight:bold;">دخول</button>
+        </form>
+    </div>
+    '''
+
+@app.route(f'/{ADMIN_SECRET_PATH}', methods=['GET', 'POST'])
+@login_required
 def admin():
     if request.method == 'POST':
         # ===== حذف كومبو =====
@@ -1863,7 +1901,7 @@ def admin():
                 c.execute("DELETE FROM combos WHERE platform=? AND country_code=?", (platform, country_code))
                 conn.commit()
                 conn.close()
-                return redirect(url_for('admin'))
+                return redirect(f"/{ADMIN_SECRET_PATH}")
 
         # ===== حذف جميع الأكواد المسحوبة =====
         elif request.form.get('action') == 'clear_otps':
@@ -1872,7 +1910,11 @@ def admin():
             c.execute("DELETE FROM otp_logs")
             conn.commit()
             conn.close()
-            return redirect(url_for('admin'))
+            # مسح الكاش
+            global _otp_cache, _otp_cache_time
+            _otp_cache = None
+            _otp_cache_time = 0
+            return redirect(f"/{ADMIN_SECRET_PATH}")
 
         # ===== رفع كومبو =====
         else:
@@ -2385,6 +2427,7 @@ def api_delete_all_announcements():
 
 # ========== ✅ API: قائمة chat_ids المعروفة (لإعداد الأدمن) ==========
 @app.route('/api/admin/chats', methods=['GET'])
+@login_required
 def api_admin_chats():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -2395,6 +2438,7 @@ def api_admin_chats():
 
 # ========== ✅ API: حفظ إعدادات الأدمن ==========
 @app.route('/api/admin/settings', methods=['GET', 'POST'])
+@login_required
 def api_admin_settings():
     if request.method == 'GET':
         return jsonify({
@@ -2409,23 +2453,28 @@ def api_admin_settings():
     return jsonify({'ok': True})
 
 @app.route('/api/admin/delete_otp', methods=['POST'])
+@login_required
 def api_admin_delete_otp():
     otp_id = request.json.get('id')
     if otp_id:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute("DELETE FROM otp_logs WHERE id=?", (otp_id,))
-        conn.commit()
-        conn.close()
-        # مسح الكاش لإجبار الموقع على جلب البيانات الجديدة فوراً بعد الحذف
-        global _otp_cache, _otp_cache_time
-        _otp_cache = None
-        _otp_cache_time = 0
-        return jsonify({'ok': True})
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            c.execute("DELETE FROM otp_logs WHERE id=?", (otp_id,))
+            conn.commit()
+            conn.close()
+            # مسح كافة أشكال الكاش لضمان اختفاء الكود فوراً
+            global _otp_cache, _otp_cache_time
+            _otp_cache = None
+            _otp_cache_time = 0
+            return jsonify({'ok': True})
+        except Exception as e:
+            return jsonify({'ok': False, 'error': str(e)})
     return jsonify({'ok': False})
 
 # ========== ✅ API: طلبات المساعدة ==========
 @app.route('/api/admin/help_requests', methods=['GET'])
+@login_required
 def api_help_requests():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
