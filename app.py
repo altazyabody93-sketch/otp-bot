@@ -40,9 +40,47 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS help_requests (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, message TEXT, source TEXT, status TEXT DEFAULT 'pending', created_at TEXT)''')
     # ✅ [جديد] جدول لتخزين chat_ids اللي البوت يتواصل معها
     c.execute('''CREATE TABLE IF NOT EXISTS known_chats (chat_id TEXT PRIMARY KEY, chat_type TEXT, chat_title TEXT, last_seen TEXT)''')
+    # ✅ [جديد] جدول إعدادات الأدمن (chat_id الخاص بالأدمن لاستلام طلبات المساعدة)
+    c.execute('''CREATE TABLE IF NOT EXISTS admin_settings (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT)''')
     conn.commit()
     conn.close()
 init_db()
+
+# ========== مساعدات الإعدادات ==========
+def get_admin_setting(key, default=""):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT value FROM admin_settings WHERE key=?", (key,))
+    row = c.fetchone()
+    conn.close()
+    return row[0] if row and row[0] else default
+
+def set_admin_setting(key, value):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(
+        "INSERT INTO admin_settings (key, value, updated_at) VALUES (?, ?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
+        (key, value, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    )
+    conn.commit()
+    conn.close()
+
+def notify_admin(text):
+    """إرسال إشعار للأدمن على تيليجرام"""
+    admin_id = get_admin_setting('admin_telegram_id')
+    if not admin_id:
+        return False
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+            json={'chat_id': admin_id, 'text': text, 'parse_mode': 'HTML'},
+            timeout=10
+        )
+        return True
+    except Exception as e:
+        print(f"⚠️ فشل إشعار الأدمن: {e}")
+        return False
 
 # ========== جميع دول العالم (أكثر من 195 دولة) ==========
 COUNTRY_DATA = {
@@ -1353,8 +1391,96 @@ hr { border: 1px solid rgba(255,255,255,0.1); margin: 20px 0; }
     {% endif %}
 
     <hr>
+    <a href="/admin/announcements_manager"><button class="btn-danger" style="background: linear-gradient(135deg, #f59e0b, #d97706); box-shadow: 0 0 20px rgba(245, 158, 11, 0.4);">🗑️ إدارة الإعلانات (حذف/تنظيف)</button></a>
+
+    <hr>
+
+    <h3>🆘 طلبات المساعدة (<span id="helpCount">0</span>)</h3>
+    <div id="helpList" style="max-height:200px; overflow-y:auto; margin-bottom:10px;">
+        <p style="color:#64748b; text-align:center; padding:10px; font-size:13px;">⏳ جاري التحميل...</p>
+    </div>
+
+    <hr>
+
+    <h3>⚙️ إعدادات البوت</h3>
+    <div class="form-group">
+        <label>🆔 Chat ID الخاص بك (لاستلام طلبات المساعدة)</label>
+        <div style="display:flex; gap:6px;">
+            <input type="text" id="adminTelegramId" class="form-control" placeholder="مثال: 123456789">
+            <button type="button" onclick="saveAdminId()" class="btn-primary" style="width:auto; padding:12px 18px; margin-top:0;">💾</button>
+        </div>
+        <small style="color:#94a3b8; font-size:11px; display:block; margin-top:4px;">
+            💡 أرسل /chatid للبوت على الخاص وانسخ الرقم من رده
+        </small>
+    </div>
+    <div class="form-group">
+        <label>📋 آخر المحادثات المكتشفة (اضغط للنسخ):</label>
+        <div id="knownChats" style="max-height:140px; overflow-y:auto; background:rgba(0,0,0,0.3); padding:8px; border-radius:8px; font-size:12px;">
+            <p style="color:#64748b; text-align:center;">⏳ جاري التحميل...</p>
+        </div>
+    </div>
+
+    <hr>
     <a href="/"><button class="btn-secondary">🔙 العودة للصفحة الرئيسية</button></a>
 </div>
+
+<script>
+async function loadHelpRequests() {
+    try {
+        const res = await fetch('/api/admin/help_requests');
+        const data = await res.json();
+        document.getElementById('helpCount').textContent = data.length;
+        const box = document.getElementById('helpList');
+        if (!data.length) { box.innerHTML = '<p style="color:#64748b; text-align:center; padding:10px; font-size:13px;">📭 لا توجد طلبات</p>'; return; }
+        box.innerHTML = data.slice(0, 8).map(h => `
+            <div style="background:rgba(31,41,55,0.5); padding:8px 10px; border-radius:8px; margin-bottom:6px; font-size:12px; border-right:3px solid #f59e0b;">
+                <div style="display:flex; justify-content:space-between; color:#cbd5e1;">
+                    <span>👤 <code>${h.user_id}</code></span>
+                    <span style="color:#64748b;">${h.created_at}</span>
+                </div>
+                <div style="color:#e2e8f0; margin-top:4px;">${h.message || ''}</div>
+            </div>
+        `).join('');
+    } catch(e) {}
+}
+async function loadAdminSettings() {
+    try {
+        const res = await fetch('/api/admin/settings');
+        const data = await res.json();
+        document.getElementById('adminTelegramId').value = data.admin_telegram_id || '';
+    } catch(e) {}
+}
+async function saveAdminId() {
+    const v = document.getElementById('adminTelegramId').value.trim();
+    if (!v) { alert('⚠️ اكتب Chat ID'); return; }
+    const res = await fetch('/api/admin/settings', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({admin_telegram_id: v})
+    });
+    const data = await res.json();
+    if (data.ok) { alert('✅ تم الحفظ'); } else { alert('❌ فشل الحفظ'); }
+}
+async function loadKnownChats() {
+    try {
+        const res = await fetch('/api/admin/chats');
+        const data = await res.json();
+        const box = document.getElementById('knownChats');
+        if (!data.length) { box.innerHTML = '<p style="color:#64748b; text-align:center;">📭 لا توجد محادثات بعد</p>'; return; }
+        box.innerHTML = data.map(c => `
+            <div onclick="document.getElementById('adminTelegramId').value='${c.chat_id}'; navigator.clipboard.writeText('${c.chat_id}')" 
+                 style="cursor:pointer; padding:6px; border-bottom:1px solid rgba(255,255,255,0.05); display:flex; justify-content:space-between;">
+                <span style="color:#cbd5e1;">${c.type === 'private' ? '👤' : c.type === 'group' ? '👥' : '📢'} ${c.title || '—'}</span>
+                <code style="color:#00ffc8;">${c.chat_id}</code>
+            </div>
+        `).join('');
+    } catch(e) {}
+}
+loadHelpRequests();
+loadAdminSettings();
+loadKnownChats();
+setInterval(loadHelpRequests, 15000);
+setInterval(loadKnownChats, 20000);
+</script>
 </body>
 </html>
 """
@@ -1814,6 +1940,49 @@ def monitor_telegram_group():
                             'chat_id': chat_id,
                             'text': f'📊 عدد الإعلانات المنشورة في الموقع: <b>{count}</b>'
                         }, timeout=10)
+                    # ✅ [جديد] أمر "مساعد" — يحول الزبون للأدمن
+                    elif text and text.strip() in ('مساعد', 'مساعدة', 'help', '/help', 'المساعد'):
+                        conn = sqlite3.connect(DB_PATH)
+                        conn.cursor().execute(
+                            "INSERT INTO help_requests (user_id, message, source, status, created_at) VALUES (?, ?, ?, ?, ?)",
+                            (str(chat_id), 'طلب تفعيل محادثة مع الأدمن', 'telegram', 'pending', datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                        )
+                        conn.commit()
+                        conn.close()
+                        # إشعار الأدمن
+                        user_info = chat.get('first_name') or chat.get('username') or 'مستخدم'
+                        notify_admin(
+                            f"🆘 <b>طلب مساعدة جديد!</b>\n\n"
+                            f"👤 الاسم: {user_info}\n"
+                            f"🆔 Chat ID: <code>{chat_id}</code>\n"
+                            f"🕒 الوقت: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+                            f"💡 للرد عليه من لوحة الأدمن، افتح:\n"
+                            f"<code>https://otp-bot-7-0b93.onrender.com/admin</code>"
+                        )
+                        requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage", json={
+                            'chat_id': chat_id,
+                            'text': '🆘 <b>تم استلام طلب المساعدة!</b>\n\n'
+                                    '✅ تم إشعار الأدمن بطلبك. اكتب رسالتك الآن وسيتم توصيلها مباشرة للإدمن.\n\n'
+                                    '⏰ الرد يكون عادة خلال دقائق معدودة.'
+                        }, timeout=10)
+                    # ✅ [جديد] تمرير رسائل الخاص للأدمن (بعد ما يكتب "مساعد")
+                    else:
+                        conn = sqlite3.connect(DB_PATH)
+                        c = conn.cursor()
+                        c.execute("SELECT COUNT(*) FROM help_requests WHERE user_id=? AND status='pending'", (str(chat_id),))
+                        has_pending = c.fetchone()[0] > 0
+                        conn.close()
+                        if has_pending:
+                            user_info = chat.get('first_name') or chat.get('username') or 'مستخدم'
+                            notify_admin(
+                                f"💬 <b>رسالة جديدة من زبون</b>\n\n"
+                                f"👤 {user_info} (<code>{chat_id}</code>):\n\n"
+                                f"📝 {text}"
+                            )
+                            requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage", json={
+                                'chat_id': chat_id,
+                                'text': '✅ <b>تم إرسال رسالتك للإدمن.</b>\n\nسيتم الرد عليك قريباً.'
+                            }, timeout=10)
         except Exception as e:
             print(f"❌ خطأ في بوت تيليجرام: {e}")
         time.sleep(3)
@@ -1831,6 +2000,70 @@ def api_get_chats():
     conn.close()
     return jsonify([{
         'chat_id': r[0], 'chat_type': r[1], 'chat_title': r[2], 'last_seen': r[3]
+    } for r in rows])
+
+# ========== ✅ API: حذف إعلان ==========
+@app.route('/api/announcement/delete', methods=['POST'])
+def api_delete_announcement():
+    data = request.json or {}
+    ann_id = data.get('id')
+    if not ann_id:
+        return jsonify({'ok': False, 'error': 'id required'}), 400
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("DELETE FROM announcements WHERE id=?", (ann_id,))
+    conn.commit()
+    deleted = c.rowcount > 0
+    conn.close()
+    return jsonify({'ok': deleted})
+
+# ========== ✅ API: حذف كل الإعلانات ==========
+@app.route('/api/announcement/delete_all', methods=['POST'])
+def api_delete_all_announcements():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("DELETE FROM announcements")
+    conn.commit()
+    count = c.rowcount
+    conn.close()
+    return jsonify({'ok': True, 'deleted': count})
+
+# ========== ✅ API: قائمة chat_ids المعروفة (لإعداد الأدمن) ==========
+@app.route('/api/admin/chats', methods=['GET'])
+def api_admin_chats():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT chat_id, chat_type, chat_title, last_seen FROM known_chats ORDER BY last_seen DESC LIMIT 30")
+    rows = c.fetchall()
+    conn.close()
+    return jsonify([{'chat_id': r[0], 'type': r[1], 'title': r[2], 'last_seen': r[3]} for r in rows])
+
+# ========== ✅ API: حفظ إعدادات الأدمن ==========
+@app.route('/api/admin/settings', methods=['GET', 'POST'])
+def api_admin_settings():
+    if request.method == 'GET':
+        return jsonify({
+            'admin_telegram_id': get_admin_setting('admin_telegram_id', ''),
+            'site_url': get_admin_setting('site_url', 'https://otp-bot-7-0b93.onrender.com')
+        })
+    data = request.json or {}
+    if 'admin_telegram_id' in data:
+        set_admin_setting('admin_telegram_id', str(data['admin_telegram_id']).strip())
+    if 'site_url' in data:
+        set_admin_setting('site_url', data['site_url'].strip())
+    return jsonify({'ok': True})
+
+# ========== ✅ API: طلبات المساعدة ==========
+@app.route('/api/admin/help_requests', methods=['GET'])
+def api_help_requests():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT id, user_id, message, source, status, created_at FROM help_requests ORDER BY id DESC LIMIT 50")
+    rows = c.fetchall()
+    conn.close()
+    return jsonify([{
+        'id': r[0], 'user_id': r[1], 'message': r[2],
+        'source': r[3], 'status': r[4], 'created_at': r[5]
     } for r in rows])
 
 @app.route('/api/announcements', methods=['GET'])
@@ -1933,7 +2166,7 @@ body { font-family:'Cairo',sans-serif; background:#07090d; color:#c9d1d9; min-he
 .ann-type.image { background: #238636; color: #fff; }
 .ann-type.video { background: #d29922; color: #fff; }
 .ann-content { color: #e6e6e6; font-size: 14px; line-height: 1.6; margin-bottom: 10px; }
-.ann-media { max-width: 100%; border-radius: 8px; margin-bottom: 10px; }
+.ann-media { max-width: 100%; max-height: 200px; width: auto; border-radius: 8px; margin-bottom: 10px; object-fit: contain; }
 .ann-btn {
     display: inline-block; padding: 10px 20px; background: linear-gradient(135deg, #238636, #2ea043);
     color: #fff; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 14px;
@@ -2000,6 +2233,107 @@ loadAnnouncements();
 @app.route('/announcements')
 def announcements_page():
     return render_template_string(announcements_html)
+
+# ========== ✅ صفحة إدارة الإعلانات (للأدمن) ==========
+announcements_manager_html = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>إدارة الإعلانات - المطري OTP</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Cairo',sans-serif; background: linear-gradient(135deg, #0a0e1a, #1a1f2e); color:#fff; min-height:100vh; display:flex; justify-content:center; align-items:flex-start; padding:20px; }
+.container { background:rgba(17, 24, 39, 0.85); backdrop-filter:blur(20px); padding:24px; border-radius:20px; width:100%; max-width:480px; border:1px solid rgba(245, 158, 11, 0.3); box-shadow: 0 0 50px rgba(245, 158, 11, 0.2); margin-top:20px; }
+h1 { text-align:center; background: linear-gradient(90deg, #f59e0b, #ef4444); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; margin-bottom:18px; font-size:24px; font-weight:900; }
+.toolbar { display:flex; gap:8px; margin-bottom:16px; }
+.btn { flex:1; padding:10px; border:none; border-radius:10px; font-family:'Cairo',sans-serif; font-weight:800; font-size:14px; cursor:pointer; transition:all 0.2s; }
+.btn-refresh { background: linear-gradient(135deg, #00ffc8, #00d2ff); color:#0a0e1a; }
+.btn-delete-all { background: linear-gradient(135deg, #ef4444, #b91c1c); color:#fff; }
+.btn-back { background: linear-gradient(135deg, #374151, #4b5563); color:#fff; text-decoration:none; display:flex; align-items:center; justify-content:center; }
+.btn:hover { transform:translateY(-2px); }
+.ann-item { background:rgba(31, 41, 55, 0.7); padding:12px; border-radius:12px; margin-bottom:10px; border:1px solid rgba(245, 158, 11, 0.2); display:flex; gap:10px; align-items:center; }
+.ann-thumb { width:60px; height:60px; border-radius:8px; object-fit:cover; background:#000; flex-shrink:0; }
+.ann-thumb-text { width:60px; height:60px; border-radius:8px; background: linear-gradient(135deg, #1f6feb, #388bfd); display:flex; align-items:center; justify-content:center; font-size:24px; flex-shrink:0; }
+.ann-info { flex:1; min-width:0; }
+.ann-type-badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:10px; font-weight:700; margin-bottom:4px; }
+.badge-text { background:#1f6feb; }
+.badge-image { background:#238636; }
+.badge-video { background:#d29922; }
+.ann-content { font-size:12px; color:#cbd5e1; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+.ann-time { font-size:10px; color:#64748b; margin-top:4px; }
+.btn-delete { background: linear-gradient(135deg, #ef4444, #b91c1c); color:#fff; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; font-family:'Cairo',sans-serif; font-weight:800; font-size:12px; }
+.empty { text-align:center; padding:40px 16px; color:#64748b; }
+</style>
+</head>
+<body>
+<div class="container">
+    <h1>🗑️ إدارة الإعلانات</h1>
+    <div class="toolbar">
+        <button class="btn btn-refresh" onclick="loadList()">🔄 تحديث</button>
+        <button class="btn btn-delete-all" onclick="deleteAll()">🗑️ حذف الكل</button>
+    </div>
+    <a href="/admin" class="btn btn-back" style="margin-bottom:16px; text-align:center;">🔙 لوحة التحكم</a>
+    <div id="list"><div class="empty">⏳ جاري التحميل...</div></div>
+</div>
+<script>
+async function loadList() {
+    const box = document.getElementById('list');
+    box.innerHTML = '<div class="empty">⏳ جاري التحميل...</div>';
+    try {
+        const res = await fetch('/api/announcements');
+        const data = await res.json();
+        if (!data.length) { box.innerHTML = '<div class="empty">📭 لا توجد إعلانات</div>'; return; }
+        box.innerHTML = data.map(a => {
+            let thumb = '';
+            if (a.type === 'image' && a.media_url) {
+                thumb = `<img src="${a.media_url}" class="ann-thumb">`;
+            } else if (a.type === 'video' && a.media_url) {
+                thumb = `<div class="ann-thumb-text">🎥</div>`;
+            } else {
+                thumb = `<div class="ann-thumb-text">📝</div>`;
+            }
+            return `
+                <div class="ann-item">
+                    ${thumb}
+                    <div class="ann-info">
+                        <span class="ann-type-badge badge-${a.type}">${a.type}</span>
+                        <div class="ann-content">${a.content || '(بدون نص)'}</div>
+                        <div class="ann-time">🕒 ${a.created_at}</div>
+                    </div>
+                    <button class="btn-delete" onclick="delOne(${a.id})">🗑️</button>
+                </div>
+            `;
+        }).join('');
+    } catch(e) { box.innerHTML = '<div class="empty">❌ فشل التحميل</div>'; }
+}
+async function delOne(id) {
+    if (!confirm('🗑️ حذف هذا الإعلان؟')) return;
+    const res = await fetch('/api/announcement/delete', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({id: id})
+    });
+    const data = await res.json();
+    if (data.ok) loadList(); else alert('❌ فشل الحذف');
+}
+async function deleteAll() {
+    if (!confirm('⚠️ حذف جميع الإعلانات نهائياً؟')) return;
+    const res = await fetch('/api/announcement/delete_all', {method: 'POST'});
+    const data = await res.json();
+    alert('✅ تم حذف ' + (data.deleted || 0) + ' إعلان');
+    loadList();
+}
+loadList();
+</script>
+</body>
+</html>
+"""
+
+@app.route('/admin/announcements_manager')
+def admin_announcements_manager():
+    return render_template_string(announcements_manager_html)
 
 # ========== ✅ صفحة "اعرف المزيد عن الموقع" ==========
 learn_more_html = """
