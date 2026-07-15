@@ -7,7 +7,7 @@ import re
 import requests
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 app = Flask(__name__)
 DB_PATH = "bot.db"
@@ -255,416 +255,258 @@ platform_names = {
     'twitter': 'تويتر/X'
 }
 
+# ألوان المنصات (hex) لاستخدامها في CSS/JavaScript
 platform_colors = {
     'whatsapp': '#25D366',
     'telegram': '#0088cc',
-    'tiktok': '#FE2C55',
-    'facebook': '#1877F2',
-    'instagram': '#F58529',
+    'tiktok': '#000000',
+    'facebook': '#1877f2',
+    'instagram': '#E4405F',
     'snapchat': '#FFFC00',
     'google': '#4285F4',
-    'twitter': '#000000'
+    'twitter': '#1DA1F2'
 }
 
-# ========== HTML الرئيسي مع الميزات الجديدة ==========
 main_html = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
-    <title>🚀 موقع المطري OTP 🚀</title>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <title>المطري OTP</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
     <style>
         * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-        html, body { font-family:'Cairo',sans-serif; background:#0a0e1a; color:#fff; overflow-x:hidden; }
-        
-        /* الوضع الليلي والنهاري */
-        body.light-mode { background:#f0f2f5; color:#1f2937; }
-        body.light-mode .container { background:rgba(255,255,255,0.95); border-inline-color:rgba(0,0,0,0.1); }
-        body.light-mode .form-control { background:rgba(0,0,0,0.05); color:#1f2937; border-color:rgba(0,0,0,0.1); }
-        body.light-mode .status { background:rgba(0,0,0,0.05); color:#374151; }
-        
-        body::before {
-            content:''; position:fixed; inset:0; z-index:-2;
-            background: radial-gradient(circle at 20% 20%, rgba(0, 255, 200, 0.15), transparent 40%),
-                        radial-gradient(circle at 80% 70%, rgba(139, 92, 246, 0.15), transparent 40%),
-                        radial-gradient(circle at 50% 50%, rgba(236, 72, 153, 0.1), transparent 50%);
-            animation: bgShift 12s ease-in-out infinite alternate;
-        }
-        @keyframes bgShift { 0%{ transform:scale(1) rotate(0deg);} 100%{ transform:scale(1.1) rotate(5deg);} }
-        
-        .stars { position:fixed; inset:0; z-index:-1; pointer-events:none; }
-        .star { position:absolute; background:#fff; border-radius:50%; animation: twinkle 3s infinite; box-shadow: 0 0 8px #fff; }
-        @keyframes twinkle { 0%,100%{ opacity:0; transform:scale(0);} 50%{ opacity:1; transform:scale(1);} }
-        
-        .container { background:rgba(17, 24, 39, 0.85); backdrop-filter:blur(20px); padding:25px 18px 100px; width:100%; min-height:100vh; border-inline:1px solid rgba(139, 92, 246, 0.3); }
-        
-        .top-bar { display:flex; justify-content:flex-end; gap:10px; margin-bottom:15px; position:relative; }
-        
-        .theme-toggle, .menu-btn { 
-            background:linear-gradient(135deg, #1f2937, #374151); border:1px solid rgba(0,255,200,0.4);
-            border-radius:12px; padding:10px 16px; color:#00ffc8; font-size:20px; cursor:pointer;
-            box-shadow: 0 0 15px rgba(0,255,200,0.3);
-            transition:all 0.3s;
-        }
-        .theme-toggle:hover, .menu-btn:hover { box-shadow: 0 0 25px rgba(0,255,200,0.6); transform:translateY(-2px); }
-        
-        .dropdown-menu { 
-            display:none; position:absolute; top:55px; right:0; 
-            background:rgba(17, 24, 39, 0.95); backdrop-filter:blur(15px);
-            border:1px solid rgba(0,255,200,0.3); border-radius:14px; padding:8px; 
-            min-width:200px; z-index:100; box-shadow:0 5px 25px rgba(0,255,200,0.3); 
-        }
-        .dropdown-menu a { 
-            display:flex; align-items:center; gap:10px; color:#fff; text-decoration:none; 
-            padding:10px 14px; border-radius:10px; font-weight:600; transition:all 0.3s; 
-        }
-        .dropdown-menu a:hover { background:rgba(0,255,200,0.15); color:#00ffc8; transform:translateX(-5px); }
-        .dropdown-menu.show { display:block; animation: slideDown 0.3s ease; }
-        @keyframes slideDown { from{ opacity:0; transform:translateY(-10px);} to{ opacity:1; transform:translateY(0);} }
-        
-        .header { text-align:center; margin:20px 0 30px; position:relative; }
-        .header h1 { 
-            font-size:30px; font-weight:900; 
-            background: linear-gradient(90deg, #00ffc8, #8b5cf6, #ec4899, #00ffc8);
-            background-size: 300% 300%;
-            -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
-            animation: glow 4s ease infinite;
-            text-shadow: 0 0 30px rgba(0,255,200,0.5);
-            margin-bottom:8px;
-        }
-        @keyframes glow { 0%,100%{ background-position:0% 50%; } 50%{ background-position:100% 50%; } }
-        .header p { color:#cbd5e1; font-size:15px; font-weight:600; }
-        .header p .crown { display:inline-block; animation: bounce 1.5s infinite; }
-        @keyframes bounce { 0%,100%{ transform:translateY(0);} 50%{ transform:translateY(-5px);} }
-        
-        .section-title { 
-            display:flex; align-items:center; gap:10px; margin:25px 0 15px; 
-            color:#00ffc8; font-size:17px; font-weight:700;
-        }
-        .section-title .emoji { font-size:22px; animation: pulse 2s infinite; }
-        @keyframes pulse { 0%,100%{ transform:scale(1);} 50%{ transform:scale(1.2);} }
-        .section-title::after { content:''; flex:1; height:2px; background:linear-gradient(90deg, #00ffc8, transparent); border-radius:2px; }
-        
-        .platform-selector { display:grid; grid-template-columns:repeat(2, 1fr); gap:12px; margin-bottom:10px; }
+        html, body { font-family:'Cairo',sans-serif; background:#0e1217; color:#e6e6e6; overflow-x:hidden; }
+        body { min-height:100vh; }
+
+        .app { max-width:480px; margin:0 auto; background:#161b22; min-height:100vh; display:flex; flex-direction:column; }
+
+        /* ============= HEADER ============= */
+        .top-bar { background:#161b22; padding:14px 16px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #21262d; position:sticky; top:0; z-index:50; }
+        .brand { display:flex; align-items:center; gap:10px; }
+        .brand-icon { width:36px; height:36px; border-radius:10px; background:linear-gradient(135deg, #1f6feb, #388bfd); display:flex; align-items:center; justify-content:center; font-size:18px; }
+        .brand-text { font-size:16px; font-weight:700; color:#fff; }
+        .menu-btn { background:transparent; border:none; color:#8b949e; font-size:22px; cursor:pointer; padding:4px 8px; }
+        .dropdown-menu { display:none; position:absolute; top:55px; left:16px; right:16px; background:#1c2128; border:1px solid #30363d; border-radius:10px; padding:6px; z-index:100; box-shadow:0 4px 12px rgba(0,0,0,0.4); flex-direction:column; gap:2px; }
+        .dropdown-menu.show { display:flex; }
+        .dropdown-menu a { display:flex; align-items:center; gap:10px; color:#e6e6e6; text-decoration:none; padding:11px 14px; border-radius:8px; font-size:14px; font-weight:600; white-space:nowrap; }
+        .dropdown-menu a:hover { background:#21262d; color:#58a6ff; }
+        .dropdown-menu a .ico { font-size:18px; }
+
+        /* ============= MAIN CONTENT ============= */
+        .main { padding:16px; flex:1; }
+
+        .hero { text-align:center; padding:24px 12px 20px; }
+        .hero h1 { font-size:24px; font-weight:800; color:#fff; margin-bottom:6px; }
+        .hero p { font-size:14px; color:#8b949e; line-height:1.5; }
+        .hero p .crown { display:inline-block; animation:bounce 1.5s infinite; }
+        @keyframes bounce { 0%,100%{ transform:translateY(0);} 50%{ transform:translateY(-3px);} }
+
+        .section-title { font-size:15px; font-weight:700; color:#fff; margin:18px 4px 12px; display:flex; align-items:center; gap:8px; }
+        .section-title .icon { color:#58a6ff; }
+
+        /* ============= PLATFORMS GRID ============= */
+        .platforms { display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; margin-bottom:8px; }
         .platform-btn {
-            display:flex; align-items:center; gap:12px; padding:14px 12px;
-            border:2px solid rgba(255,255,255,0.1); border-radius:16px;
-            background:rgba(31, 41, 55, 0.7); color:#fff;
-            cursor:pointer; transition:all 0.4s cubic-bezier(0.4, 0, 0.2, 1); 
-            font-size:14px; font-weight:700; font-family:'Cairo',sans-serif;
-            position:relative; overflow:hidden;
+            display:flex; align-items:center; gap:10px; padding:12px 14px;
+            background:#1c2128; border:1px solid #30363d; border-radius:10px;
+            color:#e6e6e6; cursor:pointer; transition:all 0.15s ease;
+            font-size:14px; font-weight:600; font-family:'Cairo',sans-serif;
         }
-        .platform-btn::before {
-            content:''; position:absolute; inset:0; opacity:0; transition:opacity 0.4s;
-            background:var(--bg-gradient);
-            z-index:0;
+        .platform-btn:hover { background:#21262d; border-color:#484f58; }
+        .platform-btn:active { transform:scale(0.98); }
+        .platform-btn.active { background:var(--platform-color, #1f6feb); border-color:var(--platform-color, #1f6feb); color:#fff; box-shadow:0 0 0 1px var(--platform-color, #1f6feb), 0 0 12px rgba(31,111,235,0.15); }
+        .platform-btn img { width:32px; height:32px; object-fit:contain; border-radius:8px; background:#fff; padding:2px; }
+
+        /* ============= SELECT & BUTTONS ============= */
+        .select-wrap { position:relative; }
+        .form-control {
+            width:100%; padding:14px 16px; border-radius:10px;
+            border:1px solid #30363d; background:#0d1117; color:#e6e6e6;
+            outline:none; font-family:'Cairo',sans-serif; font-size:14px; font-weight:600;
+            appearance:none; -webkit-appearance:none;
+            background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='%238b949e' d='M6 9L1 4h10z'/></svg>");
+            background-repeat:no-repeat; background-position:left 16px center; padding-left:40px;
         }
-        .platform-btn:hover { 
-            transform:translateY(-3px) scale(1.02); 
-            border-color:transparent;
-            box-shadow: 0 8px 25px rgba(0,0,0,0.5);
+        .form-control:focus { border-color:#1f6feb; }
+        .form-control:disabled { opacity:0.5; cursor:not-allowed; }
+
+        .btn-primary {
+            width:100%; padding:14px; border:none; border-radius:10px;
+            background:#238636; color:#fff; font-size:15px; font-weight:700;
+            cursor:pointer; margin-top:10px; font-family:'Cairo',sans-serif;
+            transition:all 0.15s ease;
         }
-        .platform-btn:hover::before { opacity:1; }
-        .platform-btn.active { 
-            border-color:transparent;
-            box-shadow: 0 0 25px var(--glow-color), 0 0 50px var(--glow-color);
-            transform:translateY(-2px);
+        .btn-primary:hover:not(:disabled) { background:#2ea043; }
+        .btn-primary:active:not(:disabled) { transform:scale(0.98); }
+        .btn-primary:disabled { opacity:0.5; cursor:not-allowed; }
+
+        .btn-blue {
+            width:100%; padding:14px; border:none; border-radius:10px;
+            background:#1f6feb; color:#fff; font-size:15px; font-weight:700;
+            cursor:pointer; margin-top:8px; font-family:'Cairo',sans-serif;
+            transition:all 0.15s ease;
         }
-        .platform-btn.active::before { opacity:1; }
-        .platform-btn img { 
-            width:42px; height:42px; object-fit:contain; 
-            border-radius:12px;
-            position:relative; z-index:1;
-            box-shadow: 0 4px 14px rgba(0,0,0,0.4);
-            transition:transform 0.4s;
-            background: rgba(255,255,255,0.95);
-            padding: 3px;
+        .btn-blue:hover { background:#388bfd; }
+
+        /* ============= NUMBER BOX ============= */
+        .number-card {
+            background:#0d1117; border:1px solid #238636; border-radius:12px;
+            padding:18px; margin:16px 0; text-align:center;
+            box-shadow:0 0 0 1px rgba(35, 134, 54, 0.2), 0 0 16px rgba(35, 134, 54, 0.1);
         }
-        .platform-btn.active img { transform: rotate(360deg) scale(1.15); }
-        .platform-btn span { position:relative; z-index:1; }
-        
-        .form-group { margin-bottom:18px; }
-        .form-group label { display:flex; align-items:center; gap:8px; margin-bottom:10px; color:#cbd5e1; font-weight:700; font-size:14px; }
-        .form-control { 
-            width:100%; padding:14px 16px; border-radius:14px; 
-            border:2px solid rgba(255,255,255,0.1); 
-            background:rgba(31, 41, 55, 0.7); color:#fff; 
-            outline:none; font-family:'Cairo',sans-serif; font-size:15px; font-weight:600;
-            transition:all 0.3s;
+        .number-card .number { font-family:'Courier New',monospace; font-size:24px; font-weight:bold; color:#3fb950; letter-spacing:1px; }
+        .copy-btn-mini { background:transparent; border:1px solid #30363d; color:#8b949e; padding:6px 10px; border-radius:8px; cursor:pointer; font-size:12px; margin-top:8px; transition:all 0.15s; }
+        .copy-btn-mini:hover { color:#58a6ff; border-color:#58a6ff; }
+
+        /* ============= AUTO MONITOR STATUS ============= */
+        .auto-monitor { display:flex; align-items:center; gap:8px; padding:10px 14px; background:#0d1117; border:1px solid #21262d; border-radius:10px; margin-top:8px; font-size:12px; color:#8b949e; font-weight:600; }
+        .auto-monitor .dot { width:8px; height:8px; border-radius:50%; background:#3fb950; animation:pulse-dot 1.5s infinite; }
+        @keyframes pulse-dot { 0%,100%{ opacity:1; transform:scale(1);} 50%{ opacity:0.4; transform:scale(1.3);} }
+        .auto-monitor.done { color:#3fb950; }
+        .auto-monitor.done .dot { background:#3fb950; animation:none; }
+
+        /* ============= OTP COUNTDOWN 120s ============= */
+        .otp-countdown { display:inline-block; padding:2px 8px; background:rgba(63, 185, 80, 0.15); border:1px solid #3fb950; color:#3fb950; border-radius:6px; font-size:10px; font-weight:bold; font-family:'Courier New',monospace; margin-right:6px; }
+        .otp-countdown.warn { background:rgba(210, 153, 34, 0.15); border-color:#d29922; color:#d29922; }
+        .otp-countdown.expired { background:rgba(248, 81, 73, 0.15); border-color:#f85149; color:#f85149; }
+
+        /* ============= OTP PLATFORM SECTIONS ============= */
+        .otp-section { margin-bottom:14px; }
+        .otp-section-header { display:flex; align-items:center; gap:8px; padding:8px 12px; background:#1c2128; border:1px solid #30363d; border-radius:8px; margin-bottom:6px; cursor:pointer; transition:background 0.15s; }
+        .otp-section-header:hover { background:#21262d; border-color:#484f58; }
+        .otp-section-header .platform-icon { width:24px; height:24px; border-radius:6px; padding:2px; background:#fff; }
+        .otp-section-header .platform-name { font-size:13px; font-weight:700; color:#fff; }
+        .otp-section-header .platform-count { font-size:11px; color:#8b949e; margin-right:auto; }
+        .otp-section-header .toggle-arrow { color:#8b949e; font-size:12px; transition:transform 0.2s; }
+        .otp-section-header.collapsed .toggle-arrow { transform:rotate(-90deg); }
+        .otp-section-items { display:flex; flex-direction:column; gap:6px; }
+        .otp-section-items.hidden { display:none; }
+        body.light .otp-section-header { background:#f6f8fa; border-color:#d0d7de; }
+        body.light .otp-section-header .platform-name { color:#1f2328; }
+
+        /* ============= OTP LIST ============= */
+        .otp-list { display:flex; flex-direction:column; gap:8px; margin-top:12px; }
+        .otp-item {
+            background:#1c2128; border:1px solid #30363d; border-radius:10px;
+            padding:12px 14px; display:flex; justify-content:space-between; align-items:center;
         }
-        .form-control:focus { 
-            border-color:#00ffc8; 
-            box-shadow: 0 0 20px rgba(0,255,200,0.3);
-            background:rgba(31, 41, 55, 0.9);
-        }
-        .form-control:disabled { opacity:0.4; cursor:not-allowed; }
-        
-        .btn-primary { 
-            width:100%; padding:16px; border:none; border-radius:16px; 
-            background: linear-gradient(135deg, #00ff88, #00d2ff);
-            color:#0a0e1a; font-size:18px; font-weight:900;
-            cursor:pointer; margin-top:12px; 
-            font-family:'Cairo',sans-serif;
-            box-shadow: 0 0 25px rgba(0, 255, 136, 0.5);
-            transition:all 0.3s;
-            position:relative; overflow:hidden;
-        }
-        .btn-primary::before {
-            content:''; position:absolute; top:0; left:-100%;
-            width:100%; height:100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
-            transition:left 0.6s;
-        }
-        .btn-primary:hover::before { left:100%; }
-        .btn-primary:hover { transform:translateY(-3px); box-shadow: 0 5px 35px rgba(0, 255, 136, 0.7); }
-        .btn-primary:disabled { opacity:0.4; cursor:not-allowed; box-shadow:none; transform:none; }
-        
-        .btn-blue { 
-            width:100%; padding:16px; border:none; border-radius:16px; 
-            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
-            color:#fff; font-size:16px; font-weight:800;
-            cursor:pointer; margin-top:10px; 
-            font-family:'Cairo',sans-serif;
-            box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
-            transition:all 0.3s;
-            display:flex; align-items:center; justify-content:center; gap:8px;
-        }
-        .btn-blue:hover { transform:translateY(-3px); box-shadow: 0 5px 30px rgba(59, 130, 246, 0.7); }
-        .btn-blue:disabled { opacity:0.4; cursor:not-allowed; }
-        
-        .btn-danger { 
-            background: linear-gradient(135deg, #ef4444, #b91c1c) !important;
-            box-shadow: 0 0 20px rgba(239, 68, 68, 0.5) !important;
-        }
-        .btn-danger:hover { box-shadow: 0 5px 30px rgba(239, 68, 68, 0.7) !important; }
-        
-        .number-box { 
-            display:flex; align-items:center; justify-content:space-between; 
-            background: linear-gradient(135deg, #000, #0f172a);
-            border:2px solid #00ff88; border-radius:16px; padding:16px; margin:18px 0;
-            box-shadow: 0 0 30px rgba(0, 255, 136, 0.4), inset 0 0 20px rgba(0, 255, 136, 0.1);
-            animation: glowPulse 2s infinite;
-        }
-        @keyframes glowPulse { 0%,100%{ box-shadow: 0 0 30px rgba(0, 255, 136, 0.4), inset 0 0 20px rgba(0, 255, 136, 0.1);} 50%{ box-shadow: 0 0 40px rgba(0, 255, 136, 0.7), inset 0 0 30px rgba(0, 255, 136, 0.2);} }
-        .number-box .number { 
-            font-family:'Courier New',monospace; font-size:22px; 
-            color:#00ff88; flex-grow:1; text-align:center; font-weight:bold;
-            text-shadow: 0 0 10px #00ff88;
-            letter-spacing:1px;
-        }
-        .countdown { 
-            color:#ff4444; font-weight:bold; font-size:14px; margin-top:8px;
-            animation: pulse 1s infinite;
-        }
-        .copy-number-btn { 
-            background:rgba(0, 255, 136, 0.15); border:1px solid #00ff88;
-            border-radius:10px; padding:8px 12px; color:#00ff88; 
-            cursor:pointer; font-size:18px; margin-right:10px;
-            transition:all 0.3s;
-        }
-        .copy-number-btn:hover { background:#00ff88; color:#000; transform:rotate(15deg); }
-        
-        .otp-container { 
-            margin-top:20px; max-height:380px; overflow-y:auto; 
-            border:1px solid rgba(139, 92, 246, 0.3); border-radius:16px; padding:12px; 
-            background:rgba(15, 23, 42, 0.5);
-        }
-        .otp-container::-webkit-scrollbar { width:6px; }
-        .otp-container::-webkit-scrollbar-track { background:rgba(255,255,255,0.05); border-radius:10px; }
-        .otp-container::-webkit-scrollbar-thumb { background:linear-gradient(180deg, #00ffc8, #8b5cf6); border-radius:10px; }
-        .otp-item { 
-            background: linear-gradient(135deg, #0f172a, #1e293b);
-            border:1px solid #00ff88; border-radius:14px; 
-            padding:14px; margin-bottom:12px; 
-            font-family:'Courier New'; font-size:15px; 
-            color:#00ff88; line-height:1.7;
-            box-shadow: 0 0 15px rgba(0, 255, 136, 0.2);
-            animation: slideIn 0.4s ease;
-            position:relative;
-        }
-        @keyframes slideIn { from{opacity:0; transform:translateX(20px);} to{opacity:1; transform:translateX(0);} }
-        .otp-item .copy-btn { 
-            background:rgba(0, 255, 136, 0.2); border:1px solid #00ff88;
-            border-radius:8px; padding:5px 12px; color:#00ff88; 
-            cursor:pointer; font-size:12px; font-weight:bold;
-            transition:all 0.3s;
-        }
-        .otp-item .copy-btn:hover { background:#00ff88; color:#000; }
-        .otp-item .info { color:#94a3b8; font-size:12px; display:block; margin-top:6px; }
-        
-        .status { 
-            background: linear-gradient(135deg, rgba(31, 41, 55, 0.7), rgba(15, 23, 42, 0.7));
-            padding:14px; border-radius:14px; text-align:center; 
-            margin-top:20px; color:#cbd5e1; font-size:14px; font-weight:600;
-            border:1px solid rgba(255,255,255,0.1);
-        }
-        .status .icon { font-size:18px; margin-left:8px; }
-        
-        /* شريط الأخبار المتحرك */
-        .ticker-container {
-            position:fixed; bottom:0; left:0; width:100%; 
-            background:rgba(17, 24, 39, 0.95); border-top:2px solid #00ffc8;
-            padding:10px 0; z-index:999; overflow:hidden;
-        }
-        .ticker-text {
-            display:inline-block; white-space:nowrap; padding-right:100%;
-            animation: ticker 20s linear infinite; color:#00ffc8; font-weight:bold;
-        }
-        @keyframes ticker { 0%{ transform:translateX(100%);} 100%{ transform:translateX(-100%);} }
-        
-        .pulse-emoji { display:inline-block; animation: pulse 1.5s infinite; }
-        .spin-emoji { display:inline-block; animation: spin 3s linear infinite; }
-        @keyframes spin { from{transform:rotate(0);} to{transform:rotate(360deg);} }
-        
-        @media (min-width: 768px) {
-            .container { max-width:480px; margin:0 auto; min-height:100vh; }
-            .platform-selector { grid-template-columns:repeat(2, 1fr); }
-        }
-        @media (max-width: 380px) {
-            .header h1 { font-size:24px; }
-            .platform-btn img { width:32px; height:32px; }
-            .platform-btn span { font-size:12px; }
+        .otp-item .otp-code { font-family:'Courier New',monospace; font-size:16px; font-weight:bold; color:#3fb950; }
+        .otp-item .otp-info { font-size:11px; color:#8b949e; margin-top:2px; }
+        .otp-item .copy-btn { background:transparent; border:1px solid #30363d; color:#58a6ff; padding:4px 10px; border-radius:6px; cursor:pointer; font-size:11px; font-weight:600; }
+
+        .empty-state { text-align:center; padding:30px 16px; color:#8b949e; font-size:13px; }
+        .empty-state .icon { font-size:36px; margin-bottom:8px; opacity:0.6; }
+
+        /* ============= STATUS BAR ============= */
+        .status { background:#1c2128; border:1px solid #30363d; border-radius:10px; padding:12px 16px; text-align:center; margin-top:14px; color:#8b949e; font-size:13px; font-weight:600; }
+
+        /* ============= THEME TOGGLE ============= */
+        .theme-toggle { background:transparent; border:1px solid #30363d; color:#8b949e; padding:6px 10px; border-radius:8px; cursor:pointer; font-size:14px; }
+        .theme-toggle:hover { color:#58a6ff; }
+
+        /* ============= LIGHT MODE ============= */
+        body.light { background:#f6f8fa !important; color:#1f2328 !important; }
+        body.light .app { background:#ffffff !important; }
+        body.light .top-bar { background:#ffffff !important; border-bottom-color:#d0d7de !important; }
+        body.light .brand-text, body.light .hero h1, body.light .section-title { color:#1f2328 !important; }
+        body.light .hero p, body.light .status, body.light .empty-state { color:#656d76 !important; }
+        body.light .platform-btn { background:#f6f8fa; border-color:#d0d7de; color:#1f2328; }
+        body.light .platform-btn:hover { background:#eaeef2; }
+        body.light .form-control { background:#ffffff; border-color:#d0d7de; color:#1f2328; }
+        body.light .otp-item { background:#f6f8fa; border-color:#d0d7de; }
+        body.light .otp-item .otp-code { color:#1a7f37; }
+        body.light .dropdown-menu { background:#ffffff; border-color:#d0d7de; }
+        body.light .dropdown-menu a { color:#1f2328; }
+        body.light .status { background:#f6f8fa; border-color:#d0d7de; }
+        body.light .number-card { background:#f6f8fa; border-color:#1a7f37; }
+        body.light .number-card .number { color:#1a7f37; }
+
+        .footer { text-align:center; padding:20px 16px; color:#484f58; font-size:12px; border-top:1px solid #21262d; }
+        body.light .footer { color:#656d76; border-top-color:#d0d7de; }
+
+        /* ============= RESPONSIVE ============= */
+        @media (max-width:380px) {
+            .hero h1 { font-size:20px; }
+            .platform-btn { font-size:13px; padding:10px 12px; }
         }
     </style>
 </head>
 <body>
-    <div class="stars" id="stars"></div>
-    
-    <div class="container">
+    <div class="app">
+        <!-- HEADER -->
         <div class="top-bar">
-            <button class="theme-toggle" onclick="toggleTheme()" title="تبديل الوضع">🌙</button>
-            <button class="menu-btn" onclick="toggleMenu()">☰</button>
-            <div class="dropdown-menu" id="contactMenu">
-                <a href="{{ owner_link }}" target="_blank">📞 واتساب المطور</a>
-                <a href="{{ wa_group }}" target="_blank">💬 جروب الدعم</a>
-                <a href="https://t.me/jsjsgsjsvh" target="_blank">✈️ تيليجرام</a>
-                <a href="https://t.me/jsjsgsjsvh" target="_blank">📢 قناة التحديثات</a>
+            <div class="brand">
+                <div class="brand-icon">🚀</div>
+                <div class="brand-text">المطري OTP</div>
             </div>
-        </div>
-
-        <div class="header">
-            <h1>🚀 موقع المطري OTP 🚀</h1>
-            <p><span class="crown">👑</span> أرقام واتساب سحب أكواد تطوير مطري <span class="crown">👑</span></p>
-        </div>
-
-        <div class="section-title">
-            <span class="emoji">🎯</span>
-            <span>اختر المنصة</span>
-        </div>
-        <div class="form-group">
-            <div class="platform-selector" id="platformSelector"></div>
-        </div>
-
-        <div class="section-title">
-            <span class="emoji">🌍</span>
-            <span>اختر الدولة</span>
-        </div>
-        <div class="form-group">
-            <select id="country" class="form-control" disabled>
-                <option value="">🚀 -- اختر المنصة أولاً -- 🚀</option>
-            </select>
-        </div>
-
-        <button class="btn-primary" id="getNumberBtn" onclick="getNumber()" disabled>
-            🚀 جلب رقم
-        </button>
-        <button class="btn-blue" id="refreshBtn" onclick="refreshNumber()" disabled>
-            🔄 تبديل
-        </button>
-
-        <div id="numberContainer" style="display:none;">
-            <div class="number-box">
-                <button class="copy-number-btn" onclick="copyNumber()" title="نسخ">📋</button>
-                <div>
-                    <div class="number" id="numberDisplay">+</div>
-                    <div class="countdown" id="countdown" style="display:none;">صلاحية الرقم: 60 ثانية</div>
+            <div style="display:flex; gap:6px; position:relative;">
+                <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">🌙</button>
+                <button class="menu-btn" onclick="toggleMenu()">☰</button>
+                <div class="dropdown-menu" id="contactMenu">
+                    <a href="{{ owner_link }}" target="_blank"><span class="ico">📞</span> تواصل معي على واتساب</a>
+                    <a href="{{ wa_group }}" target="_blank"><span class="ico">💬</span> جروب واتساب الرسمي</a>
+                    <a href="https://t.me/jsjsgsjsvh" target="_blank"><span class="ico">📢</span> قناة تليجرام</a>
                 </div>
             </div>
-            <div style="display:flex; gap:10px; margin-top:12px;">
-                <button class="btn-primary" id="startMonitorBtn" onclick="startMonitoring()">📡 بدء السحب</button>
-                <button class="btn-blue btn-danger" id="stopMonitorBtn" onclick="stopMonitoring()" disabled>⏹️ إيقاف</button>
+        </div>
+
+        <!-- MAIN -->
+        <div class="main">
+            <div class="hero">
+                <h1>🚀 موقع المطري OTP</h1>
+                <p><span class="crown">👑</span> أرقام واتساب سحب أكواد تطوير مطري <span class="crown">👑</span></p>
             </div>
+
+            <div class="section-title"><span class="icon">🎯</span> اختر المنصة</div>
+            <div class="platforms" id="platformSelector"></div>
+
+            <div class="section-title"><span class="icon">🌍</span> اختر الدولة</div>
+            <div class="select-wrap">
+                <select id="country" class="form-control" disabled>
+                    <option value="">-- اختر المنصة أولاً --</option>
+                </select>
+            </div>
+
+            <button class="btn-primary" id="getNumberBtn" onclick="getNumber()" disabled>🚀 جلب رقم</button>
+            <button class="btn-blue" id="refreshBtn" onclick="refreshNumber()" disabled>🔄 تبديل</button>
+
+            <div id="numberContainer" style="display:none;">
+                <div class="number-card">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                        <span style="font-size:11px; color:#8b949e; font-weight:600;">📞 الرقم</span>
+                        <button class="copy-btn-mini" onclick="copyNumber()" id="copyNumBtn">📋 نسخ</button>
+                    </div>
+                    <div class="number" id="numberDisplay">+</div>
+                </div>
+                <div id="autoMonitorStatus" class="auto-monitor">
+                    <span class="dot"></span> جاري المراقبة التلقائية...
+                </div>
+            </div>
+
+            <div class="section-title" style="margin-top:24px;"><span class="icon">📜</span> الأكواد المسحوبة</div>
+            <div class="otp-list" id="otpHistory">
+                <div class="empty-state">
+                    <div class="icon">⏳</div>
+                    <div>في انتظار الأكواد...</div>
+                </div>
+            </div>
+
+            <div class="status" id="status">⚡ اختر المنصة والدولة للبدء</div>
         </div>
 
-        <div class="otp-container" id="otpList" style="display:none;">
-            <div style="text-align:center; color:#94a3b8; padding:20px;">في انتظار الأكواد...</div>
+        <div class="footer">
+            💎 صُنع بحب ⚡ بواسطة المطري
         </div>
-        <div class="status" id="status"><span class="icon">ℹ️</span>اختر المنصة والدولة للبدء</div>
-    </div>
-
-    <!-- شريط الأخبار المتحرك -->
-    <div class="ticker-container">
-        <div class="ticker-text">🚀 المطري OTP - أسرع موقع سحب أكواد - صُنع بحب 🚀</div>
     </div>
 
     <script>
-        // ========== متغيرات عامة ==========
-        let currentPlatform = '';
-        let currentNumber = '';
-        let monitorInterval = null;
-        let countdownInterval = null;
-        let countdown = 60;
-        let isMonitoring = false;
+        const platformLogos = {{ platform_logos | tojson }};
+        const platformLogosSmall = {{ platform_logos_small | tojson }};
+        const platformNames = {{ platform_names | tojson }};
+        const platformGradients = {{ platform_gradients | tojson }};
 
-        // ========== إنشاء النجوم ==========
-        function createStars() {
-            const starsContainer = document.getElementById('stars');
-            for (let i = 0; i < 80; i++) {
-                const star = document.createElement('div');
-                star.className = 'star';
-                star.style.left = Math.random() * 100 + '%';
-                star.style.top = Math.random() * 100 + '%';
-                star.style.width = star.style.height = (Math.random() * 3 + 1) + 'px';
-                star.style.animationDelay = Math.random() * 3 + 's';
-                starsContainer.appendChild(star);
-            }
-        }
-
-        // ========== تبديل الوضع الليلي/النهاري ==========
-        function toggleTheme() {
-            document.body.classList.toggle('light-mode');
-            const btn = document.querySelector('.theme-toggle');
-            btn.textContent = document.body.classList.contains('light-mode') ? '☀️' : '🌙';
-            localStorage.setItem('theme', document.body.classList.contains('light-mode') ? 'light' : 'dark');
-        }
-
-        // ========== تحميل الوضع المحفوظ ==========
-        window.addEventListener('load', () => {
-            const savedTheme = localStorage.getItem('theme');
-            if (savedTheme === 'light') {
-                document.body.classList.add('light-mode');
-                document.querySelector('.theme-toggle').textContent = '☀️';
-            }
-        });
-
-        // ========== تشغيل صوت التنبيه ==========
-        function playNotificationSound() {
-            try {
-                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                const oscillator = audioCtx.createOscillator();
-                const gainNode = audioCtx.createGain();
-
-                oscillator.type = 'sine';
-                oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
-                oscillator.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.5);
-
-                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
-
-                oscillator.connect(gainNode);
-                gainNode.connect(audioCtx.destination);
-
-                oscillator.start();
-                oscillator.stop(audioCtx.currentTime + 0.5);
-            } catch (e) {
-                console.error('خطأ في تشغيل الصوت:', e);
-            }
-        }
-
-        // ========== القائمة المنسدلة ==========
         function toggleMenu() {
             document.getElementById('contactMenu').classList.toggle('show');
         }
@@ -676,39 +518,109 @@ main_html = """
             }
         });
 
-        // ========== نسخ النص ==========
+        function toggleTheme() {
+            const isLight = document.body.classList.toggle('light');
+            document.getElementById('themeToggle').textContent = isLight ? '☀️' : '🌙';
+            localStorage.setItem('theme', isLight ? 'light' : 'dark');
+        }
+        function loadTheme() {
+            if (localStorage.getItem('theme') === 'light') {
+                document.body.classList.add('light');
+                document.getElementById('themeToggle').textContent = '☀️';
+            }
+        }
+        loadTheme();
+
         async function copyNumber() {
             const num = document.getElementById('numberDisplay').textContent;
             await navigator.clipboard.writeText(num);
-            showToast('✅ تم نسخ الرقم! ' + num);
+            const btn = document.getElementById('copyNumBtn');
+            const orig = btn.textContent;
+            btn.textContent = '✅ تم';
+            btn.style.color = '#3fb950';
+            btn.style.borderColor = '#3fb950';
+            setTimeout(() => { btn.textContent = orig; btn.style.color = ''; btn.style.borderColor = ''; }, 1500);
         }
 
-        // ========== إظهار التنبيهات ==========
-        function showToast(msg) {
-            const t = document.createElement('div');
-            t.textContent = msg;
-            t.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#00ff88,#00d2ff);color:#000;padding:14px 28px;border-radius:14px;font-weight:bold;z-index:9999;box-shadow:0 0 30px rgba(0,255,136,0.6);animation:slideIn 0.4s;';
-            document.body.appendChild(t);
-            setTimeout(() => t.remove(), 2500);
+        function copyText(text, btn) {
+            navigator.clipboard.writeText(text);
+            if (btn) {
+                const orig = btn.textContent;
+                btn.textContent = '✅';
+                setTimeout(() => btn.textContent = orig, 1200);
+            }
         }
 
-        // ========== اختيار المنصة ==========
-        function selectPlatform(platform, event) {
-            currentPlatform = platform;
-            document.querySelectorAll('.platform-btn').forEach(btn => {
-                btn.classList.remove('active');
+        // 🔔 صوت تنبيه أجمل وأوضح (نغمتين: A5 ثم C6)
+        function playNotificationSound() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const now = ctx.currentTime;
+                // نغمة أولى
+                const o1 = ctx.createOscillator();
+                const g1 = ctx.createGain();
+                o1.connect(g1); g1.connect(ctx.destination);
+                o1.type = 'sine';
+                o1.frequency.setValueAtTime(880, now);
+                g1.gain.setValueAtTime(0.0001, now);
+                g1.gain.exponentialRampToValueAtTime(0.4, now + 0.02);
+                g1.gain.exponentialRampToValueAtTime(0.0001, now + 0.25);
+                o1.start(now); o1.stop(now + 0.3);
+                // نغمة ثانية (أعلى)
+                const o2 = ctx.createOscillator();
+                const g2 = ctx.createGain();
+                o2.connect(g2); g2.connect(ctx.destination);
+                o2.type = 'sine';
+                o2.frequency.setValueAtTime(1318, now + 0.18);
+                g2.gain.setValueAtTime(0.0001, now + 0.18);
+                g2.gain.exponentialRampToValueAtTime(0.4, now + 0.2);
+                g2.gain.exponentialRampToValueAtTime(0.0001, now + 0.5);
+                o2.start(now + 0.18); o2.stop(now + 0.55);
+            } catch(e) {}
+        }
+
+        let currentPlatform = '';
+        let currentNumber = '';
+        let monitorInterval = null;
+        let countdownIntervals = {};   // تتبع العدادات
+        let allOtpsCache = [];          // أكواد مخزنة محلياً
+
+        function initPlatformSelector() {
+            const selector = document.getElementById('platformSelector');
+            selector.innerHTML = '';
+            // ألوان المنصات
+            const platformColors = {
+                whatsapp: '#25D366',
+                telegram: '#26A5E4',
+                facebook: '#1877F2',
+                instagram: '#E4405F',
+                tiktok: '#FE2C55',
+                snapchat: '#FFFC00',
+                google: '#4285F4',
+                twitter: '#1DA1F2'
+            };
+            Object.keys(platformNames).forEach(platform => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'platform-btn';
+                btn.onclick = () => selectPlatform(platform, btn);
+                btn.style.setProperty('--platform-color', platformColors[platform] || '#1f6feb');
+                btn.innerHTML = `<img src="${platformLogos[platform]}" alt="${platformNames[platform]}" onerror="this.src='${platformLogosSmall[platform]}'"><span>${platformNames[platform]}</span>`;
+                selector.appendChild(btn);
             });
-            const btn = event.currentTarget || event.target.closest('.platform-btn');
+        }
+
+        function selectPlatform(platform, btn) {
+            currentPlatform = platform;
+            document.querySelectorAll('.platform-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             loadCountries();
         }
 
-        // ========== تحميل الدول ==========
         async function loadCountries() {
-            const platform = currentPlatform;
             const countrySelect = document.getElementById('country');
-            if (!platform) {
-                countrySelect.innerHTML = '<option value="">🚀 -- اختر المنصة أولاً -- 🚀</option>';
+            if (!currentPlatform) {
+                countrySelect.innerHTML = '<option value="">-- اختر المنصة أولاً --</option>';
                 countrySelect.disabled = true;
                 document.getElementById('numberContainer').style.display = 'none';
                 document.getElementById('getNumberBtn').disabled = true;
@@ -716,243 +628,345 @@ main_html = """
                 return;
             }
             countrySelect.disabled = true;
-            countrySelect.innerHTML = '<option value="">⏳ جاري التحميل...</option>';
-            const res = await fetch('/api/countries', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform})});
+            countrySelect.innerHTML = '<option value="">جاري التحميل...</option>';
+            const res = await fetch('/api/countries', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform:currentPlatform})});
             const data = await res.json();
-            let options = '<option value="">🌍 -- اختر الدولة -- 🌍</option>';
+            let options = '<option value="">-- اختر الدولة --</option>';
             data.forEach(c => { options += `<option value="${c.code}">${c.flag} ${c.name}</option>`; });
             countrySelect.innerHTML = options;
             countrySelect.disabled = false;
         }
 
         document.getElementById('country').addEventListener('change', function() {
-            const hasSelection = this.value !== '';
-            document.getElementById('getNumberBtn').disabled = !hasSelection;
-            document.getElementById('refreshBtn').disabled = !hasSelection;
+            const has = this.value !== '';
+            document.getElementById('getNumberBtn').disabled = !has;
+            document.getElementById('refreshBtn').disabled = !has;
         });
 
-        // ========== جلب رقم جديد ==========
         async function getNumber() {
-            const platform = currentPlatform;
             const country = document.getElementById('country').value;
-            if (!platform || !country) {
-                document.getElementById('status').innerHTML = '<span class="icon">⚠️</span>يرجى اختيار المنصة والدولة';
+            if (!currentPlatform || !country) {
+                document.getElementById('status').textContent = '⚠️ يرجى اختيار المنصة والدولة';
                 return;
             }
-            document.getElementById('status').innerHTML = '<span class="icon">⏳</span>جاري جلب رقم...';
-            const res = await fetch('/api/get_number', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform, country})});
+            document.getElementById('status').textContent = '⏳ جاري جلب رقم...';
+            const res = await fetch('/api/get_number', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform:currentPlatform, country})});
             const data = await res.json();
             if (data.number) {
                 currentNumber = data.number;
-                countdown = 60;
-                document.getElementById('numberDisplay').textContent = '+' + data.number;
+                document.getElementById('numberDisplay').textContent = data.number;
                 document.getElementById('numberContainer').style.display = 'block';
-                document.getElementById('otpList').style.display = 'none';
-                document.getElementById('status').innerHTML = '<span class="icon">✅</span>الرقم جاهز!';
-                showToast('🎉 تم جلب رقم جديد!');
-                startCountdown();
+                document.getElementById('status').textContent = '✅ الرقم جاهز!';
+                // 🎯 تشغيل المراقبة التلقائية فوراً
+                startMonitoring();
             } else {
-                document.getElementById('status').innerHTML = '<span class="icon">❌</span>لا توجد أرقام متاحة';
+                document.getElementById('status').textContent = '❌ لا توجد أرقام متاحة';
             }
         }
 
-        // ========== تبديل الرقم ==========
-        function refreshNumber() {
-            getNumber();
+        async function refreshNumber() {
+            const country = document.getElementById('country').value;
+            if (!currentPlatform || !country) return;
+            // إيقاف المراقبة القديمة
+            stopMonitoring();
+            document.getElementById('status').textContent = '⏳ جاري التبديل...';
+            const res = await fetch('/api/get_number', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform:currentPlatform, country})});
+            const data = await res.json();
+            if (data.number && data.number !== currentNumber) {
+                currentNumber = data.number;
+                document.getElementById('numberDisplay').textContent = data.number;
+                document.getElementById('status').textContent = '🔄 تم التبديل!';
+                // إعادة تشغيل المراقبة
+                startMonitoring();
+            }
         }
 
-        // ========== العداد التنازلي ==========
-        function startCountdown() {
-            if (countdownInterval) clearInterval(countdownInterval);
-            countdown = 60;
-            const countdownEl = document.getElementById('countdown');
-            countdownEl.style.display = 'block';
-            countdownEl.textContent = `صلاحية الرقم: ${countdown} ثانية`;
-            
-            countdownInterval = setInterval(() => {
-                countdown--;
-                countdownEl.textContent = `صلاحية الرقم: ${countdown} ثانية`;
-                if (countdown <= 0) {
-                    clearInterval(countdownInterval);
-                    countdownEl.textContent = 'انتهت صلاحية الكود';
-                    countdownEl.style.color = '#ff4444';
-                    stopMonitoring();
-                    document.getElementById('status').innerHTML = '<span class="icon">⏰</span>انتهت صلاحية الكود';
-                }
-            }, 1000);
-        }
-
-        // ========== بدء المراقبة ==========
+        // 🎯 مراقبة تلقائية (تبدأ بعد جلب الرقم مباشرة)
         function startMonitoring() {
             if (!currentNumber) return;
-            isMonitoring = true;
-            document.getElementById('startMonitorBtn').disabled = true;
-            document.getElementById('stopMonitorBtn').disabled = false;
-            document.getElementById('status').innerHTML = '<span class="icon">📡</span>بدأ السحب التلقائي...';
-            showToast('📡 بدأ المراقبة!');
-            document.getElementById('otpList').style.display = 'block';
-            document.getElementById('otpList').innerHTML = '<div style="text-align:center; color:#94a3b8; padding:20px;">في انتظار الأكواد...</div>';
-
-            monitorInterval = setInterval(async () => {
-                try {
-                    const res = await fetch('/api/get_otp', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({number: currentNumber})});
-                    const data = await res.json();
+            if (monitorInterval) clearInterval(monitorInterval);
+            const status = document.getElementById('autoMonitorStatus');
+            if (status) { status.classList.remove('done'); status.innerHTML = '<span class="dot"></span> جاري المراقبة التلقائية...'; }
+            monitorInterval = setInterval(() => {
+                fetch('/api/get_otp', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({number:currentNumber})})
+                .then(res => res.json()).then(data => {
                     if (data.otp) {
-                        addOtpToList(data.otp);
+                        const now = new Date().toLocaleString('ar-YE', {timeZone:'Asia/Aden'});
+                        addOtpToHistory(currentNumber, data.otp, now, currentPlatform);
+                        if (status) { status.classList.add('done'); status.innerHTML = '<span class="dot"></span> ✅ تم استلام الكود!'; }
+                        // تشغيل الصوت
                         playNotificationSound();
-                        showToast(`🎉 كود جديد: ${data.otp}`);
+                        // إيقاف المراقبة (الكود وصل)
                         stopMonitoring();
                     }
-                } catch (e) {
-                    console.error('خطأ:', e);
-                }
+                }).catch(()=>{});
             }, 5000);
         }
 
-        // ========== إيقاف المراقبة ==========
         function stopMonitoring() {
-            isMonitoring = false;
-            if (monitorInterval) clearInterval(monitorInterval);
-            document.getElementById('startMonitorBtn').disabled = false;
-            document.getElementById('stopMonitorBtn').disabled = true;
-            document.getElementById('status').innerHTML = '<span class="icon">⏹️</span>تم إيقاف السحب';
+            if (monitorInterval) { clearInterval(monitorInterval); monitorInterval = null; }
         }
 
-        // ========== إضافة كود للقائمة ==========
-        function addOtpToList(otp) {
-            const list = document.getElementById('otpList');
-            if (list.innerHTML.includes('في انتظار')) {
-                list.innerHTML = '';
-            }
-            const item = document.createElement('div');
-            item.className = 'otp-item';
-            const now = new Date().toLocaleTimeString('ar-YE');
-            item.innerHTML = `
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <strong style="color: #00ffc8;">🔑 ${otp}</strong>
-                    <button class="copy-btn" onclick="copyOtp('${otp}')">📋 نسخ</button>
-                </div>
-                <span class="info">📞 +${currentNumber} • 🕒 ${now}</span>
-            `;
-            list.insertBefore(item, list.firstChild);
+        // ✅ إضافة كود للقائمة (الأحدث أولاً، يحفظ في localStorage)
+        function addOtpToHistory(number, otp, timestamp, platform) {
+            const container = document.getElementById('otpHistory');
+            if (container.querySelector('.empty-state')) container.innerHTML = '';
+            const otpId = Date.now() + '_' + Math.random().toString(36).slice(2,8);
+            const otpData = {id: otpId, number, otp, timestamp, platform: platform || currentPlatform || 'unknown', otpTime: Date.now()};
+            allOtpsCache.unshift(otpData);
+            // حفظ في localStorage
+            try {
+                localStorage.setItem('allOtps', JSON.stringify(allOtpsCache.slice(0, 50)));
+            } catch(e) {}
+            renderOtpSections();
+            startAllCountdowns();
         }
 
-        // ========== نسخ الكود ==========
-        async function copyOtp(otp) {
-            await navigator.clipboard.writeText(otp);
-            showToast('✅ تم نسخ الكود!');
-        }
-
-        // ========== تهيئة الصفحة ==========
-        window.addEventListener('load', () => {
-            createStars();
-            initPlatforms();
-        });
-
-        // ========== تحميل المنصات ==========
-        function initPlatforms() {
-            const platforms = {{ platforms|tojson }};
-            const selector = document.getElementById('platformSelector');
-            const colors = {{ platform_colors|tojson }};
-            const logos = {{ platform_logos|tojson }};
-            const names = {{ platform_names|tojson }};
-            
-            platforms.forEach(platform => {
-                const btn = document.createElement('button');
-                btn.className = 'platform-btn';
-                btn.style.setProperty('--bg-gradient', '{{ platform_gradients[platform] }}');
-                btn.style.setProperty('--glow-color', colors[platform]);
-                btn.onclick = (e) => selectPlatform(platform, e);
-                btn.innerHTML = `<img src="${logos[platform]}" alt="${platform}"><span>${names[platform]} ✨</span>`;
-                selector.appendChild(btn);
+        // 🎯 عداد 120 ثانية لكل كود
+        function startAllCountdowns() {
+            Object.values(countdownIntervals).forEach(clearInterval);
+            countdownIntervals = {};
+            document.querySelectorAll('.otp-countdown').forEach(el => {
+                if (el.dataset.started) return;
+                el.dataset.started = '1';
+                const otpId = el.dataset.otpid;
+                const otpData = allOtpsCache.find(o => o.id === otpId);
+                if (!otpData) return;
+                const tick = () => {
+                    const elapsed = Math.floor((Date.now() - otpData.otpTime) / 1000);
+                    const remaining = 120 - elapsed;
+                    if (remaining <= 0) {
+                        el.textContent = '⌛ انتهت';
+                        el.classList.add('expired');
+                        clearInterval(countdownIntervals[otpId]);
+                    } else if (remaining <= 30) {
+                        el.textContent = `⏱️ ${remaining}s`;
+                        el.classList.add('warn');
+                    } else {
+                        el.textContent = `⏱️ ${remaining}s`;
+                    }
+                };
+                tick();
+                countdownIntervals[otpId] = setInterval(tick, 1000);
             });
         }
+
+        // 📂 عرض الأكواد مقسّمة حسب المنصة
+        function renderOtpSections() {
+            const container = document.getElementById('otpHistory');
+            if (!allOtpsCache.length) {
+                container.innerHTML = '<div class="empty-state"><div class="icon">⏳</div><div>في انتظار الأكواد...</div></div>';
+                return;
+            }
+            // تجميع حسب المنصة
+            const grouped = {};
+            allOtpsCache.forEach(o => {
+                const p = o.platform || 'unknown';
+                if (!grouped[p]) grouped[p] = [];
+                grouped[p].push(o);
+            });
+            let html = '';
+            Object.keys(grouped).forEach(platform => {
+                const items = grouped[platform];
+                const logoUrl = platformLogos[platform] || '';
+                const name = platformNames[platform] || platform;
+                html += `
+                <div class="otp-section">
+                    <div class="otp-section-header" onclick="toggleSection(this)">
+                        <img src="${logoUrl}" class="platform-icon" onerror="this.style.display='none'">
+                        <span class="platform-name">${name}</span>
+                        <span class="platform-count">${items.length} كود</span>
+                        <span class="toggle-arrow">▼</span>
+                    </div>
+                    <div class="otp-section-items">
+                        ${items.map(o => `
+                        <div class="otp-item">
+                            <div>
+                                <div class="otp-code">
+                                    <span class="otp-countdown" data-otpid="${o.id}">⏱️ 120</span>
+                                    🔑 ${o.otp}
+                                </div>
+                                <div class="otp-info">📞 ${o.number}  •  🕒 ${o.timestamp}</div>
+                            </div>
+                            <button class="copy-btn" onclick="copyText('${o.otp}', this)">نسخ</button>
+                        </div>
+                        `).join('')}
+                    </div>
+                </div>`;
+            });
+            container.innerHTML = html;
+        }
+
+        function toggleSection(header) {
+            const items = header.nextElementSibling;
+            items.classList.toggle('hidden');
+            header.classList.toggle('collapsed');
+        }
+
+        // تحميل الأكواد المحفوظة من localStorage
+        function loadCachedOtps() {
+            try {
+                const cached = localStorage.getItem('allOtps');
+                if (cached) {
+                    allOtpsCache = JSON.parse(cached);
+                    // فلترة الأكواد اللي عمرها أقل من 24 ساعة
+                    const dayAgo = Date.now() - 24*60*60*1000;
+                    allOtpsCache = allOtpsCache.filter(o => o.otpTime > dayAgo);
+                    if (allOtpsCache.length) renderOtpSections();
+                }
+            } catch(e) {}
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initPlatformSelector();
+            loadCachedOtps();
+            startAllCountdowns();
+        });
     </script>
 </body>
 </html>
 """
 
-# ========== صفحة الأدمن ==========
 admin_html = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🔐 لوحة الأدمن</title>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
-    <style>
-        * { margin:0; padding:0; box-sizing:border-box; }
-        body { font-family:'Cairo',sans-serif; background:#0a0e1a; color:#fff; padding:20px; }
-        .container { max-width:600px; margin:0 auto; background:rgba(17, 24, 39, 0.85); padding:30px; border-radius:16px; border:1px solid rgba(0,255,200,0.3); }
-        h2 { color:#00ffc8; margin:20px 0 15px; font-size:20px; }
-        .form-group { margin-bottom:15px; }
-        label { display:block; margin-bottom:8px; color:#cbd5e1; font-weight:600; }
-        select, input[type="file"] { width:100%; padding:12px; border-radius:8px; border:1px solid rgba(0,255,200,0.3); background:rgba(31, 41, 55, 0.7); color:#fff; font-family:'Cairo',sans-serif; }
-        button { width:100%; padding:12px; border:none; border-radius:8px; background:linear-gradient(135deg, #00ff88, #00d2ff); color:#000; font-weight:bold; cursor:pointer; margin-top:10px; }
-        button:hover { transform:translateY(-2px); box-shadow: 0 5px 20px rgba(0, 255, 136, 0.5); }
-        .btn-danger { background:linear-gradient(135deg, #ef4444, #b91c1c) !important; color:#fff !important; }
-        .combo-item { background:rgba(31, 41, 55, 0.7); padding:12px; border-radius:8px; margin:10px 0; display:flex; justify-content:space-between; align-items:center; }
-        hr { border:none; border-top:1px solid rgba(0,255,200,0.2); margin:20px 0; }
-        a { color:#00ffc8; text-decoration:none; }
-        a:hover { text-decoration:underline; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>⚙️ لوحة التحكم</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { 
+    font-family:'Cairo',sans-serif; 
+    background: linear-gradient(135deg, #0a0e1a, #1a1f2e);
+    color:#fff; min-height:100vh; display:flex; justify-content:center; align-items:center;
+    padding:20px;
+}
+.container { 
+    background:rgba(17, 24, 39, 0.85); backdrop-filter:blur(20px);
+    padding:30px; border-radius:25px; width:100%; max-width:480px; 
+    border:1px solid rgba(139, 92, 246, 0.3);
+    box-shadow: 0 0 50px rgba(139, 92, 246, 0.3);
+}
+h1 { 
+    text-align:center; 
+    background: linear-gradient(90deg, #00ffc8, #8b5cf6);
+    -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+    margin-bottom:25px; font-size:28px; font-weight:900;
+}
+h3 { color:#cbd5e1; margin-bottom:12px; margin-top:18px; }
+.form-group { margin-bottom:15px; }
+.form-group label { display:block; margin-bottom:6px; color:#cbd5e1; font-weight:700; }
+.form-control { 
+    width:100%; padding:12px; border-radius:12px; 
+    border:2px solid rgba(255,255,255,0.1); 
+    background:rgba(31, 41, 55, 0.7); color:#fff; 
+    font-family:'Cairo',sans-serif;
+    transition:all 0.3s;
+}
+.form-control:focus { border-color:#00ffc8; box-shadow: 0 0 20px rgba(0,255,200,0.3); }
+.btn-primary { 
+    width:100%; padding:14px; border:none; border-radius:12px; 
+    background: linear-gradient(135deg, #00ff88, #00d2ff);
+    color:#0a0e1a; cursor:pointer; margin-top:15px; 
+    font-weight:900; font-size:16px; font-family:'Cairo',sans-serif;
+    box-shadow: 0 0 20px rgba(0,255,136,0.4);
+    transition:all 0.3s;
+}
+.btn-primary:hover { transform:translateY(-2px); box-shadow: 0 5px 30px rgba(0,255,136,0.6); }
+.btn-danger { 
+    width:100%; padding:14px; border:none; border-radius:12px; 
+    background: linear-gradient(135deg, #ef4444, #b91c1c);
+    color:#fff; cursor:pointer; margin-top:10px; 
+    font-weight:800; font-size:15px; font-family:'Cairo',sans-serif';
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
+    transition:all 0.3s;
+}
+.btn-danger:hover { transform:translateY(-2px); }
+.btn-secondary { 
+    width:100%; padding:14px; border:none; border-radius:12px; 
+    background: linear-gradient(135deg, #374151, #4b5563);
+    color:#fff; cursor:pointer; margin-top:10px; 
+    font-weight:800; font-size:15px; font-family:'Cairo',sans-serif;
+    transition:all 0.3s;
+}
+.btn-secondary:hover { transform:translateY(-2px); }
+hr { border: 1px solid rgba(255,255,255,0.1); margin: 20px 0; }
+.combo-item { 
+    display:flex; justify-content:space-between; align-items:center; 
+    background:rgba(31, 41, 55, 0.7); padding:12px; border-radius:12px; 
+    margin-bottom:10px; border:1px solid rgba(139, 92, 246, 0.3);
+}
+.combo-item span { color:#fff; font-weight:600; }
+.combo-item button { padding:6px 14px; font-size:13px; margin-top:0 !important; }
+</style>
 </head>
 <body>
-    <div class="container">
-        <h1>🔐 لوحة الأدمن</h1>
-        <hr>
-        <h2>📤 رفع كومبو</h2>
-        <form method="POST" enctype="multipart/form-data">
-            <div class="form-group">
-                <label>اختر المنصة:</label>
-                <select name="platform" required>
-                    <option value="">-- اختر --</option>
-                    <option value="whatsapp">واتساب</option>
-                    <option value="telegram">تيليجرام</option>
-                    <option value="tiktok">تيك توك</option>
-                    <option value="facebook">فيسبوك</option>
-                    <option value="instagram">انستقرام</option>
-                    <option value="snapchat">سناب شات</option>
-                    <option value="google">جوجل</option>
-                    <option value="twitter">تويتر</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>اختر ملف .txt:</label>
-                <input type="file" name="file" accept=".txt" required>
-            </div>
-            <button type="submit">📤 رفع</button>
-        </form>
-        <hr>
-        <h2>🗑️ حذف كومبو</h2>
-        {% if combos %}
-            {% for platform, code, name, flag in combos %}
-            <div class="combo-item">
-                <span>{{ flag }} {{ name }} ({{ platform }})</span>
-                <form method="POST" style="display:inline; margin:0;">
-                    <input type="hidden" name="action" value="delete">
-                    <input type="hidden" name="platform" value="{{ platform }}">
-                    <input type="hidden" name="country_code" value="{{ code }}">
-                    <button type="submit" class="btn-danger" style="width:auto; padding:8px 16px; margin:0;">🗑️ حذف</button>
-                </form>
-            </div>
-            {% endfor %}
-        {% else %}
-            <p style="color:#64748b; text-align:center; padding:20px;">🤷‍♂️ لا توجد كومبوهات حالياً</p>
-        {% endif %}
-        <hr>
-        <a href="/"><button style="background:linear-gradient(135deg, #3b82f6, #1d4ed8); color:#fff;">🔙 العودة للصفحة الرئيسية</button></a>
-    </div>
+<div class="container">
+    <h1>⚙️ لوحة التحكم ⚙️</h1>
+
+    <h3>📤 رفع ملف جديد</h3>
+    <form method="POST" enctype="multipart/form-data">
+        <div class="form-group"><label>📱 المنصة</label>
+        <select name="platform" class="form-control" required>
+            <option value="whatsapp">📱 واتساب</option>
+            <option value="telegram">✈️ تيليجرام</option>
+            <option value="tiktok">🎵 تيك توك</option>
+            <option value="facebook">📘 فيسبوك</option>
+            <option value="instagram">📸 انستقرام</option>
+            <option value="snapchat">👻 سناب شات</option>
+            <option value="google">🔍 جوجل</option>
+            <option value="twitter">🐦 تويتر/X</option>
+        </select></div>
+        <div class="form-group"><label>📁 ارفع ملف الأرقام (.txt)</label>
+        <input type="file" name="file" accept=".txt" class="form-control" required></div>
+        <button type="submit" class="btn-primary">📤 رفع الكومبو</button>
+    </form>
+
+    <hr>
+
+    <h3>🗑️ حذف كومبو</h3>
+    {% if combos %}
+        {% for platform, code, name, flag in combos %}
+        <div class="combo-item">
+            <span>{{ flag }} {{ name }} ({{ platform }})</span>
+            <form method="POST" style="display:inline;">
+                <input type="hidden" name="action" value="delete">
+                <input type="hidden" name="platform" value="{{ platform }}">
+                <input type="hidden" name="country_code" value="{{ code }}">
+                <button type="submit" class="btn-danger">🗑️ حذف</button>
+            </form>
+        </div>
+        {% endfor %}
+    {% else %}
+        <p style="color:#64748b; text-align:center; padding:20px;">🤷‍♂️ لا توجد كومبوهات حالياً</p>
+    {% endif %}
+
+    <hr>
+    <a href="/"><button class="btn-secondary">🔙 العودة للصفحة الرئيسية</button></a>
+</div>
 </body>
 </html>
 """
 
 @app.route('/')
-def home():
-    platforms = get_platforms() or ['whatsapp', 'telegram', 'tiktok', 'facebook', 'instagram', 'snapchat', 'google', 'twitter']
-    return render_template_string(main_html, owner_link=OWNER_LINK, wa_group=WHATSAPP_GROUP_LINK, platforms=platforms, platform_logos=PLATFORM_LOGOS, platform_names=platform_names, platform_colors=platform_colors, platform_gradients=PLATFORM_GRADIENTS)
+# ======================
+# 🔹 استبدل من هنا 👇
+# ======================
 
+def home():
+    return render_template_string(
+        main_html,
+        owner_link=OWNER_LINK,
+        wa_group=WHATSAPP_GROUP_LINK,
+        platform_logos=PLATFORM_LOGOS,
+        platform_logos_small=PLATFORM_LOGOS,
+        platform_names=platform_names,
+        platform_gradients=PLATFORM_GRADIENTS
+    )
+
+# ========== الحصول على قائمة الكومبوهات للحذف ==========
 def get_all_combos_list():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -961,9 +975,11 @@ def get_all_combos_list():
     conn.close()
     return rows
 
+# ========== صفحة الأدمن الجديدة ==========
 @app.route('/admin', methods=['GET', 'POST'])
 def admin():
     if request.method == 'POST':
+        # ===== حذف كومبو =====
         if request.form.get('action') == 'delete':
             platform = request.form.get('platform')
             country_code = request.form.get('country_code')
@@ -974,6 +990,8 @@ def admin():
                 conn.commit()
                 conn.close()
                 return redirect(url_for('admin'))
+
+        # ===== رفع كومبو =====
         else:
             platform = request.form.get('platform')
             file = request.files.get('file')
@@ -992,6 +1010,8 @@ def admin():
                         name, flag = get_country_info(cc)
                         save_combo(platform, cc, name, flag, numbers)
                         return redirect(url_for('home'))
+    
+    # جلب قائمة الكومبوهات الحالية
     combos = get_all_combos_list()
     return render_template_string(admin_html, combos=combos)
 
@@ -1014,6 +1034,28 @@ def api_get_otp():
     row = c.fetchone()
     conn.close()
     return jsonify({'otp': row[0] if row else None})
+
+# ========== ✅ API واحد فقط: جلب جميع الأكواد مرة واحدة (مع caching في المتصفح) ==========
+_otp_cache = {'data': None, 'time': 0}
+CACHE_DURATION = 30  # ثواني
+
+@app.route('/api/all_otps', methods=['GET'])
+def api_all_otps():
+    now = time.time()
+    if _otp_cache['data'] is not None and (now - _otp_cache['time']) < CACHE_DURATION:
+        return jsonify(_otp_cache['data'])
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT id, number, otp, timestamp, platform, country_code, country_flag FROM otp_logs ORDER BY id DESC LIMIT 100")
+    rows = c.fetchall()
+    conn.close()
+    result = [{
+        'id': r[0], 'number': r[1], 'otp': r[2], 'timestamp': r[3],
+        'platform': r[4] or 'Unknown', 'country_code': r[5] or '', 'country_flag': r[6] or '🌍'
+    } for r in rows]
+    _otp_cache['data'] = result
+    _otp_cache['time'] = now
+    return jsonify(result)
 
 def monitor_channel():
     last_update_id = 0
