@@ -18,6 +18,10 @@ OWNER_LINK = f"https://wa.me/{OWNER_PHONE}"
 
 TELEGRAM_BOT_TOKEN = "8814038881:AAGyuACUYA4YPKlJQhAyUMkpRNiV0u1gNuU"
 CHANNEL_USERNAME = "@jsjsgsjsvh"
+# ✅ [جديد] ID الأدمن اللي بنرسل له طلبات المساعدة والإعلانات الجديدة
+OWNER_TELEGRAM_ID = "ABOD_90N"  # username الأدمن
+# ✅ [جديد] ID جروب تيليجرام للمراقبة (سالب للقروبات)
+TELEGRAM_GROUP_CHAT_ID = "-1001234567890"  # لازم تحدد الـ chat_id الحقيقي للجروب
 
 # ========== قاعدة البيانات ==========
 def init_db():
@@ -25,6 +29,10 @@ def init_db():
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS combos (id INTEGER PRIMARY KEY AUTOINCREMENT, platform TEXT, country_code TEXT, country_name TEXT, country_flag TEXT, numbers TEXT, UNIQUE(platform, country_code))''')
     c.execute('''CREATE TABLE IF NOT EXISTS otp_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, number TEXT, otp TEXT, timestamp TEXT, platform TEXT)''')
+    # ✅ [جديد] جدول الإعلانات اللي بنرسلها من البوت
+    c.execute('''CREATE TABLE IF NOT EXISTS announcements (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT, content TEXT, media_url TEXT, button_text TEXT, button_url TEXT, source_msg_id INTEGER, created_at TEXT)''')
+    # ✅ [جديد] جدول طلبات المساعدة من الموقع
+    c.execute('''CREATE TABLE IF NOT EXISTS help_requests (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, message TEXT, source TEXT, status TEXT DEFAULT 'pending', created_at TEXT)''')
     conn.commit()
     conn.close()
 init_db()
@@ -342,11 +350,78 @@ main_html = """
         }
         body.light .news-ticker { background: linear-gradient(90deg, #f6f8fa, #eaeef2, #f6f8fa); border-bottom-color: #d0d7de; }
         body.light .ticker-content { color: #1f2328; }
-        .dropdown-menu { display:none; position:absolute; top:55px; left:16px; right:16px; background:#1c2128; border:1px solid #30363d; border-radius:10px; padding:6px; z-index:100; box-shadow:0 4px 12px rgba(0,0,0,0.4); flex-direction:column; gap:2px; }
+        /* ============= [القائمة المنسدلة] بتصميم احترافي مع أيقونات SVG ============= */
+        .dropdown-menu { 
+            display:none; 
+            position:absolute; 
+            top:55px; 
+            left:16px; 
+            right:16px; 
+            background:linear-gradient(180deg, #1c2128 0%, #161b22 100%);
+            border:1px solid #30363d; 
+            border-radius:14px; 
+            padding:10px; 
+            z-index:100; 
+            box-shadow:0 12px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(88,166,255,0.08); 
+            flex-direction:column; 
+            gap:4px;
+            max-width:340px;
+            margin:0 auto;
+            animation: menuSlide 0.25s ease;
+        }
         .dropdown-menu.show { display:flex; }
-        .dropdown-menu a { display:flex; align-items:center; gap:10px; color:#e6e6e6; text-decoration:none; padding:11px 14px; border-radius:8px; font-size:14px; font-weight:600; white-space:nowrap; }
-        .dropdown-menu a:hover { background:#21262d; color:#58a6ff; }
-        .dropdown-menu a .ico { font-size:18px; }
+        @keyframes menuSlide {
+            from { opacity:0; transform:translateY(-8px); }
+            to   { opacity:1; transform:translateY(0); }
+        }
+        .dropdown-menu a { 
+            display:flex; 
+            align-items:center; 
+            gap:12px; 
+            color:#e6e6e6; 
+            text-decoration:none; 
+            padding:12px 14px; 
+            border-radius:10px; 
+            font-size:14px; 
+            font-weight:600; 
+            white-space:nowrap; 
+            transition:all 0.15s ease;
+            border:1px solid transparent;
+            width:100%;
+        }
+        .dropdown-menu a:hover { 
+            background:linear-gradient(135deg, #21262d 0%, #1c2128 100%); 
+            color:#58a6ff; 
+            border-color:#30363d;
+            transform:translateX(-3px);
+        }
+        .dropdown-menu a .ico { 
+            font-size:20px; 
+            width:32px; 
+            height:32px; 
+            display:flex; 
+            align-items:center; 
+            justify-content:center;
+            background:rgba(88,166,255,0.1);
+            border-radius:8px;
+            flex-shrink:0;
+        }
+        .dropdown-menu a:hover .ico {
+            background:rgba(88,166,255,0.2);
+        }
+        .dropdown-menu .menu-divider {
+            height:1px;
+            background:linear-gradient(90deg, transparent, #30363d, transparent);
+            margin:6px 0;
+        }
+        .dropdown-menu .menu-header {
+            font-size:11px;
+            color:#8b949e;
+            font-weight:700;
+            padding:6px 14px 2px;
+            text-transform:uppercase;
+            letter-spacing:0.5px;
+        }
 
         /* ============= MAIN CONTENT ============= */
         .main { padding:16px; flex:1; }
@@ -548,6 +623,80 @@ main_html = """
         .footer { text-align:center; padding:20px 16px; color:#484f58; font-size:12px; border-top:1px solid #21262d; }
         body.light .footer { color:#656d76; border-top-color:#d0d7de; }
 
+        /* ============= [الفوتر] تذييل الصفحة ============= */
+        .footer-section {
+            background: linear-gradient(180deg, #0d1117, #07090d);
+            border-top: 1px solid #21262d;
+            padding: 0;
+            margin-top: 20px;
+        }
+        .footer-info {
+            text-align:center;
+            padding: 18px 16px;
+            color: #8b949e;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .footer-info strong { color: #58a6ff; }
+        body.light .footer-section { background: linear-gradient(180deg, #ffffff, #f6f8fa); border-top-color: #d0d7de; }
+        body.light .footer-info { color: #656d76; }
+
+        /* ============= [مودال طلب المساعدة] ============= */
+        .modal-overlay {
+            display: none;
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(8px);
+            z-index: 10000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .modal-overlay.show { display: flex; animation: fadeIn 0.2s ease; }
+        @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+        .modal-box {
+            background: linear-gradient(180deg, #1c2128, #161b22);
+            border: 1px solid #30363d;
+            border-radius: 16px;
+            padding: 24px;
+            max-width: 420px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            animation: slideUp 0.3s ease;
+        }
+        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .modal-box h2 { color: #fff; font-size: 18px; margin-bottom: 8px; text-align: center; }
+        .modal-box p { color: #8b949e; font-size: 13px; text-align: center; margin-bottom: 18px; }
+        .modal-box textarea {
+            width: 100%; min-height: 100px;
+            background: #0d1117; color: #e6e6e6;
+            border: 1px solid #30363d; border-radius: 10px;
+            padding: 12px; font-family: 'Cairo', sans-serif; font-size: 14px;
+            resize: vertical; outline: none;
+        }
+        .modal-box textarea:focus { border-color: #1f6feb; }
+        .modal-box .modal-actions { display: flex; gap: 10px; margin-top: 16px; }
+        .modal-box button {
+            flex: 1; padding: 12px; border: none; border-radius: 10px;
+            font-family: 'Cairo', sans-serif; font-size: 14px; font-weight: 700; cursor: pointer;
+            transition: all 0.2s;
+        }
+        .modal-box .btn-send { background: linear-gradient(135deg, #238636, #2ea043); color: #fff; }
+        .modal-box .btn-send:hover { transform: translateY(-1px); }
+        .modal-box .btn-send:disabled { opacity: 0.5; cursor: not-allowed; }
+        .modal-box .btn-cancel { background: #30363d; color: #e6e6e6; }
+        .modal-box .btn-cancel:hover { background: #484f58; }
+        .modal-box .success-msg {
+            background: rgba(35, 134, 54, 0.15);
+            border: 1px solid #238636;
+            color: #3fb950;
+            padding: 12px;
+            border-radius: 10px;
+            text-align: center;
+            font-size: 14px;
+            margin-top: 12px;
+        }
+
         /* ============= RESPONSIVE ============= */
         @media (max-width:380px) {
             .hero h1 { font-size:20px; }
@@ -567,37 +716,43 @@ main_html = """
                 <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">🌙</button>
                 <button class="menu-btn" onclick="toggleMenu()">☰</button>
                 <div class="dropdown-menu" id="contactMenu">
-                    <a href="{{ owner_link }}" target="_blank"><span class="ico">📞</span> تواصل معي على واتساب</a>
-                    <a href="{{ wa_group }}" target="_blank"><span class="ico">💬</span> جروب واتساب الرسمي</a>
-                    <a href="https://t.me/jsjsgsjsvh" target="_blank"><span class="ico">📢</span> قناة تليجرام</a>
+                    <div class="menu-header">📞 تواصل معنا</div>
+                    <a href="{{ owner_link }}" target="_blank">
+                        <span class="ico">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                        </span>
+                        <span>تواصل معي على واتساب</span>
+                    </a>
+                    <a href="{{ wa_group }}" target="_blank">
+                        <span class="ico">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="#25D366"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.95 9.95 0 004.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.825 9.825 0 0012.04 2zm5.45 13.91c-.23.64-1.36 1.24-1.86 1.31-.47.07-1.07.1-1.73-.1-.4-.13-.92-.31-1.59-.62-2.79-1.21-4.61-4.02-4.75-4.21-.14-.18-1.13-1.5-1.13-2.86 0-1.36.71-2.03.96-2.31.25-.28.55-.35.74-.35.19 0 .37 0 .53.01.17.01.4-.06.62.47.23.55.79 1.91.86 2.05.07.14.12.31.02.49-.1.18-.14.29-.28.45-.14.16-.3.36-.42.48-.14.14-.29.3-.12.58.16.28.72 1.19 1.55 1.93 1.07.95 1.97 1.25 2.25 1.39.28.14.44.12.6-.07.16-.19.7-.81.88-1.09.18-.28.37-.23.62-.14.25.09 1.6.75 1.87.89.28.14.46.21.53.32.07.11.07.65-.16 1.29z"/></svg>
+                        </span>
+                        <span>جروب واتساب الرسمي</span>
+                    </a>
+                    <a href="https://t.me/jsjsgsjsvh" target="_blank">
+                        <span class="ico">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="#26A5E4"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.479.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
+                        </span>
+                        <span>قناة تليجرام</span>
+                    </a>
+                    <div class="menu-divider"></div>
+                    <a href="/learn-more">
+                        <span class="ico">📰</span>
+                        <span>اعرف المزيد عن الموقع</span>
+                    </a>
+                    <a href="/announcements">
+                        <span class="ico">📢</span>
+                        <span>إعلانات الموقع</span>
+                    </a>
+                    <a href="#" onclick="openHelpModal(); return false;">
+                        <span class="ico">🆘</span>
+                        <span>طلب مساعدة</span>
+                    </a>
                 </div>
             </div>
         </div>
 
-        <!-- [شريط الأخبار] يتحدث عن الموقع والمطور -->
-        <div class="news-ticker">
-            <div class="ticker-content">
-                <span class="ticker-item"><span class="ticker-emoji">🚀</span> مرحباً بك في موقع المطري OTP</span>
-                <span class="ticker-item"><span class="ticker-emoji">⚡</span> أسرع موقع للحصول على الأكواد</span>
-                <span class="ticker-item"><span class="ticker-emoji">💎</span> صُنع بحب بواسطة</span>
-                <span class="ticker-item"><span class="ticker-name">المطري</span> 🔥</span>
-                <span class="ticker-item"><span class="ticker-emoji">🌍</span> دعم 195+ دولة حول العالم</span>
-                <span class="ticker-item"><span class="ticker-emoji">📱</span> واتساب • تيليجرام • فيسبوك • تيك توك</span>
-                <span class="ticker-item"><span class="ticker-emoji">🔔</span> إشعارات فورية لحظة بلحظة</span>
-                <span class="ticker-item"><span class="ticker-emoji">🎯</span> المطور المطري يقدّم لك أفضل تجربة</span>
-                <span class="ticker-item"><span class="ticker-emoji">⭐</span> شكراً لزيارتك</span>
-                <!-- مكرر للتمرير السلس -->
-                <span class="ticker-item"><span class="ticker-emoji">🚀</span> مرحباً بك في موقع المطري OTP</span>
-                <span class="ticker-item"><span class="ticker-emoji">⚡</span> أسرع موقع للحصول على الأكواد</span>
-                <span class="ticker-item"><span class="ticker-emoji">💎</span> صُنع بحب بواسطة</span>
-                <span class="ticker-item"><span class="ticker-name">المطري</span> 🔥</span>
-                <span class="ticker-item"><span class="ticker-emoji">🌍</span> دعم 195+ دولة حول العالم</span>
-                <span class="ticker-item"><span class="ticker-emoji">📱</span> واتساب • تيليجرام • فيسبوك • تيك توك</span>
-                <span class="ticker-item"><span class="ticker-emoji">🔔</span> إشعارات فورية لحظة بلحظة</span>
-                <span class="ticker-item"><span class="ticker-emoji">🎯</span> المطور المطري يقدّم لك أفضل تجربة</span>
-                <span class="ticker-item"><span class="ticker-emoji">⭐</span> شكراً لزيارتك</span>
-            </div>
-        </div>
+        <!-- ✅ [الإصلاح] تم حذف شريط الأخبار من هنا ونقله إلى الفوتر -->
 
         <!-- MAIN -->
         <div class="main">
@@ -643,8 +798,51 @@ main_html = """
             <div class="status" id="status">⚡ اختر المنصة والدولة للبدء</div>
         </div>
 
-        <div class="footer">
-            <span class="emoji-pulse-soft">💎</span> صُنع بحب <span class="emoji-spin">⚡</span> بواسطة المطري <span class="emoji-wave">🔥</span>
+        <!-- ✅ [الإصلاح] شريط الأخبار الاحترافي في الفوتر -->
+        <div class="footer-section">
+            <div class="news-ticker">
+                <div class="ticker-content">
+                    <span class="ticker-item"><span class="ticker-emoji">🚀</span> مرحباً بك في موقع المطري OTP</span>
+                    <span class="ticker-item"><span class="ticker-emoji">⚡</span> أسرع موقع للحصول على الأكواد</span>
+                    <span class="ticker-item"><span class="ticker-emoji">💎</span> صُنع بحب بواسطة</span>
+                    <span class="ticker-item"><span class="ticker-name">المطري</span> 🔥</span>
+                    <span class="ticker-item"><span class="ticker-emoji">🌍</span> دعم 195+ دولة حول العالم</span>
+                    <span class="ticker-item"><span class="ticker-emoji">📱</span> واتساب • تيليجرام • فيسبوك • تيك توك</span>
+                    <span class="ticker-item"><span class="ticker-emoji">🔔</span> إشعارات فورية لحظة بلحظة</span>
+                    <span class="ticker-item"><span class="ticker-emoji">🎯</span> المطور المطري يقدّم لك أفضل تجربة</span>
+                    <span class="ticker-item"><span class="ticker-emoji">⭐</span> شكراً لزيارتك</span>
+                    <!-- مكرر للتمرير السلس -->
+                    <span class="ticker-item"><span class="ticker-emoji">🚀</span> مرحباً بك في موقع المطري OTP</span>
+                    <span class="ticker-item"><span class="ticker-emoji">⚡</span> أسرع موقع للحصول على الأكواد</span>
+                    <span class="ticker-item"><span class="ticker-emoji">💎</span> صُنع بحب بواسطة</span>
+                    <span class="ticker-item"><span class="ticker-name">المطري</span> 🔥</span>
+                    <span class="ticker-item"><span class="ticker-emoji">🌍</span> دعم 195+ دولة حول العالم</span>
+                    <span class="ticker-item"><span class="ticker-emoji">📱</span> واتساب • تيليجرام • فيسبوك • تيك توك</span>
+                    <span class="ticker-item"><span class="ticker-emoji">🔔</span> إشعارات فورية لحظة بلحظة</span>
+                    <span class="ticker-item"><span class="ticker-emoji">🎯</span> المطور المطري يقدّم لك أفضل تجربة</span>
+                    <span class="ticker-item"><span class="ticker-emoji">⭐</span> شكراً لزيارتك</span>
+                </div>
+            </div>
+            <div class="footer-info">
+                <span class="emoji-pulse-soft">💎</span> صُنع بحب <span class="emoji-spin">⚡</span> بواسطة <strong>المطري</strong> <span class="emoji-wave">🔥</span>
+                <br><span style="color:#484f58; font-size:11px;">جميع الحقوق محفوظة © 2025</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ✅ [مودال طلب المساعدة] -->
+    <div class="modal-overlay" id="helpModal" onclick="if(event.target===this) closeHelpModal()">
+        <div class="modal-box">
+            <h2>🆘 طلب مساعدة</h2>
+            <p>اشرح مشكلتك وسنرد عليك في أسرع وقت</p>
+            <textarea id="helpMessage" placeholder="اكتب رسالتك هنا... مثلاً: أحتاج رقم واتساب سعودي لكن الأرقام لا تظهر"></textarea>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeHelpModal()">إلغاء</button>
+                <button class="btn-send" id="sendHelpBtn" onclick="sendHelpRequest()">إرسال</button>
+            </div>
+            <div class="success-msg" id="helpSuccess" style="display:none;">
+                ✅ تم إرسال رسالتك بنجاح! سنرد عليك قريباً
+            </div>
         </div>
     </div>
 
@@ -656,6 +854,40 @@ main_html = """
 
         function toggleMenu() {
             document.getElementById('contactMenu').classList.toggle('show');
+        }
+
+        // ✅ [مودال طلب المساعدة]
+        function openHelpModal() {
+            document.getElementById('helpModal').classList.add('show');
+            document.getElementById('helpMessage').value = '';
+            document.getElementById('helpSuccess').style.display = 'none';
+        }
+        function closeHelpModal() {
+            document.getElementById('helpModal').classList.remove('show');
+        }
+        async function sendHelpRequest() {
+            const msg = document.getElementById('helpMessage').value.trim();
+            if (!msg) { alert('الرجاء كتابة رسالتك'); return; }
+            const btn = document.getElementById('sendHelpBtn');
+            btn.disabled = true; btn.textContent = '⏳ جاري الإرسال...';
+            try {
+                const res = await fetch('/api/help', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({message: msg})
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    document.getElementById('helpSuccess').style.display = 'block';
+                    document.getElementById('helpMessage').value = '';
+                    setTimeout(() => closeHelpModal(), 2000);
+                } else {
+                    alert('❌ فشل الإرسال: ' + (data.error || 'حاول مرة أخرى'));
+                }
+            } catch(e) {
+                alert('❌ فشل الاتصال بالخادم');
+            }
+            btn.disabled = false; btn.textContent = 'إرسال';
         }
         document.addEventListener('click', function(event) {
             const menu = document.getElementById('contactMenu');
@@ -1188,7 +1420,10 @@ def api_countries():
 def api_get_number():
     d = request.json
     nums = get_numbers(d['platform'], d['country'])
-    return jsonify({'number': random.choice(nums) if nums else None})
+    if not nums:
+        return jsonify({'number': None})
+    # ✅ [الإصلاح] نرجّع الرقم كما هو بدون أي عكس أو تعديل
+    return jsonify({'number': nums[0] if nums else None})
 
 @app.route('/api/get_otp', methods=['POST'])
 def api_get_otp():
@@ -1415,6 +1650,374 @@ def monitor_channel():
         time.sleep(5)
 
 threading.Thread(target=monitor_channel, daemon=True).start()
+
+# ========== ✅ [بوت تيليجرام] يراقب الجروب ويستقبل الإعلانات ==========
+def monitor_telegram_group():
+    """يراقب الجروب ويستقبل الإعلانات + أوامر الأدمن"""
+    last_update_id = 0
+    while True:
+        try:
+            url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
+            params = {"timeout": 15, "offset": last_update_id + 1, "allowed_updates": ["message", "channel_post"]}
+            r = requests.get(url, params=params, timeout=20)
+            if r.status_code != 200:
+                time.sleep(5)
+                continue
+            data = r.json()
+            if not data.get('ok'):
+                time.sleep(5)
+                continue
+            for upd in data.get('result', []):
+                last_update_id = upd['update_id']
+                msg = upd.get('message') or upd.get('channel_post')
+                if not msg:
+                    continue
+                chat = msg.get('chat', {})
+                chat_id = chat.get('id')
+                chat_type = chat.get('type', '')
+                text = msg.get('text', '') or msg.get('caption', '')
+                # 📨 رسالة في الجروب (إعلان جديد)
+                if chat_type in ('group', 'supergroup', 'channel'):
+                    if not text and not msg.get('photo') and not msg.get('video'):
+                        continue
+                    # تحديد نوع الإعلان
+                    ann_type = 'text'
+                    media_url = None
+                    content = text or ''
+                    button_text = None
+                    button_url = None
+                    # إذا في صورة
+                    if msg.get('photo'):
+                        ann_type = 'image'
+                        # جلب أكبر صورة
+                        photo = msg['photo'][-1]
+                        file_id = photo['file_id']
+                        # جلب رابط الصورة
+                        try:
+                            file_info = requests.get(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getFile?file_id={file_id}", timeout=10).json()
+                            if file_info.get('ok'):
+                                media_url = f"https://api.telegram.org/file/bot{TELEGRAM_BOT_TOKEN}/{file_info['result']['file_path']}"
+                        except: pass
+                    # إذا في فيديو
+                    elif msg.get('video'):
+                        ann_type = 'video'
+                        try:
+                            file_id = msg['video']['file_id']
+                            file_info = requests.get(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getFile?file_id={file_id}", timeout=10).json()
+                            if file_info.get('ok'):
+                                media_url = f"https://api.telegram.org/file/bot{TELEGRAM_BOT_TOKEN}/{file_info['result']['file_path']}"
+                        except: pass
+                    # البحث عن زر في النص (صيغة: 🔗 زر | URL)
+                    if text:
+                        btn_match = re.search(r'\[(.+?)\|(https?://[^\s\]]+)\]', text)
+                        if btn_match:
+                            button_text = btn_match.group(1)
+                            button_url = btn_match.group(2)
+                            content = text.replace(btn_match.group(0), '').strip()
+                    # حفظ في قاعدة البيانات
+                    if content or media_url:
+                        conn = sqlite3.connect(DB_PATH)
+                        conn.cursor().execute(
+                            "INSERT INTO announcements (type, content, media_url, button_text, button_url, source_msg_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                            (ann_type, content, media_url, button_text, button_url, msg.get('message_id'), datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                        )
+                        conn.commit()
+                        conn.close()
+                        print(f"✅ [إعلان جديد] {ann_type} | {content[:30]}...")
+                        # إرسال إشعار للقروب بأن الإعلان تم نشره في الموقع
+                        try:
+                            requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage", json={
+                                'chat_id': chat_id,
+                                'text': f'✅ تم نشر الإعلان في الموقع بنجاح!',
+                                'reply_to_message_id': msg.get('message_id')
+                            }, timeout=10)
+                        except: pass
+                # 📩 رسالة خاصة للبوت من الأدمن
+                elif chat_type == 'private':
+                    if not text:
+                        continue
+                    if text == '/start':
+                        requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage", json={
+                            'chat_id': chat_id,
+                            'text': '🤖 <b>مرحباً بك في بوت المطري OTP</b>\n\nهذا البوت مربوط بموقع المطري OTP. الإعلانات التي تنشرها في الجروب الرسمي ستظهر تلقائياً في الموقع.\n\n✅ أرسل إعلانك في الجروب وسيظهر فوراً!'
+                        }, timeout=10)
+                    elif text == '/announcements':
+                        conn = sqlite3.connect(DB_PATH)
+                        c = conn.cursor()
+                        c.execute("SELECT COUNT(*) FROM announcements")
+                        count = c.fetchone()[0]
+                        conn.close()
+                        requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage", json={
+                            'chat_id': chat_id,
+                            'text': f'📊 عدد الإعلانات المنشورة في الموقع: <b>{count}</b>'
+                        }, timeout=10)
+        except Exception as e:
+            print(f"❌ خطأ في بوت تيليجرام: {e}")
+        time.sleep(3)
+
+threading.Thread(target=monitor_telegram_group, daemon=True).start()
+
+# ========== ✅ نظام الإعلانات (مربوط بالبوت والجروب) ==========
+@app.route('/api/announcements', methods=['GET'])
+def api_get_announcements():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT id, type, content, media_url, button_text, button_url, created_at FROM announcements ORDER BY id DESC LIMIT 50")
+    rows = c.fetchall()
+    conn.close()
+    return jsonify([{
+        'id': r[0], 'type': r[1], 'content': r[2], 'media_url': r[3],
+        'button_text': r[4], 'button_url': r[5], 'created_at': r[6]
+    } for r in rows])
+
+# ========== ✅ API طلب مساعدة ==========
+@app.route('/api/help', methods=['POST'])
+def api_help():
+    d = request.json
+    msg = (d.get('message') or '').strip()
+    if not msg:
+        return jsonify({'ok': False, 'error': 'الرسالة فارغة'}), 400
+    user_id = request.headers.get('X-Forwarded-For', request.remote_addr or 'unknown')
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("INSERT INTO help_requests (user_id, message, source, created_at) VALUES (?, ?, ?, ?)",
+              (user_id, msg, 'website', datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+    help_id = c.lastrowid
+    conn.commit()
+    conn.close()
+    # إرسال الرسالة إلى البوت عبر تيليجرام
+    try:
+        help_text = (
+            f"🆘 <b>طلب مساعدة جديد #{help_id}</b>\n\n"
+            f"👤 المستخدم: <code>{user_id}</code>\n"
+            f"💬 الرسالة:\n{msg}\n\n"
+            f"🕒 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        )
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        requests.post(url, json={
+            'chat_id': OWNER_TELEGRAM_ID,
+            'text': help_text,
+            'parse_mode': 'HTML'
+        }, timeout=10)
+    except Exception as e:
+        print(f"❌ فشل إرسال طلب المساعدة للبوت: {e}")
+    return jsonify({'ok': True, 'id': help_id})
+
+# ========== ✅ صفحة الإعلانات ==========
+announcements_html = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>إعلانات الموقع - المطري OTP</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Cairo',sans-serif; background:#07090d; color:#c9d1d9; min-height:100vh; }
+.container { max-width:480px; margin:0 auto; padding:16px; }
+.header {
+    background: linear-gradient(135deg, #1f6feb, #388bfd);
+    padding: 24px 20px; border-radius: 14px; margin-bottom: 20px;
+    box-shadow: 0 4px 20px rgba(31, 111, 235, 0.3);
+    text-align: center;
+}
+.header h1 { color:#fff; font-size: 22px; font-weight: 900; margin-bottom: 4px; }
+.header p { color: rgba(255,255,255,0.85); font-size: 13px; }
+.ann-card {
+    background: #1c2128; border: 1px solid #30363d; border-radius: 12px;
+    padding: 16px; margin-bottom: 12px;
+    transition: all 0.2s;
+}
+.ann-card:hover { border-color: #58a6ff; transform: translateY(-2px); }
+.ann-type {
+    display: inline-block; padding: 3px 10px; border-radius: 6px;
+    font-size: 11px; font-weight: 700; margin-bottom: 8px;
+}
+.ann-type.text { background: #1f6feb; color: #fff; }
+.ann-type.image { background: #238636; color: #fff; }
+.ann-type.video { background: #d29922; color: #fff; }
+.ann-content { color: #e6e6e6; font-size: 14px; line-height: 1.6; margin-bottom: 10px; }
+.ann-media { max-width: 100%; border-radius: 8px; margin-bottom: 10px; }
+.ann-btn {
+    display: inline-block; padding: 10px 20px; background: linear-gradient(135deg, #238636, #2ea043);
+    color: #fff; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 14px;
+}
+.ann-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(35, 134, 54, 0.4); }
+.ann-time { color: #6e7681; font-size: 11px; margin-top: 8px; }
+.empty { text-align: center; padding: 40px 16px; color: #6e7681; }
+.back-btn {
+    display: inline-block; padding: 10px 20px; background: #30363d; color: #fff;
+    text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 14px; margin-bottom: 16px;
+}
+.back-btn:hover { background: #484f58; }
+</style>
+</head>
+<body>
+<div class="container">
+    <a href="/" class="back-btn">🔙 العودة للرئيسية</a>
+    <div class="header">
+        <h1>📢 إعلانات الموقع</h1>
+        <p>تابع آخر الإعلانات والتحديثات</p>
+    </div>
+    <div id="annList">
+        <div class="empty">⏳ جاري التحميل...</div>
+    </div>
+</div>
+<script>
+async function loadAnnouncements() {
+    try {
+        const res = await fetch('/api/announcements');
+        const data = await res.json();
+        const container = document.getElementById('annList');
+        if (!data.length) {
+            container.innerHTML = '<div class="empty">📭 لا توجد إعلانات حالياً</div>';
+            return;
+        }
+        container.innerHTML = data.map(a => {
+            let media = '';
+            if (a.type === 'image' && a.media_url) {
+                media = `<img src="${a.media_url}" class="ann-media" alt="">`;
+            } else if (a.type === 'video' && a.media_url) {
+                media = `<video src="${a.media_url}" class="ann-media" controls></video>`;
+            }
+            const btn = a.button_url ? `<a href="${a.button_url}" target="_blank" class="ann-btn">${a.button_text || 'افتح الرابط'}</a>` : '';
+            return `
+                <div class="ann-card">
+                    <span class="ann-type ${a.type}">${a.type === 'text' ? '📝' : a.type === 'image' ? '🖼️' : '🎥'} ${a.type}</span>
+                    ${media}
+                    <div class="ann-content">${a.content || ''}</div>
+                    ${btn}
+                    <div class="ann-time">🕒 ${a.created_at}</div>
+                </div>
+            `;
+        }).join('');
+    } catch(e) {
+        document.getElementById('annList').innerHTML = '<div class="empty">❌ فشل تحميل الإعلانات</div>';
+    }
+}
+loadAnnouncements();
+</script>
+</body>
+</html>
+"""
+
+@app.route('/announcements')
+def announcements_page():
+    return render_template_string(announcements_html)
+
+# ========== ✅ صفحة "اعرف المزيد عن الموقع" ==========
+learn_more_html = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>اعرف المزيد - المطري OTP</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Cairo',sans-serif; background:#07090d; color:#c9d1d9; min-height:100vh; }
+.container { max-width:480px; margin:0 auto; padding:16px; }
+.back-btn {
+    display: inline-block; padding: 10px 20px; background: #30363d; color: #fff;
+    text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 14px; margin-bottom: 16px;
+}
+.back-btn:hover { background: #484f58; }
+.hero-card {
+    background: linear-gradient(135deg, #1f6feb 0%, #6e40c9 100%);
+    padding: 30px 24px; border-radius: 16px; margin-bottom: 20px;
+    text-align: center; box-shadow: 0 8px 30px rgba(31, 111, 235, 0.4);
+}
+.hero-card h1 { color: #fff; font-size: 26px; font-weight: 900; margin-bottom: 8px; }
+.hero-card p { color: rgba(255,255,255,0.9); font-size: 14px; line-height: 1.6; }
+.section { background: #0d1117; border: 1px solid #21262d; border-radius: 14px; padding: 20px; margin-bottom: 16px; }
+.section h2 { color: #fff; font-size: 17px; font-weight: 800; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+.feature { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid #21262d; }
+.feature:last-child { border-bottom: none; }
+.feature-icon {
+    width: 40px; height: 40px; border-radius: 10px;
+    background: linear-gradient(135deg, #1f6feb, #388bfd);
+    display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0;
+}
+.feature-text h3 { color: #fff; font-size: 14px; font-weight: 700; margin-bottom: 2px; }
+.feature-text p { color: #8b949e; font-size: 12px; line-height: 1.5; }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 8px; }
+.stat { text-align: center; padding: 14px 8px; background: #161b22; border-radius: 10px; }
+.stat-num { font-size: 22px; font-weight: 900; color: #58a6ff; }
+.stat-label { font-size: 11px; color: #8b949e; margin-top: 2px; }
+.cta-box {
+    background: linear-gradient(135deg, #238636, #2ea043);
+    padding: 20px; border-radius: 14px; text-align: center; margin-bottom: 16px;
+}
+.cta-box a {
+    display: inline-block; padding: 12px 28px; background: #fff; color: #238636;
+    text-decoration: none; border-radius: 10px; font-weight: 800; font-size: 15px; margin-top: 8px;
+}
+</style>
+</head>
+<body>
+<div class="container">
+    <a href="/" class="back-btn">🔙 العودة للرئيسية</a>
+    <div class="hero-card">
+        <h1>🚀 المطري OTP</h1>
+        <p>أسرع وأقوى منصة لاستقبال أكواد التحقق من جميع المنصات العالمية</p>
+    </div>
+
+    <div class="section">
+        <h2>⭐ مميزات الموقع</h2>
+        <div class="feature">
+            <div class="feature-icon">🌍</div>
+            <div class="feature-text">
+                <h3>195+ دولة حول العالم</h3>
+                <p>نغطي جميع دول العالم بأرقام موثوقة وسريعة</p>
+            </div>
+        </div>
+        <div class="feature">
+            <div class="feature-icon">⚡</div>
+            <div class="feature-text">
+                <h3>استلام فوري للأكواد</h3>
+                <p>الأكواد توصلك خلال ثوانٍ من وصولها</p>
+            </div>
+        </div>
+        <div class="feature">
+            <div class="feature-icon">🔒</div>
+            <div class="feature-text">
+                <h3>خصوصية وأمان عالي</h3>
+                <p>حماية كاملة لبياناتك بدون تسجيل</p>
+            </div>
+        </div>
+        <div class="feature">
+            <div class="feature-icon">📱</div>
+            <div class="feature-text">
+                <h3>دعم 8 منصات رئيسية</h3>
+                <p>واتساب، تيليجرام، فيسبوك، تيك توك، انستقرام، سناب، جوجل، تويتر</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>📊 إحصائيات</h2>
+        <div class="stats">
+            <div class="stat"><div class="stat-num">195+</div><div class="stat-label">دولة</div></div>
+            <div class="stat"><div class="stat-num">8</div><div class="stat-label">منصات</div></div>
+            <div class="stat"><div class="stat-num">24/7</div><div class="stat-label">دعم</div></div>
+        </div>
+    </div>
+
+    <div class="cta-box">
+        <h2 style="color:#fff; font-size:18px;">🎯 جاهز للبدء؟</h2>
+        <p style="color:rgba(255,255,255,0.9); font-size:13px; margin-top:6px;">اختر منصتك واحصل على رقمك الآن</p>
+        <a href="/">🚀 ابدأ الآن</a>
+    </div>
+</div>
+</body>
+</html>
+"""
+
+@app.route('/learn-more')
+def learn_more_page():
+    return render_template_string(learn_more_html)
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
