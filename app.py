@@ -1391,7 +1391,13 @@ hr { border: 1px solid rgba(255,255,255,0.1); margin: 20px 0; }
     {% endif %}
 
     <hr>
-    <a href="/admin/announcements_manager"><button class="btn-danger" style="background: linear-gradient(135deg, #f59e0b, #d97706); box-shadow: 0 0 20px rgba(245, 158, 11, 0.4);">🗑️ إدارة الإعلانات (حذف/تنظيف)</button></a>
+    <div style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15)); padding:14px; border-radius:12px; border:1px solid rgba(245, 158, 11, 0.4); margin-bottom:10px;">
+        <h3 style="margin-top:0; color:#fbbf24;">📢 إدارة الإعلانات</h3>
+        <p style="color:#cbd5e1; font-size:12px; margin-bottom:10px;">حذف إعلان واحد، أو مسح الكل، أو تعديل الإعلانات</p>
+        <a href="/admin/announcements_manager" style="text-decoration:none; display:block;">
+            <button class="btn-danger" style="background: linear-gradient(135deg, #f59e0b, #d97706); box-shadow: 0 0 20px rgba(245, 158, 11, 0.4); margin-top:0;">🗑️ افتح صفحة حذف الإعلانات</button>
+        </a>
+    </div>
 
     <hr>
 
@@ -2091,42 +2097,45 @@ def api_help():
     c.execute("INSERT INTO help_requests (user_id, message, source, created_at) VALUES (?, ?, ?, ?)",
               (user_id, msg, 'website', datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     help_id = c.lastrowid
-    # ✅ ناخذ آخر chat_id معروف (من رسائل الأدمن السابقة في الخاص)
+    # ✅ [تحديث] أولوية للإعداد المحفوظ في admin_settings
     c.execute("SELECT chat_id FROM known_chats WHERE chat_type='private' ORDER BY last_seen DESC LIMIT 1")
     owner_row = c.fetchone()
     conn.commit()
     conn.close()
-    owner_chat_id = owner_row[0] if owner_row else None
+    # 1) الأولوية للإعداد اليدوي اللي يحطه الأدمن في /admin
+    saved_admin_id = get_admin_setting('admin_telegram_id')
+    # 2) ثانياً من آخر رسالة خاصة للبوت
+    owner_chat_id = saved_admin_id if saved_admin_id else (owner_row[0] if owner_row else None)
     # إرسال الرسالة إلى البوت عبر تيليجرام
     try:
         help_text = (
             f"🆘 <b>طلب مساعدة جديد #{help_id}</b>\n\n"
             f"👤 المستخدم: <code>{user_id}</code>\n"
             f"💬 الرسالة:\n{msg}\n\n"
-            f"🕒 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            f"🕒 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+            f"💡 للرد: ادخل /admin وراح تشوف هالطلب"
         )
         url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-        # نحاول الإرسال للأدمن (إذا عندنا chat_id)
+        sent_ok = False
         if owner_chat_id:
             r = requests.post(url, json={
                 'chat_id': owner_chat_id,
                 'text': help_text,
                 'parse_mode': 'HTML'
             }, timeout=10)
-            if r.status_code != 200:
-                # نرجع نرسل للـ username كحل بديل
-                requests.post(url, json={
-                    'chat_id': f"@{OWNER_TELEGRAM_ID}",
-                    'text': help_text,
-                    'parse_mode': 'HTML'
-                }, timeout=10)
-        else:
-            # نرسل للـ username مباشرة
-            requests.post(url, json={
-                'chat_id': f"@{OWNER_TELEGRAM_ID}",
+            sent_ok = r.status_code == 200
+            if not sent_ok:
+                print(f"⚠️ فشل الإرسال للأدمن ({owner_chat_id}): {r.text[:200]}")
+        # لو ما اشتغل، نحاول بالـ username كحل بديل
+        if not sent_ok:
+            r2 = requests.post(url, json={
+                'chat_id': f"@{OWNER_TELEGRAM_ID.lstrip('@')}",
                 'text': help_text,
                 'parse_mode': 'HTML'
             }, timeout=10)
+            sent_ok = r2.status_code == 200
+            if not sent_ok:
+                print(f"⚠️ فشل الإرسال لليوزرنيم: {r2.text[:200]}")
     except Exception as e:
         print(f"❌ فشل إرسال طلب المساعدة للبوت: {e}")
     return jsonify({'ok': True, 'id': help_id})
@@ -2166,7 +2175,10 @@ body { font-family:'Cairo',sans-serif; background:#07090d; color:#c9d1d9; min-he
 .ann-type.image { background: #238636; color: #fff; }
 .ann-type.video { background: #d29922; color: #fff; }
 .ann-content { color: #e6e6e6; font-size: 14px; line-height: 1.6; margin-bottom: 10px; }
-.ann-media { max-width: 100%; max-height: 200px; width: auto; border-radius: 8px; margin-bottom: 10px; object-fit: contain; }
+.ann-media { max-width: 100%; max-height: 180px; width: auto; border-radius: 8px; margin-bottom: 10px; object-fit: contain; display:block; margin-left:auto; margin-right:auto; }
+.ann-video-wrap { position:relative; max-height:180px; border-radius:8px; overflow:hidden; margin-bottom:10px; background:#000; }
+.ann-video-wrap video { width:100%; max-height:180px; display:block; }
+.ann-video-wrap::after { content:'🎥 اضغط للتشغيل'; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#fff; font-size:13px; font-weight:800; background:rgba(0,0,0,0.4); pointer-events:none; }
 .ann-btn {
     display: inline-block; padding: 10px 20px; background: linear-gradient(135deg, #238636, #2ea043);
     color: #fff; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 14px;
@@ -2205,9 +2217,9 @@ async function loadAnnouncements() {
         container.innerHTML = data.map(a => {
             let media = '';
             if (a.type === 'image' && a.media_url) {
-                media = `<img src="${a.media_url}" class="ann-media" alt="">`;
+                media = `<img src="${a.media_url}" class="ann-media" alt="" loading="lazy" onclick="window.open('${a.media_url}','_blank')">`;
             } else if (a.type === 'video' && a.media_url) {
-                media = `<video src="${a.media_url}" class="ann-media" controls></video>`;
+                media = `<div class="ann-video-wrap"><video src="${a.media_url}" controls preload="metadata"></video></div>`;
             }
             const btn = a.button_url ? `<a href="${a.button_url}" target="_blank" class="ann-btn">${a.button_text || 'افتح الرابط'}</a>` : '';
             return `
