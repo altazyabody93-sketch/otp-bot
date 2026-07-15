@@ -450,20 +450,19 @@ main_html = """
         .dropdown-menu { 
             display:none; 
             position:absolute; 
-            top:100%;
-            left:0; 
-            width: 240px;
+            top:calc(100% + 12px);
+            right:0; 
+            width: 190px;
             background: #1c2128;
             border:1px solid #30363d; 
             border-radius:12px; 
-            padding:8px; 
+            padding:6px; 
             z-index:9999; 
-            box-shadow:0 8px 24px rgba(0,0,0,0.5); 
+            box-shadow:0 10px 30px rgba(0,0,0,0.8); 
             flex-direction:column; 
             gap:2px;
             box-sizing:border-box;
-            margin-top: 8px;
-            transform-origin: top left;
+            transform-origin: top right;
             animation: menuFadeIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
         .dropdown-menu.show { display:flex; }
@@ -477,7 +476,7 @@ main_html = """
             gap:10px; 
             color:#c9d1d9; 
             text-decoration:none; 
-            padding:8px 10px; 
+            padding:10px 12px; 
             border-radius:8px; 
             font-size:13px; 
             font-weight:600; 
@@ -486,9 +485,8 @@ main_html = """
             width:100%;
         }
         .dropdown-menu a:hover { 
-            background:linear-gradient(135deg, #21262d 0%, #1c2128 100%); 
+            background: #21262d;
             color:#58a6ff; 
-            border-color:#30363d;
             transform:translateX(-3px);
         }
         .dropdown-menu a .ico { 
@@ -882,52 +880,46 @@ main_html = """
                 <div class="brand-icon">🚀</div>
                 <div class="brand-text">المطري OTP</div>
             </div>
-            <div class="top-actions" style="position:relative; display:flex; align-items:center;">
+            <div class="top-actions" style="display:flex; align-items:center; gap:8px;">
                 <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">🌙</button>
                 <div style="position:relative;">
                     <button class="menu-btn" onclick="toggleMenu()">☰</button>
-                    <div class="dropdown-menu" id="contactMenu" style="left:auto; right:0; transform-origin: top right;">
-                    <div class="menu-header">📞 تواصل معنا</div>
-                    <a href="{{ owner_link }}" target="_blank">
-                        <span class="ico">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-                        </span>
-                        <span>تواصل معي على واتساب</span>
-                    </a>
-                    <a href="{{ wa_group }}" target="_blank">
-                        <span class="ico">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="#25D366"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.95 9.95 0 004.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.825 9.825 0 0012.04 2zm5.45 13.91c-.23.64-1.36 1.24-1.86 1.31-.47.07-1.07.1-1.73-.1-.4-.13-.92-.31-1.59-.62-2.79-1.21-4.61-4.02-4.75-4.21-.14-.18-1.13-1.5-1.13-2.86 0-1.36.71-2.03.96-2.31.25-.28.55-.35.74-.35.19 0 .37 0 .53.01.17.01.4-.06.62.47.23.55.79 1.91.86 2.05.07.14.12.31.02.49-.1.18-.14.29-.28.45-.14.16-.3.36-.42.48-.14.14-.29.3-.12.58.16.28.72 1.19 1.55 1.93 1.07.95 1.97 1.25 2.25 1.39.28.14.44.12.6-.07.16-.19.7-.81.88-1.09.18-.28.37-.23.62-.14.25.09 1.6.75 1.87.89.28.14.46.21.53.32.07.11.07.65-.16 1.29z"/></svg>
-                        </span>
-                        <span>جروب واتساب الرسمي</span>
-                    </a>
-                    <a href="https://t.me/jsjsgsjsvh" target="_blank">
-                        <span class="ico">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="#26A5E4"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.479.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
-                        </span>
-                        <span>قناة تليجرام</span>
-                    </a>
-                    <div class="menu-divider"></div>
-                    <a href="/learn-more">
-                        <span class="ico">📰</span>
-                        <span>اعرف المزيد عن الموقع</span>
-                    </a>
-                    <a href="/announcements">
-                        <span class="ico">📢</span>
-                        <span>إعلانات الموقع</span>
-                    </a>
-                    <a href="#" onclick="openHelpModal(); return false;">
-                        <span class="ico">🆘</span>
-                        <span>طلب مساعدة</span>
-                    </a>
-                    <div class="menu-divider"></div>
-                    <a href="/admin">
-                        <span class="ico">⚙️</span>
-                        <span>لوحة التحكم (للأدمن)</span>
-                    </a>
+                    <div class="dropdown-menu" id="contactMenu">
+                        <div class="menu-header">📞 تواصل معنا</div>
+                        <a href="{{ owner_link }}" target="_blank">
+                            <span class="ico">💬</span>
+                            <span>واتساب المطور</span>
+                        </a>
+                        <a href="{{ wa_group }}" target="_blank">
+                            <span class="ico">👥</span>
+                            <span>جروب واتساب</span>
+                        </a>
+                        <a href="https://t.me/jsjsgsjsvh" target="_blank">
+                            <span class="ico">✈️</span>
+                            <span>قناة تليجرام</span>
+                        </a>
+                        <div class="menu-divider"></div>
+                        <a href="/learn-more">
+                            <span class="ico">📰</span>
+                            <span>اعرف المزيد</span>
+                        </a>
+                        <a href="/announcements">
+                            <span class="ico">📢</span>
+                            <span>إعلانات الموقع</span>
+                        </a>
+                        <a href="#" onclick="openHelpModal(); return false;">
+                            <span class="ico">🆘</span>
+                            <span>طلب مساعدة</span>
+                        </a>
+                        <div class="menu-divider"></div>
+                        <a href="/admin">
+                            <span class="ico">⚙️</span>
+                            <span>لوحة التحكم</span>
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
 
         <!-- ✅ [الإصلاح] تم حذف شريط الأخبار من هنا ونقله إلى الفوتر -->
 
@@ -1488,8 +1480,8 @@ main_html = """
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
             
-            const digits = "0123456789+()#-"; // أرقام ورموز متعلقة بالأرقام الوهمية
-            const fontSize = 18; 
+            const digits = "0123456789+()#-*$!%&"; // رموز وأرقام متنوعة
+            const fontSize = 16; 
             const columns = Math.floor(canvas.width / fontSize);
             const drops = [];
             
@@ -1498,20 +1490,25 @@ main_html = """
             }
             
             function draw() {
-                ctx.fillStyle = "rgba(7, 9, 13, 0.15)";
+                // تقليل الشفافية لزيادة وضوح التأثير
+                ctx.fillStyle = "rgba(7, 9, 13, 0.1)";
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
                 
                 ctx.fillStyle = "#00ffc8"; 
-                ctx.font = "bold " + fontSize + "px 'Courier New'";
+                ctx.font = fontSize + "px 'Courier New'";
                 
                 for (let i = 0; i < drops.length; i++) {
                     const text = digits.charAt(Math.floor(Math.random() * digits.length));
+                    // إضافة توهج بسيط للنصوص
+                    ctx.shadowBlur = 5;
+                    ctx.shadowColor = "#00ffc8";
                     ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+                    ctx.shadowBlur = 0;
                     
                     if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
                         drops[i] = 0;
                     }
-                    drops[i] += 0.8; // سرعة مناسبة للمطر الرقمي
+                    drops[i] += 1.2; // زيادة السرعة قليلاً لتكون أوضح
                 }
             }
             
@@ -1755,17 +1752,25 @@ async function loadOtpLogs() {
     } catch(e) {}
 }
 
-async function deleteOtp(id) {
-    if(!confirm('هل تريد حذف هذا الكود؟')) return;
-    try {
-        const res = await fetch('/api/admin/delete_otp', {
-            method: 'POST', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({id: id})
-        });
-        const data = await res.json();
-        if(data.ok) loadOtpLogs();
-    } catch(e) {}
-}
+        async function deleteOtp(id) {
+            if(!confirm('🗑️ هل تريد حذف هذا الكود المسحوب نهائياً؟')) return;
+            try {
+                const res = await fetch('/api/admin/delete_otp', {
+                    method: 'POST', 
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({id: id})
+                });
+                const data = await res.json();
+                if(data.ok) {
+                    loadOtpLogs();
+                } else {
+                    alert('❌ فشل الحذف');
+                }
+            } catch(e) {
+                console.error(e);
+                alert('❌ حدث خطأ أثناء الحذف');
+            }
+        }
 async function loadAdminSettings() {
     try {
         const res = await fetch('/api/admin/settings');
