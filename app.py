@@ -336,7 +336,7 @@ main_html = """
         body { min-height:100vh; }
         /* [تقليل الإضاءة] overlay يخفف السطوع على العيون */
         body::before {
-            content:''; position:fixed; inset:0; z-index:9999; pointer-events:none;
+            content:''; position:fixed; inset:0; z-index:5; pointer-events:none;
             background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.4) 100%);
         }
         
@@ -347,11 +347,19 @@ main_html = """
             left: 0;
             width: 100%;
             height: 100%;
-            z-index: -1;
-            opacity: 0.15;
+            z-index: 1;
+            opacity: 0.35;
+            pointer-events: none;
         }
 
-        .app { max-width:480px; margin:0 auto; background:rgba(13, 17, 23, 0.9); backdrop-filter:blur(5px); min-height:100vh; display:flex; flex-direction:column; position:relative; }
+        .app { 
+            max-width:480px; margin:0 auto; 
+            background:rgba(13, 17, 23, 0.65); 
+            backdrop-filter:blur(3px); 
+            min-height:100vh; display:flex; flex-direction:column; 
+            position:relative; 
+            z-index: 2;
+        }
 
         /* ============= HEADER ============= */
         .top-bar { background:#0d1117; padding:14px 16px; display:flex; align-items:center; justify-content:flex-start; gap:12px; border-bottom:1px solid #21262d; position:sticky; top:0; z-index:50; }
@@ -1644,6 +1652,13 @@ hr { border: 1px solid rgba(255,255,255,0.1); margin: 20px 0; }
 
     <hr>
 
+    <h3>📋 سجل الأكواد المسحوبة</h3>
+    <div id="otpLogsList" style="max-height:300px; overflow-y:auto; margin-bottom:10px; background:rgba(0,0,0,0.2); padding:10px; border-radius:12px;">
+        <p style="color:#64748b; text-align:center; padding:10px; font-size:13px;">⏳ جاري تحميل الأكواد...</p>
+    </div>
+
+    <hr>
+
     <h3>⚙️ إعدادات البوت</h3>
     <div class="form-group">
         <label>🆔 Chat ID الخاص بك (لاستلام طلبات المساعدة)</label>
@@ -1695,6 +1710,37 @@ async function loadHelpRequests() {
         `).join('');
     } catch(e) {}
 }
+
+async function loadOtpLogs() {
+    try {
+        const res = await fetch('/api/all_otps');
+        const data = await res.json();
+        const box = document.getElementById('otpLogsList');
+        if (!data.length) { box.innerHTML = '<p style="color:#64748b; text-align:center; padding:10px; font-size:13px;">📭 لا توجد أكواد مسحوبة</p>'; return; }
+        box.innerHTML = data.map(o => `
+            <div style="background:rgba(31,41,55,0.5); padding:10px; border-radius:10px; margin-bottom:8px; font-size:12px; border:1px solid rgba(255,255,255,0.05); display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <div style="color:#00ffc8; font-weight:bold; font-size:14px;">🔑 ${o.otp}</div>
+                    <div style="color:#cbd5e1; margin-top:2px;">📞 ${o.number} (${o.platform})</div>
+                    <div style="color:#64748b; font-size:10px; margin-top:2px;">🕒 ${o.timestamp}</div>
+                </div>
+                <button onclick="deleteOtp(${o.id})" style="background:#ef4444; border:none; color:#fff; padding:5px 10px; border-radius:6px; cursor:pointer; font-size:11px;">🗑️ حذف</button>
+            </div>
+        `).join('');
+    } catch(e) {}
+}
+
+async function deleteOtp(id) {
+    if(!confirm('هل تريد حذف هذا الكود؟')) return;
+    try {
+        const res = await fetch('/api/admin/delete_otp', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id: id})
+        });
+        const data = await res.json();
+        if(data.ok) loadOtpLogs();
+    } catch(e) {}
+}
 async function loadAdminSettings() {
     try {
         const res = await fetch('/api/admin/settings');
@@ -1727,9 +1773,10 @@ async function loadKnownChats() {
         `).join('');
     } catch(e) {}
 }
-loadHelpRequests();
-loadAdminSettings();
-loadKnownChats();
+        loadHelpRequests();
+        loadOtpLogs();
+        loadAdminSettings();
+        loadKnownChats();
 setInterval(loadHelpRequests, 15000);
 setInterval(loadKnownChats, 20000);
 </script>
@@ -2320,6 +2367,22 @@ def api_admin_settings():
     if 'site_url' in data:
         set_admin_setting('site_url', data['site_url'].strip())
     return jsonify({'ok': True})
+
+@app.route('/api/admin/delete_otp', methods=['POST'])
+def api_admin_delete_otp():
+    otp_id = request.json.get('id')
+    if otp_id:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("DELETE FROM otp_logs WHERE id=?", (otp_id,))
+        conn.commit()
+        conn.close()
+        # مسح الكاش لإجبار الموقع على جلب البيانات الجديدة فوراً بعد الحذف
+        global _otp_cache, _otp_cache_time
+        _otp_cache = None
+        _otp_cache_time = 0
+        return jsonify({'ok': True})
+    return jsonify({'ok': False})
 
 # ========== ✅ API: طلبات المساعدة ==========
 @app.route('/api/admin/help_requests', methods=['GET'])
