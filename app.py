@@ -21,7 +21,9 @@ CHANNEL_USERNAME = "@jsjsgsjsvh"
 # ✅ [جديد] ID الأدمن اللي بنرسل له طلبات المساعدة والإعلانات الجديدة
 OWNER_TELEGRAM_ID = "ABOD_90N"  # username الأدمن
 # ✅ [جديد] ID جروب تيليجرام للمراقبة (سالب للقروبات)
-TELEGRAM_GROUP_CHAT_ID = "-1001234567890"  # لازم تحدد الـ chat_id الحقيقي للجروب
+# 💡 اكتشف chat_id بإرسال أي رسالة للبوت ثم ادخل: https://api.telegram.org/bot<TOKEN>/getUpdates
+# أو استخدم الأمر /chatid في الجروب
+TELEGRAM_GROUP_CHAT_ID = "AUTO_DETECT"  # النظام يكتشفه تلقائياً من أي رسالة جديدة
 
 # ========== قاعدة البيانات ==========
 def init_db():
@@ -33,6 +35,8 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS announcements (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT, content TEXT, media_url TEXT, button_text TEXT, button_url TEXT, source_msg_id INTEGER, created_at TEXT)''')
     # ✅ [جديد] جدول طلبات المساعدة من الموقع
     c.execute('''CREATE TABLE IF NOT EXISTS help_requests (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, message TEXT, source TEXT, status TEXT DEFAULT 'pending', created_at TEXT)''')
+    # ✅ [جديد] جدول لتخزين chat_ids اللي البوت يتواصل معها
+    c.execute('''CREATE TABLE IF NOT EXISTS known_chats (chat_id TEXT PRIMARY KEY, chat_type TEXT, chat_title TEXT, last_seen TEXT)''')
     conn.commit()
     conn.close()
 init_db()
@@ -353,20 +357,21 @@ main_html = """
         /* ============= [القائمة المنسدلة] بتصميم احترافي مع أيقونات SVG ============= */
         .dropdown-menu { 
             display:none; 
-            position:absolute; 
-            top:55px; 
-            left:16px; 
-            right:16px; 
+            position:fixed; 
+            top:60px;
+            left:50%; 
+            transform:translateX(-50%);
+            width: calc(100% - 32px);
+            max-width:360px;
             background:linear-gradient(180deg, #1c2128 0%, #161b22 100%);
             border:1px solid #30363d; 
             border-radius:14px; 
             padding:10px; 
-            z-index:100; 
+            z-index:9999; 
             box-shadow:0 12px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(88,166,255,0.08); 
             flex-direction:column; 
             gap:4px;
-            max-width:340px;
-            margin:0 auto;
+            box-sizing:border-box;
             animation: menuSlide 0.25s ease;
         }
         .dropdown-menu.show { display:flex; }
@@ -1676,6 +1681,49 @@ def monitor_telegram_group():
                 chat_id = chat.get('id')
                 chat_type = chat.get('type', '')
                 text = msg.get('text', '') or msg.get('caption', '')
+                # ✅ [جديد] نحفظ كل chat_id يستقبله البوت في قاعدة البيانات
+                if chat_id:
+                    try:
+                        conn_k = sqlite3.connect(DB_PATH)
+                        conn_k.execute(
+                            "INSERT OR REPLACE INTO known_chats (chat_id, chat_type, chat_title, last_seen) VALUES (?, ?, ?, ?)",
+                            (str(chat_id), chat_type, chat.get('title') or chat.get('username') or chat.get('first_name') or 'unknown', datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                        )
+                        conn_k.commit()
+                        conn_k.close()
+                    except Exception as e:
+                        print(f"⚠️ فشل حفظ chat_id: {e}")
+                # 🆘 أمر /chatid — يعطي الـ chat_id للمستخدم (لتجربة سريعة)
+                if text and text.strip() == '/chatid':
+                    try:
+                        requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage", json={
+                            'chat_id': chat_id,
+                            'text': f"📋 <b>معلومات الدردشة</b>\n\n"
+                                    f"🆔 Chat ID: <code>{chat_id}</code>\n"
+                                    f"📌 النوع: <b>{chat_type}</b>\n"
+                                    f"📝 الاسم: {chat.get('title') or chat.get('username') or chat.get('first_name') or '—'}\n\n"
+                                    f"💡 انسخ الـ Chat ID واستخدمه في الكود إذا تبي.",
+                            'parse_mode': 'HTML'
+                        }, timeout=10)
+                    except: pass
+                    continue
+                # 🆘 أمر /start في الخاص — يرسل تعليمات
+                if text and text.strip() == '/start' and chat_type == 'private':
+                    try:
+                        requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage", json={
+                            'chat_id': chat_id,
+                            'text': '🤖 <b>مرحباً بك في بوت المطري OTP</b>\n\n'
+                                    '✅ هذا البوت مربوط بموقع المطري OTP.\n\n'
+                                    '📌 لاستخدام النظام:\n'
+                                    '1) أضف البوت للجروب/القناة كأدمن\n'
+                                    '2) أرسل /chatid في الجروب لمعرفة الـ Chat ID\n'
+                                    '3) حدّث TELEGRAM_GROUP_CHAT_ID في الكود\n'
+                                    '4) أي رسالة/صورة/فيديو في الجروب ستظهر تلقائياً في الموقع\n\n'
+                                    '🆘 لطلب المساعدة من الموقع: ادخل الموقع واضغط زر "طلب مساعدة" في القائمة',
+                            'parse_mode': 'HTML'
+                        }, timeout=10)
+                    except: pass
+                    continue
                 # 📨 رسالة في الجروب (إعلان جديد)
                 if chat_type in ('group', 'supergroup', 'channel'):
                     if not text and not msg.get('photo') and not msg.get('video'):
@@ -1758,6 +1806,18 @@ def monitor_telegram_group():
 threading.Thread(target=monitor_telegram_group, daemon=True).start()
 
 # ========== ✅ نظام الإعلانات (مربوط بالبوت والجروب) ==========
+@app.route('/api/chats', methods=['GET'])
+def api_get_chats():
+    """يعيد قائمة بكل chat_id اللي البوت تواصل معها — مفيد لمعرفة الـ ID الحقيقي"""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT chat_id, chat_type, chat_title, last_seen FROM known_chats ORDER BY last_seen DESC LIMIT 50")
+    rows = c.fetchall()
+    conn.close()
+    return jsonify([{
+        'chat_id': r[0], 'chat_type': r[1], 'chat_title': r[2], 'last_seen': r[3]
+    } for r in rows])
+
 @app.route('/api/announcements', methods=['GET'])
 def api_get_announcements():
     conn = sqlite3.connect(DB_PATH)
@@ -1783,8 +1843,12 @@ def api_help():
     c.execute("INSERT INTO help_requests (user_id, message, source, created_at) VALUES (?, ?, ?, ?)",
               (user_id, msg, 'website', datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     help_id = c.lastrowid
+    # ✅ ناخذ آخر chat_id معروف (من رسائل الأدمن السابقة في الخاص)
+    c.execute("SELECT chat_id FROM known_chats WHERE chat_type='private' ORDER BY last_seen DESC LIMIT 1")
+    owner_row = c.fetchone()
     conn.commit()
     conn.close()
+    owner_chat_id = owner_row[0] if owner_row else None
     # إرسال الرسالة إلى البوت عبر تيليجرام
     try:
         help_text = (
@@ -1794,11 +1858,27 @@ def api_help():
             f"🕒 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         )
         url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-        requests.post(url, json={
-            'chat_id': OWNER_TELEGRAM_ID,
-            'text': help_text,
-            'parse_mode': 'HTML'
-        }, timeout=10)
+        # نحاول الإرسال للأدمن (إذا عندنا chat_id)
+        if owner_chat_id:
+            r = requests.post(url, json={
+                'chat_id': owner_chat_id,
+                'text': help_text,
+                'parse_mode': 'HTML'
+            }, timeout=10)
+            if r.status_code != 200:
+                # نرجع نرسل للـ username كحل بديل
+                requests.post(url, json={
+                    'chat_id': f"@{OWNER_TELEGRAM_ID}",
+                    'text': help_text,
+                    'parse_mode': 'HTML'
+                }, timeout=10)
+        else:
+            # نرسل للـ username مباشرة
+            requests.post(url, json={
+                'chat_id': f"@{OWNER_TELEGRAM_ID}",
+                'text': help_text,
+                'parse_mode': 'HTML'
+            }, timeout=10)
     except Exception as e:
         print(f"❌ فشل إرسال طلب المساعدة للبوت: {e}")
     return jsonify({'ok': True, 'id': help_id})
