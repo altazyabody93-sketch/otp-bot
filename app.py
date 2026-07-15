@@ -1,4 +1,4 @@
-    from flask import Flask, request, render_template_string, jsonify, redirect, url_for
+from flask import Flask, request, render_template_string, jsonify, redirect, url_for
 import sqlite3
 import json
 import random
@@ -16,8 +16,10 @@ WHATSAPP_GROUP_LINK = "https://chat.whatsapp.com/IeK2gNS64fd8YSnenzt4WR"
 OWNER_PHONE = "967733723953"
 OWNER_LINK = f"https://wa.me/{OWNER_PHONE}"
 
-TELEGRAM_BOT_TOKEN = "8845420882:AAHZ-7qhCL3_ddDT3am4zWNtBRBy3mVDgws"
+TELEGRAM_BOT_TOKEN = "8814038881:AAGyuACUYA4YPKlJQhAyUMkpRNiV0u1gNuU"  # 🔍 بوت مراقبة جروب الأكواد
 CHANNEL_USERNAME = "@jsjsgsjsvh"
+# ✅ بوت ثاني مخصص لاستقبال طلبات المساعدة والإشعارات
+ASSISTANT_BOT_TOKEN = "8845420882:AAHZ-7qhCL3_ddDT3am4zWNtBRBy3mVDgws"
 # ✅ [جديد] ID الأدمن اللي بنرسل له طلبات المساعدة والإعلانات الجديدة
 # غيّر هذا إلى chat_id الأدمن بعد ما يعمل /chatid للبوت
 OWNER_TELEGRAM_ID = "@ABOD_90N"  # username الأدمن
@@ -67,13 +69,13 @@ def set_admin_setting(key, value):
     conn.close()
 
 def notify_admin(text):
-    """إرسال إشعار للأدمن على تيليجرام"""
+    """إرسال إشعار للأدمن على تيليجرام (بوت المساعد)"""
     admin_id = get_admin_setting('admin_telegram_id')
     if not admin_id:
         return False
     try:
         requests.post(
-            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+            f"https://api.telegram.org/bot{ASSISTANT_BOT_TOKEN}/sendMessage",
             json={'chat_id': admin_id, 'text': text, 'parse_mode': 'HTML'},
             timeout=10
         )
@@ -1586,6 +1588,28 @@ def api_get_otp():
     conn.close()
     return jsonify({'otp': row[0] if row else None})
 
+# ========== ✅ API واحد فقط: جلب جميع الأكواد مرة واحدة (مع caching في المتصفح) ==========
+_otp_cache = {'data': None, 'time': 0}
+CACHE_DURATION = 30  # ثواني
+
+@app.route('/api/all_otps', methods=['GET'])
+def api_all_otps():
+    now = time.time()
+    if _otp_cache['data'] is not None and (now - _otp_cache['time']) < CACHE_DURATION:
+        return jsonify(_otp_cache['data'])
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT id, number, otp, timestamp, platform, country_code, country_flag FROM otp_logs ORDER BY id DESC LIMIT 100")
+    rows = c.fetchall()
+    conn.close()
+    result = [{
+        'id': r[0], 'number': r[1], 'otp': r[2], 'timestamp': r[3],
+        'platform': r[4] or 'Unknown', 'country_code': r[5] or '', 'country_flag': r[6] or '🌍'
+    } for r in rows]
+    _otp_cache['data'] = result
+    _otp_cache['time'] = now
+    return jsonify(result)
+
 def monitor_channel():
     last_update_id = 0
     while True:
@@ -1782,11 +1806,11 @@ threading.Thread(target=monitor_channel, daemon=True).start()
 
 # ========== ✅ [بوت تيليجرام] يراقب الجروب ويستقبل الإعلانات ==========
 def monitor_telegram_group():
-    """يراقب الجروب ويستقبل الإعلانات + أوامر الأدمن"""
+    """يراقب الجروب ويستقبل الإعلانات + أوامر الأدمن (بوت المساعد)"""
     last_update_id = 0
     while True:
         try:
-            url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
+            url = f"https://api.telegram.org/bot{ASSISTANT_BOT_TOKEN}/getUpdates"
             params = {"timeout": 15, "offset": last_update_id + 1, "allowed_updates": ["message", "channel_post"]}
             r = requests.get(url, params=params, timeout=20)
             if r.status_code != 200:
@@ -1822,7 +1846,7 @@ def monitor_telegram_group():
                 # 🆘 أمر /chatid — يعطي الـ chat_id للمستخدم (لتجربة سريعة)
                 if text and text.strip() == '/chatid':
                     try:
-                        requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage", json={
+                        requests.post(f"https://api.telegram.org/bot{ASSISTANT_BOT_TOKEN}/sendMessage", json={
                             'chat_id': chat_id,
                             'text': f"📋 <b>معلومات الدردشة</b>\n\n"
                                     f"🆔 Chat ID: <code>{chat_id}</code>\n"
@@ -1836,7 +1860,7 @@ def monitor_telegram_group():
                 # 🆘 أمر /start في الخاص — يرسل تعليمات
                 if text and text.strip() == '/start' and chat_type == 'private':
                     try:
-                        requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage", json={
+                        requests.post(f"https://api.telegram.org/bot{ASSISTANT_BOT_TOKEN}/sendMessage", json={
                             'chat_id': chat_id,
                             'text': '🤖 <b>مرحباً بك في بوت المطري OTP</b>\n\n'
                                     '✅ هذا البوت مربوط بموقع المطري OTP.\n\n'
@@ -1869,18 +1893,18 @@ def monitor_telegram_group():
                         file_id = photo['file_id']
                         # جلب رابط الصورة
                         try:
-                            file_info = requests.get(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getFile?file_id={file_id}", timeout=10).json()
+                            file_info = requests.get(f"https://api.telegram.org/bot{ASSISTANT_BOT_TOKEN}/getFile?file_id={file_id}", timeout=10).json()
                             if file_info.get('ok'):
-                                media_url = f"https://api.telegram.org/file/bot{TELEGRAM_BOT_TOKEN}/{file_info['result']['file_path']}"
+                                media_url = f"https://api.telegram.org/file/bot{ASSISTANT_BOT_TOKEN}/{file_info['result']['file_path']}"
                         except: pass
                     # إذا في فيديو
                     elif msg.get('video'):
                         ann_type = 'video'
                         try:
                             file_id = msg['video']['file_id']
-                            file_info = requests.get(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getFile?file_id={file_id}", timeout=10).json()
+                            file_info = requests.get(f"https://api.telegram.org/bot{ASSISTANT_BOT_TOKEN}/getFile?file_id={file_id}", timeout=10).json()
                             if file_info.get('ok'):
-                                media_url = f"https://api.telegram.org/file/bot{TELEGRAM_BOT_TOKEN}/{file_info['result']['file_path']}"
+                                media_url = f"https://api.telegram.org/file/bot{ASSISTANT_BOT_TOKEN}/{file_info['result']['file_path']}"
                         except: pass
                     # البحث عن زر في النص (صيغة: 🔗 زر | URL)
                     if text:
@@ -1901,7 +1925,7 @@ def monitor_telegram_group():
                         print(f"✅ [إعلان جديد] {ann_type} | {content[:30]}...")
                         # إرسال إشعار للقروب بأن الإعلان تم نشره في الموقع
                         try:
-                            requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage", json={
+                            requests.post(f"https://api.telegram.org/bot{ASSISTANT_BOT_TOKEN}/sendMessage", json={
                                 'chat_id': chat_id,
                                 'text': f'✅ تم نشر الإعلان في الموقع بنجاح!',
                                 'reply_to_message_id': msg.get('message_id')
@@ -1917,7 +1941,7 @@ def monitor_telegram_group():
                     if not text:
                         continue
                     if text == '/start':
-                        requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage", json={
+                        requests.post(f"https://api.telegram.org/bot{ASSISTANT_BOT_TOKEN}/sendMessage", json={
                             'chat_id': chat_id,
                             'text': '🤖 <b>مرحباً بك في بوت المطري OTP</b>\n\nهذا البوت مربوط بموقع المطري OTP. الإعلانات التي تنشرها في الجروب الرسمي ستظهر تلقائياً في الموقع.\n\n✅ أرسل إعلانك في الجروب وسيظهر فوراً!'
                         }, timeout=10)
@@ -1927,7 +1951,7 @@ def monitor_telegram_group():
                         c.execute("SELECT COUNT(*) FROM announcements")
                         count = c.fetchone()[0]
                         conn.close()
-                        requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage", json={
+                        requests.post(f"https://api.telegram.org/bot{ASSISTANT_BOT_TOKEN}/sendMessage", json={
                             'chat_id': chat_id,
                             'text': f'📊 عدد الإعلانات المنشورة في الموقع: <b>{count}</b>'
                         }, timeout=10)
@@ -1950,7 +1974,7 @@ def monitor_telegram_group():
                             f"💡 للرد عليه من لوحة الأدمن، افتح:\n"
                             f"<code>https://otp-bot-7-0b93.onrender.com/admin</code>"
                         )
-                        requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage", json={
+                        requests.post(f"https://api.telegram.org/bot{ASSISTANT_BOT_TOKEN}/sendMessage", json={
                             'chat_id': chat_id,
                             'text': '🆘 <b>تم استلام طلب المساعدة!</b>\n\n'
                                     '✅ تم إشعار الأدمن بطلبك. اكتب رسالتك الآن وسيتم توصيلها مباشرة للإدمن.\n\n'
@@ -1970,7 +1994,7 @@ def monitor_telegram_group():
                                 f"👤 {user_info} (<code>{chat_id}</code>):\n\n"
                                 f"📝 {text}"
                             )
-                            requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage", json={
+                            requests.post(f"https://api.telegram.org/bot{ASSISTANT_BOT_TOKEN}/sendMessage", json={
                                 'chat_id': chat_id,
                                 'text': '✅ <b>تم إرسال رسالتك للإدمن.</b>\n\nسيتم الرد عليك قريباً.'
                             }, timeout=10)
@@ -2100,7 +2124,7 @@ def api_help():
             f"🕒 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
             f"💡 للرد: ادخل /admin وراح تشوف هالطلب"
         )
-        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        url = f"https://api.telegram.org/bot{ASSISTANT_BOT_TOKEN}/sendMessage"
         sent_ok = False
         if owner_chat_id:
             r = requests.post(url, json={
