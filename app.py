@@ -448,46 +448,50 @@ main_html = """
         body.light .ticker-content { color: #1f2328; }
         /* ============= [القائمة المنسدلة] بتصميم احترافي مع أيقونات SVG ============= */
         .dropdown-menu { 
-            display:none; 
-            position:absolute; 
-            top:calc(100% + 12px);
-            right:0; 
-            width: 190px;
-            background: #1c2128;
-            border:1px solid #30363d; 
-            border-radius:12px; 
-            padding:6px; 
-            z-index:9999; 
-            box-shadow:0 10px 30px rgba(0,0,0,0.8); 
+            display:flex; 
+            position:fixed; 
+            top:0;
+            left:-280px; 
+            width: 260px;
+            height: 100vh;
+            background: #0d1117;
+            border-right:1px solid #30363d; 
+            padding:20px 10px; 
+            z-index:10000; 
+            box-shadow:10px 0 30px rgba(0,0,0,0.8); 
             flex-direction:column; 
-            gap:2px;
-            box-sizing:border-box;
-            transform-origin: top right;
-            animation: menuFadeIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            gap:8px;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            visibility: hidden;
         }
-        .dropdown-menu.show { display:flex; }
-        @keyframes menuFadeIn {
-            from { opacity:0; transform: scale(0.95) translateY(-10px); }
-            to   { opacity:1; transform: scale(1) translateY(0); }
+        .dropdown-menu.show { left:0; visibility: visible; }
+        .menu-overlay {
+            display:none;
+            position:fixed;
+            inset:0;
+            background:rgba(0,0,0,0.7);
+            backdrop-filter:blur(4px);
+            z-index:9999;
         }
+        .menu-overlay.show { display:block; }
         .dropdown-menu a { 
             display:flex; 
             align-items:center; 
-            gap:10px; 
+            gap:12px; 
             color:#c9d1d9; 
             text-decoration:none; 
-            padding:10px 12px; 
-            border-radius:8px; 
-            font-size:13px; 
+            padding:12px 15px; 
+            border-radius:10px; 
+            font-size:14px; 
             font-weight:600; 
-            white-space:nowrap; 
-            transition:all 0.2s ease;
-            width:100%;
+            transition:all 0.3s ease;
+            border: 1px solid transparent;
         }
         .dropdown-menu a:hover { 
-            background: #21262d;
+            background: rgba(88,166,255,0.1);
             color:#58a6ff; 
-            transform:translateX(-3px);
+            border-color: rgba(88,166,255,0.2);
+            padding-right: 20px;
         }
         .dropdown-menu a .ico { 
             font-size:16px; 
@@ -880,11 +884,15 @@ main_html = """
                 <div class="brand-icon">🚀</div>
                 <div class="brand-text">المطري OTP</div>
             </div>
-            <div class="top-actions" style="display:flex; align-items:center; gap:8px;">
+            <div class="top-actions" style="display:flex; align-items:center; gap:10px;">
                 <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">🌙</button>
-                <div style="position:relative;">
-                    <button class="menu-btn" onclick="toggleMenu()">☰</button>
-                    <div class="dropdown-menu" id="contactMenu">
+                <button class="menu-btn" onclick="toggleMenu()">☰</button>
+                <div class="menu-overlay" id="menuOverlay" onclick="toggleMenu()"></div>
+                <div class="dropdown-menu" id="contactMenu">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; padding:0 10px;">
+                        <div style="font-weight:900; color:#fff; font-size:18px;">🚀 القائمة</div>
+                        <button onclick="toggleMenu()" style="background:none; border:none; color:#8b949e; font-size:20px; cursor:pointer;">✕</button>
+                    </div>
                         <div class="menu-header">📞 تواصل معنا</div>
                         <a href="{{ owner_link }}" target="_blank">
                             <span class="ico">💬</span>
@@ -1025,18 +1033,10 @@ main_html = """
         const platformGradients = {{ platform_gradients | tojson }};
 
         function toggleMenu() {
-            const menu = document.getElementById('contactMenu');
-            menu.classList.toggle('show');
+            document.getElementById('contactMenu').classList.toggle('show');
+            document.getElementById('menuOverlay').classList.toggle('show');
+            document.body.style.overflow = document.getElementById('contactMenu').classList.contains('show') ? 'hidden' : '';
         }
-        
-        // إغلاق القائمة عند النقر خارجها
-        document.addEventListener('click', (e) => {
-            const menu = document.getElementById('contactMenu');
-            const btn = document.querySelector('.menu-btn');
-            if (menu.classList.contains('show') && !menu.contains(e.target) && !btn.contains(e.target)) {
-                menu.classList.remove('show');
-            }
-        });
 
         // ✅ [مودال طلب المساعدة]
         function openHelpModal() {
@@ -1490,25 +1490,32 @@ main_html = """
             }
             
             function draw() {
-                // تقليل الشفافية لزيادة وضوح التأثير
-                ctx.fillStyle = "rgba(7, 9, 13, 0.1)";
+                ctx.fillStyle = "rgba(7, 9, 13, 0.15)";
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
                 
-                ctx.fillStyle = "#00ffc8"; 
-                ctx.font = fontSize + "px 'Courier New'";
+                ctx.font = "bold " + fontSize + "px monospace";
                 
                 for (let i = 0; i < drops.length; i++) {
                     const text = digits.charAt(Math.floor(Math.random() * digits.length));
-                    // إضافة توهج بسيط للنصوص
-                    ctx.shadowBlur = 5;
+                    
+                    // تدرج لوني وتوهج
+                    ctx.shadowBlur = 8;
                     ctx.shadowColor = "#00ffc8";
+                    ctx.fillStyle = "#00ffc8";
+                    
+                    // جعل بعض الأرقام أكثر سطوعاً بشكل عشوائي
+                    if(Math.random() > 0.9) {
+                        ctx.fillStyle = "#fff";
+                        ctx.shadowBlur = 15;
+                    }
+                    
                     ctx.fillText(text, i * fontSize, drops[i] * fontSize);
                     ctx.shadowBlur = 0;
                     
                     if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
                         drops[i] = 0;
                     }
-                    drops[i] += 1.2; // زيادة السرعة قليلاً لتكون أوضح
+                    drops[i] += 1.0; 
                 }
             }
             
@@ -1674,9 +1681,12 @@ hr { border: 1px solid rgba(255,255,255,0.1); margin: 20px 0; }
 
     <hr>
 
-    <h3>📋 سجل الأكواد المسحوبة</h3>
-    <div id="otpLogsList" style="max-height:300px; overflow-y:auto; margin-bottom:10px; background:rgba(0,0,0,0.2); padding:10px; border-radius:12px;">
-        <p style="color:#64748b; text-align:center; padding:10px; font-size:13px;">⏳ جاري تحميل الأكواد...</p>
+    <div style="background:rgba(0,0,0,0.2); padding:20px; border-radius:15px; border:1px solid rgba(0,255,200,0.2); margin-bottom:20px;">
+        <h3 style="margin-top:0; color:#00ffc8; display:flex; align-items:center; gap:8px;">📋 سجل الأكواد المسحوبة (حذف فردي)</h3>
+        <p style="color:#94a3b8; font-size:12px; margin-bottom:15px;">يمكنك حذف الكود الذي تريده بالضغط على زر الحذف بجانبه:</p>
+        <div id="otpLogsList" style="max-height:400px; overflow-y:auto; padding-right:5px;">
+            <p style="color:#64748b; text-align:center; padding:10px; font-size:13px;">⏳ جاري تحميل الأكواد...</p>
+        </div>
     </div>
 
     <hr>
@@ -1703,9 +1713,9 @@ hr { border: 1px solid rgba(255,255,255,0.1); margin: 20px 0; }
     <div style="background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(185, 28, 28, 0.1)); padding:14px; border-radius:12px; border:1px solid rgba(239, 68, 68, 0.4); margin-bottom:10px;">
         <h3 style="margin-top:0; color:#ef4444;">🔥 تنظيف البيانات</h3>
         <p style="color:#cbd5e1; font-size:12px; margin-bottom:10px;">حذف جميع سجلات الأكواد المسحوبة من الموقع نهائياً</p>
-        <form method="POST" onsubmit="return confirm('هل أنت متأكد من حذف جميع الأكواد المسحوبة؟ لا يمكن التراجع!')">
+        <form method="POST" onsubmit="return confirm('⚠️ تحذير: سيتم حذف جميع الأكواد المسحوبة نهائياً. هل أنت متأكد؟')">
             <input type="hidden" name="action" value="clear_otps">
-            <button type="submit" class="btn-danger" style="margin-top:0;">🗑️ حذف جميع الأكواد المسحوبة</button>
+            <button type="submit" class="btn-secondary" style="background:#374151; font-size:12px; padding:10px; margin-top:0;">🗑️ مسح السجل بالكامل (تنظيف شامل)</button>
         </form>
     </div>
 
@@ -1740,13 +1750,13 @@ async function loadOtpLogs() {
         const box = document.getElementById('otpLogsList');
         if (!data.length) { box.innerHTML = '<p style="color:#64748b; text-align:center; padding:10px; font-size:13px;">📭 لا توجد أكواد مسحوبة</p>'; return; }
         box.innerHTML = data.map(o => `
-            <div style="background:rgba(31,41,55,0.5); padding:10px; border-radius:10px; margin-bottom:8px; font-size:12px; border:1px solid rgba(255,255,255,0.05); display:flex; justify-content:space-between; align-items:center;">
+            <div style="background:rgba(31,41,55,0.8); padding:12px; border-radius:12px; margin-bottom:10px; border:1px solid rgba(255,255,255,0.1); display:flex; justify-content:space-between; align-items:center; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
                 <div>
-                    <div style="color:#00ffc8; font-weight:bold; font-size:14px;">🔑 ${o.otp}</div>
-                    <div style="color:#cbd5e1; margin-top:2px;">📞 ${o.number} (${o.platform})</div>
-                    <div style="color:#64748b; font-size:10px; margin-top:2px;">🕒 ${o.timestamp}</div>
+                    <div style="color:#00ffc8; font-weight:900; font-size:16px; letter-spacing:1px;">🔑 ${o.otp}</div>
+                    <div style="color:#fff; margin-top:4px; font-weight:600;">📞 ${o.number} <span style="color:#8b949e; font-size:11px;">(${o.platform})</span></div>
+                    <div style="color:#8b949e; font-size:10px; margin-top:4px;">🕒 ${o.timestamp}</div>
                 </div>
-                <button onclick="deleteOtp(${o.id})" style="background:#ef4444; border:none; color:#fff; padding:5px 10px; border-radius:6px; cursor:pointer; font-size:11px;">🗑️ حذف</button>
+                <button onclick="deleteOtp(${o.id})" style="background:linear-gradient(135deg, #ef4444, #b91c1c); border:none; color:#fff; padding:8px 15px; border-radius:8px; cursor:pointer; font-size:12px; font-weight:800; box-shadow: 0 2px 10px rgba(239,68,68,0.3);">🗑️ حذف</button>
             </div>
         `).join('');
     } catch(e) {}
