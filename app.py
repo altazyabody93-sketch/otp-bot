@@ -579,6 +579,49 @@ main_html = """
             unicode-bidi: bidi-override;
             display: inline-block;
         }
+        .number-countdown-wrap {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            margin-top: 10px;
+            padding: 6px 12px;
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(168, 85, 247, 0.15));
+            border: 1px solid rgba(139, 92, 246, 0.4);
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #c4b5fd;
+            width: fit-content;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .number-countdown-wrap .countdown-icon {
+            animation: tickRotate 2s linear infinite;
+            display: inline-block;
+        }
+        @keyframes tickRotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .number-countdown-wrap .countdown-value {
+            font-family: 'Courier New', monospace;
+            color: #fbbf24;
+            font-weight: 900;
+            min-width: 28px;
+            text-align: center;
+        }
+        .number-countdown-wrap.warn {
+            border-color: rgba(245, 158, 11, 0.6);
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15));
+        }
+        .number-countdown-wrap.warn .countdown-value { color: #fbbf24; }
+        .number-countdown-wrap.expired {
+            border-color: rgba(239, 68, 68, 0.6);
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(220, 38, 38, 0.2));
+        }
+        .number-countdown-wrap.expired .countdown-value { color: #ef4444; }
+        .number-countdown-wrap.expired .countdown-icon { animation: none; }
         .number-card .number .digit {
             display: inline-block;
             opacity: 0;
@@ -644,7 +687,34 @@ main_html = """
             background:#1c2128; border:1px solid #30363d; border-radius:10px;
             padding:12px 14px; display:flex; justify-content:space-between; align-items:center;
         }
-        .otp-item .otp-code { font-family:'Courier New',monospace; font-size:16px; font-weight:bold; color:#3fb950; }
+        .otp-item .otp-code {
+            font-family: 'Courier New', monospace;
+            font-size: 18px;
+            font-weight: 900;
+            color: #ff6b9d;
+            background: linear-gradient(135deg, #ff6b9d 0%, #c084fc 50%, #38bdf8 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: 2px;
+            text-shadow: 0 0 12px rgba(255, 107, 157, 0.5);
+            animation: codeGlow 2s ease-in-out infinite;
+        }
+        @keyframes codeGlow {
+            0%, 100% { filter: brightness(1) drop-shadow(0 0 4px rgba(255, 107, 157, 0.3)); }
+            50% { filter: brightness(1.2) drop-shadow(0 0 10px rgba(255, 107, 157, 0.6)); }
+        }
+        .otp-code .key-emoji {
+            -webkit-text-fill-color: initial;
+            background: none;
+            animation: keyBounce 1.5s ease-in-out infinite;
+            display: inline-block;
+        }
+        @keyframes keyBounce {
+            0%, 100% { transform: rotate(0deg) scale(1); }
+            25% { transform: rotate(-10deg) scale(1.1); }
+            75% { transform: rotate(10deg) scale(1.1); }
+        }
         .otp-item .otp-info { font-size:11px; color:#8b949e; margin-top:2px; }
         .otp-item .copy-btn { background:transparent; border:1px solid #30363d; color:#58a6ff; padding:4px 10px; border-radius:6px; cursor:pointer; font-size:11px; font-weight:600; }
 
@@ -836,6 +906,12 @@ main_html = """
                         <button class="copy-btn-mini" onclick="copyNumber()" id="copyNumBtn">📋 نسخ</button>
                     </div>
                     <div class="number" id="numberDisplay">+</div>
+                    <div class="number-countdown-wrap" id="numberCountdown" style="display:none;">
+                        <span class="countdown-icon">⏱️</span>
+                        <span>الرقم ينتهي خلال</span>
+                        <span class="countdown-value" id="numberCountdownValue">120</span>
+                        <span>ثانية</span>
+                    </div>
                 </div>
                 <div id="autoMonitorStatus" class="auto-monitor">
                     <span class="dot"></span> جاري المراقبة التلقائية...
@@ -982,7 +1058,39 @@ main_html = """
             });
         }
 
-        async function copyNumber() {
+        async async // ============ [عدّاد تنازلي تحت الرقم] ============
+        let numberCountdownTimer = null;
+        function startNumberCountdown() {
+            const wrap = document.getElementById('numberCountdown');
+            const val = document.getElementById('numberCountdownValue');
+            if (!wrap || !val) return;
+            if (numberCountdownTimer) clearInterval(numberCountdownTimer);
+            wrap.style.display = 'flex';
+            wrap.classList.remove('warn', 'expired');
+            let remaining = 120;
+            val.textContent = remaining;
+            numberCountdownTimer = setInterval(() => {
+                remaining--;
+                if (remaining <= 0) {
+                    val.textContent = '0';
+                    wrap.classList.add('expired');
+                    wrap.querySelector('span:nth-child(2)').textContent = 'انتهت صلاحية الرقم ⛔';
+                    if (numberCountdownTimer) clearInterval(numberCountdownTimer);
+                    numberCountdownTimer = null;
+                    return;
+                }
+                val.textContent = remaining;
+                if (remaining <= 30) wrap.classList.add('warn');
+                else wrap.classList.remove('warn');
+            }, 1000);
+        }
+        function stopNumberCountdown() {
+            const wrap = document.getElementById('numberCountdown');
+            if (wrap) wrap.style.display = 'none';
+            if (numberCountdownTimer) { clearInterval(numberCountdownTimer); numberCountdownTimer = null; }
+        }
+
+        function copyNumber() {
             const num = document.getElementById('numberDisplay').textContent;
             try {
                 await navigator.clipboard.writeText(num);
@@ -1097,7 +1205,7 @@ main_html = """
             document.getElementById('refreshBtn').disabled = !has;
         });
 
-        async function getNumber() {
+        async async function getNumber() {
             const country = document.getElementById('country').value;
             if (!currentPlatform || !country) {
                 document.getElementById('status').textContent = '⚠️ يرجى اختيار المنصة والدولة';
@@ -1112,6 +1220,8 @@ main_html = """
                 animateNumber(document.getElementById('numberDisplay'), data.number);
                 document.getElementById('numberContainer').style.display = 'block';
                 document.getElementById('status').textContent = '✅ الرقم جاهز!';
+                // تشغيل العداد التنازلي تحت الرقم
+                startNumberCountdown();
                 // 🎯 تشغيل المراقبة التلقائية فوراً
                 startMonitoring();
             } else {
@@ -1119,7 +1229,7 @@ main_html = """
             }
         }
 
-        async function refreshNumber() {
+        async async function refreshNumber() {
             const country = document.getElementById('country').value;
             if (!currentPlatform || !country) return;
             // إيقاف المراقبة القديمة
@@ -1132,6 +1242,8 @@ main_html = """
                 // [تأثير typewriter] للرقم الجديد
                 animateNumber(document.getElementById('numberDisplay'), data.number);
                 document.getElementById('status').textContent = '🔄 تم التبديل!';
+                // إعادة تشغيل العداد
+                startNumberCountdown();
                 // إعادة تشغيل المراقبة
                 startMonitoring();
             }
@@ -1143,17 +1255,28 @@ main_html = """
             if (monitorInterval) clearInterval(monitorInterval);
             const status = document.getElementById('autoMonitorStatus');
             if (status) { status.classList.remove('done'); status.innerHTML = '<span class="dot"></span> جاري المراقبة التلقائية...'; }
+
+            // ✅ تتبع آخر كود عشان ما نضيف المكرر
+            let lastSeenOtpTime = 0;
+            let otpCountForNumber = 0;
+            const maxOtpRetries = 10; // أقصى عدد محاولات للرقم الواحد
+
             monitorInterval = setInterval(() => {
+                if (!currentNumber) { stopMonitoring(); return; }
+
                 fetch('/api/get_otp', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({number:currentNumber})})
                 .then(res => res.json()).then(data => {
                     if (data.otp) {
-                        const now = new Date().toLocaleString('ar-YE', {timeZone:'Asia/Aden'});
-                        addOtpToHistory(currentNumber, data.otp, now, currentPlatform);
-                        if (status) { status.classList.add('done'); status.innerHTML = '<span class="dot"></span> ✅ تم استلام الكود!'; }
-                        // تشغيل الصوت
-                        playNotificationSound();
-                        // إيقاف المراقبة (الكود وصل)
-                        stopMonitoring();
+                        // ✅ تحقق من عدم تكرار الكود (نفس الـ timestamp)
+                        if (data.otp !== lastSeenOtpTime) {
+                            const now = new Date().toLocaleString('ar-YE', {timeZone:'Asia/Aden'});
+                            addOtpToHistory(currentNumber, data.otp, now, currentPlatform);
+                            lastSeenOtpTime = data.otp;
+                            otpCountForNumber++;
+                            if (status) { status.classList.add('done'); status.innerHTML = `<span class="dot"></span> ✅ تم استلام ${otpCountForNumber} كود!`; }
+                            // تشغيل الصوت
+                            playNotificationSound();
+                        }
                     }
                 }).catch(()=>{});
             }, 5000);
@@ -1161,6 +1284,8 @@ main_html = """
 
         function stopMonitoring() {
             if (monitorInterval) { clearInterval(monitorInterval); monitorInterval = null; }
+            // إيقاف العداد التنازلي تحت الرقم
+            stopNumberCountdown();
         }
 
         // ✅ إضافة كود للقائمة (الأحدث أولاً، يحفظ في localStorage)
