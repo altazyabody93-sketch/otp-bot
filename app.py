@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template_string, jsonify, redirect, url_for
+    from flask import Flask, request, render_template_string, jsonify, redirect, url_for
 import sqlite3
 import json
 import random
@@ -573,6 +573,9 @@ main_html = """
             letter-spacing: 3px;
             text-shadow: 0 0 8px rgba(63, 185, 80, 0.4);
             padding: 6px 0;
+            direction: ltr;
+            unicode-bidi: bidi-override;
+            display: inline-block;
         }
         .number-card .number .digit {
             display: inline-block;
@@ -824,8 +827,8 @@ main_html = """
             <button class="btn-primary" id="getNumberBtn" onclick="getNumber()" disabled>🚀 جلب رقم</button>
             <button class="btn-blue" id="refreshBtn" onclick="refreshNumber()" disabled>🔄 تبديل</button>
 
-            <div id="numberContainer" style="display:none;">
-                <div class="number-card">
+            <div id="numberContainer" style="display:none;" dir="ltr">
+                <div class="number-card" dir="ltr">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                         <span style="font-size:11px; color:#8b949e; font-weight:600;">📞 الرقم</span>
                         <button class="copy-btn-mini" onclick="copyNumber()" id="copyNumBtn">📋 نسخ</button>
@@ -963,6 +966,10 @@ main_html = """
         // [تأثير typewriter] للرقم - يظهر حرف حرف
         function animateNumber(element, text) {
             element.innerHTML = '';
+            // ✅ إجبار القراءة من اليسار لليمين حتى في صفحة RTL
+            element.setAttribute('dir', 'ltr');
+            element.style.direction = 'ltr';
+            element.style.unicodeBidi = 'bidi-override';
             const chars = text.split('');
             chars.forEach((ch, i) => {
                 const span = document.createElement('span');
@@ -1229,11 +1236,11 @@ main_html = """
                         ${items.map(o => `
                         <div class="otp-item">
                             <div>
-                                <div class="otp-code">
+                                <div class="otp-code" dir="ltr" style="direction:ltr; unicode-bidi:bidi-override; text-align:left;">
                                     <span class="otp-countdown" data-otpid="${o.id}">⏱️ 120</span>
                                     🔑 ${o.otp}
                                 </div>
-                                <div class="otp-info">📞 ${o.number}  •  🕒 ${o.timestamp}</div>
+                                <div class="otp-info">📞 <span dir="ltr" style="display:inline-block; direction:ltr; unicode-bidi:bidi-override;">${o.number}</span>  •  🕒 ${o.timestamp}</div>
                             </div>
                             <button class="copy-btn" onclick="copyText('${o.otp}', this)">نسخ</button>
                         </div>
@@ -1578,28 +1585,6 @@ def api_get_otp():
     row = c.fetchone()
     conn.close()
     return jsonify({'otp': row[0] if row else None})
-
-# ========== ✅ API واحد فقط: جلب جميع الأكواد مرة واحدة (مع caching في المتصفح) ==========
-_otp_cache = {'data': None, 'time': 0}
-CACHE_DURATION = 30  # ثواني
-
-@app.route('/api/all_otps', methods=['GET'])
-def api_all_otps():
-    now = time.time()
-    if _otp_cache['data'] is not None and (now - _otp_cache['time']) < CACHE_DURATION:
-        return jsonify(_otp_cache['data'])
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT id, number, otp, timestamp, platform, country_code, country_flag FROM otp_logs ORDER BY id DESC LIMIT 100")
-    rows = c.fetchall()
-    conn.close()
-    result = [{
-        'id': r[0], 'number': r[1], 'otp': r[2], 'timestamp': r[3],
-        'platform': r[4] or 'Unknown', 'country_code': r[5] or '', 'country_flag': r[6] or '🌍'
-    } for r in rows]
-    _otp_cache['data'] = result
-    _otp_cache['time'] = now
-    return jsonify(result)
 
 def monitor_channel():
     last_update_id = 0
