@@ -35,7 +35,7 @@ def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS combos (id INTEGER PRIMARY KEY AUTOINCREMENT, platform TEXT, country_code TEXT, country_name TEXT, country_flag TEXT, numbers TEXT, UNIQUE(platform, country_code))''')
-    c.execute('''CREATE TABLE IF NOT EXISTS otp_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, number TEXT, otp TEXT, timestamp TEXT, platform TEXT)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS otp_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, number TEXT, otp TEXT, timestamp TEXT, platform TEXT, country_code TEXT, country_flag TEXT)''')
     # ✅ [جديد] جدول الإعلانات اللي بنرسلها من البوت
     c.execute('''CREATE TABLE IF NOT EXISTS announcements (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT, content TEXT, media_url TEXT, button_text TEXT, button_url TEXT, source_msg_id INTEGER, created_at TEXT)''')
     # ✅ [جديد] جدول طلبات المساعدة من الموقع
@@ -1058,7 +1058,7 @@ main_html = """
             });
         }
 
-        async async // ============ [عدّاد تنازلي تحت الرقم] ============
+        // ============ [عدّاد تنازلي تحت الرقم] ============
         let numberCountdownTimer = null;
         function startNumberCountdown() {
             const wrap = document.getElementById('numberCountdown');
@@ -1090,7 +1090,7 @@ main_html = """
             if (numberCountdownTimer) { clearInterval(numberCountdownTimer); numberCountdownTimer = null; }
         }
 
-        function copyNumber() {
+        async function copyNumber() {
             const num = document.getElementById('numberDisplay').textContent;
             try {
                 await navigator.clipboard.writeText(num);
@@ -1205,7 +1205,7 @@ main_html = """
             document.getElementById('refreshBtn').disabled = !has;
         });
 
-        async async function getNumber() {
+        async function getNumber() {
             const country = document.getElementById('country').value;
             if (!currentPlatform || !country) {
                 document.getElementById('status').textContent = '⚠️ يرجى اختيار المنصة والدولة';
@@ -1229,7 +1229,7 @@ main_html = """
             }
         }
 
-        async async function refreshNumber() {
+        async function refreshNumber() {
             const country = document.getElementById('country').value;
             if (!currentPlatform || !country) return;
             // إيقاف المراقبة القديمة
