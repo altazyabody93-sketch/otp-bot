@@ -897,7 +897,6 @@ main_html = """
             </div>
 
             <button class="btn-primary" id="getNumberBtn" onclick="getNumber()" disabled>🚀 جلب رقم</button>
-            <button class="btn-blue" id="refreshBtn" onclick="refreshNumber()" disabled>🔄 تبديل</button>
 
             <div id="numberContainer" style="display:none;" dir="ltr">
                 <div class="number-card" dir="ltr">
@@ -906,11 +905,9 @@ main_html = """
                         <button class="copy-btn-mini" onclick="copyNumber()" id="copyNumBtn">📋 نسخ</button>
                     </div>
                     <div class="number" id="numberDisplay">+</div>
-                    <div class="number-countdown-wrap" id="numberCountdown" style="display:none;">
-                        <span class="countdown-icon">⏱️</span>
-                        <span>الرقم ينتهي خلال</span>
-                        <span class="countdown-value" id="numberCountdownValue">120</span>
-                        <span>ثانية</span>
+                    <div class="number-countdown-wrap" id="numberCountdown" style="display:none; cursor:pointer;" onclick="refreshNumber()">
+                        <span class="countdown-icon">🔄</span>
+                        <span>تبديل الرقم التالي</span>
                     </div>
                 </div>
                 <div id="autoMonitorStatus" class="auto-monitor">
@@ -1143,6 +1140,7 @@ main_html = """
 
         let currentPlatform = '';
         let currentNumber = '';
+        let currentNumberIndex = 0;
         let monitorInterval = null;
         let countdownIntervals = {};   // تتبع العدادات
         let allOtpsCache = [];          // أكواد مخزنة محلياً
@@ -1211,18 +1209,16 @@ main_html = """
                 document.getElementById('status').textContent = '⚠️ يرجى اختيار المنصة والدولة';
                 return;
             }
+            currentNumberIndex = 0;
             document.getElementById('status').textContent = '⏳ جاري جلب رقم...';
-            const res = await fetch('/api/get_number', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform:currentPlatform, country})});
+            const res = await fetch('/api/get_number', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform:currentPlatform, country, index: currentNumberIndex})});
             const data = await res.json();
             if (data.number) {
                 currentNumber = data.number;
-                // [تأثير typewriter] يظهر الرقم حرف حرف بخط كبير حلو
                 animateNumber(document.getElementById('numberDisplay'), data.number);
                 document.getElementById('numberContainer').style.display = 'block';
                 document.getElementById('status').textContent = '✅ الرقم جاهز!';
-                // تشغيل العداد التنازلي تحت الرقم
-                startNumberCountdown();
-                // 🎯 تشغيل المراقبة التلقائية فوراً
+                document.getElementById('numberCountdown').style.display = 'flex';
                 startMonitoring();
             } else {
                 document.getElementById('status').textContent = '❌ لا توجد أرقام متاحة';
@@ -1232,20 +1228,20 @@ main_html = """
         async function refreshNumber() {
             const country = document.getElementById('country').value;
             if (!currentPlatform || !country) return;
-            // إيقاف المراقبة القديمة
             stopMonitoring();
-            document.getElementById('status').textContent = '⏳ جاري التبديل...';
-            const res = await fetch('/api/get_number', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform:currentPlatform, country})});
+            currentNumberIndex++;
+            document.getElementById('status').textContent = '⏳ جاري التبديل للرقم التالي...';
+            const res = await fetch('/api/get_number', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform:currentPlatform, country, index: currentNumberIndex})});
             const data = await res.json();
-            if (data.number && data.number !== currentNumber) {
+            if (data.number) {
                 currentNumber = data.number;
-                // [تأثير typewriter] للرقم الجديد
                 animateNumber(document.getElementById('numberDisplay'), data.number);
                 document.getElementById('status').textContent = '🔄 تم التبديل!';
-                // إعادة تشغيل العداد
-                startNumberCountdown();
-                // إعادة تشغيل المراقبة
                 startMonitoring();
+            } else {
+                currentNumberIndex = 0; // العودة للبداية إذا انتهت الأرقام
+                document.getElementById('status').textContent = 'ℹ️ انتهت الأرقام، العودة للأول...';
+                refreshNumber();
             }
         }
 
@@ -1269,7 +1265,7 @@ main_html = """
                     if (data.otp) {
                         // ✅ تحقق من عدم تكرار الكود (نفس الـ timestamp)
                         if (data.otp !== lastSeenOtpTime) {
-                            const now = new Date().toLocaleString('ar-YE', {timeZone:'Asia/Aden'});
+                            const now = new Date().toLocaleString('en-US', {timeZone:'Asia/Aden', hour12: true});
                             addOtpToHistory(currentNumber, data.otp, now, currentPlatform);
                             lastSeenOtpTime = data.otp;
                             otpCountForNumber++;
@@ -1367,7 +1363,8 @@ main_html = """
                                     <span class="otp-countdown" data-otpid="${o.id}">⏱️ 120</span>
                                     🔑 ${o.otp}
                                 </div>
-                                <div class="otp-info">📞 <span dir="ltr" style="display:inline-block; direction:ltr; unicode-bidi:bidi-override;">${o.number}</span>  •  🕒 ${o.timestamp}</div>
+                                <div class="otp-info">📞 <span dir="ltr" style="display:inline-block; direction:ltr; unicode-bidi:bidi-override;">${o.number}</span></div>
+                                <div class="otp-info" style="margin-top:4px; color:#8b949e; font-size:11px;">🕒 ${o.timestamp}</div>
                             </div>
                             <button class="copy-btn" onclick="copyText('${o.otp}', this)">نسخ</button>
                         </div>
@@ -1697,11 +1694,18 @@ def api_countries():
 @app.route('/api/get_number', methods=['POST'])
 def api_get_number():
     d = request.json
-    nums = get_numbers(d['platform'], d['country'])
+    platform = d.get('platform')
+    country = d.get('country')
+    index = int(d.get('index', 0))
+    nums = get_numbers(platform, country)
     if not nums:
         return jsonify({'number': None})
-    # ✅ [الإصلاح] نرجّع الرقم كما هو بدون أي عكس أو تعديل
-    return jsonify({'number': nums[0] if nums else None})
+    
+    # اختيار الرقم بناءً على الفهرس (index) لضمان التنقل اليدوي
+    if index >= len(nums):
+        return jsonify({'number': None, 'end': True})
+    
+    return jsonify({'number': nums[index]})
 
 @app.route('/api/get_otp', methods=['POST'])
 def api_get_otp():
