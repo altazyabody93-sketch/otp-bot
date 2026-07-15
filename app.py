@@ -449,41 +449,40 @@ main_html = """
         /* ============= [القائمة المنسدلة] بتصميم احترافي مع أيقونات SVG ============= */
         .dropdown-menu { 
             display:none; 
-            position:fixed; 
-            top:60px;
-            left:50%; 
-            transform:translateX(-50%);
-            width: calc(100% - 32px);
-            max-width:360px;
-            background:linear-gradient(180deg, #1c2128 0%, #161b22 100%);
+            position:absolute; 
+            top:100%;
+            left:0; 
+            width: 240px;
+            background: #1c2128;
             border:1px solid #30363d; 
-            border-radius:14px; 
-            padding:10px; 
+            border-radius:12px; 
+            padding:8px; 
             z-index:9999; 
-            box-shadow:0 12px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(88,166,255,0.08); 
+            box-shadow:0 8px 24px rgba(0,0,0,0.5); 
             flex-direction:column; 
-            gap:4px;
+            gap:2px;
             box-sizing:border-box;
-            animation: menuSlide 0.25s ease;
+            margin-top: 8px;
+            transform-origin: top left;
+            animation: menuFadeIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
         .dropdown-menu.show { display:flex; }
-        @keyframes menuSlide {
-            from { opacity:0; transform:translateY(-8px); }
-            to   { opacity:1; transform:translateY(0); }
+        @keyframes menuFadeIn {
+            from { opacity:0; transform: scale(0.95) translateY(-10px); }
+            to   { opacity:1; transform: scale(1) translateY(0); }
         }
         .dropdown-menu a { 
             display:flex; 
             align-items:center; 
-            gap:12px; 
-            color:#e6e6e6; 
+            gap:10px; 
+            color:#c9d1d9; 
             text-decoration:none; 
-            padding:12px 14px; 
-            border-radius:10px; 
-            font-size:14px; 
+            padding:8px 10px; 
+            border-radius:8px; 
+            font-size:13px; 
             font-weight:600; 
             white-space:nowrap; 
-            transition:all 0.15s ease;
-            border:1px solid transparent;
+            transition:all 0.2s ease;
             width:100%;
         }
         .dropdown-menu a:hover { 
@@ -493,14 +492,14 @@ main_html = """
             transform:translateX(-3px);
         }
         .dropdown-menu a .ico { 
-            font-size:20px; 
-            width:32px; 
-            height:32px; 
+            font-size:16px; 
+            width:28px; 
+            height:28px; 
             display:flex; 
             align-items:center; 
             justify-content:center;
             background:rgba(88,166,255,0.1);
-            border-radius:8px;
+            border-radius:6px;
             flex-shrink:0;
         }
         .dropdown-menu a:hover .ico {
@@ -883,10 +882,11 @@ main_html = """
                 <div class="brand-icon">🚀</div>
                 <div class="brand-text">المطري OTP</div>
             </div>
-            <div class="top-actions" style="position:relative;">
+            <div class="top-actions" style="position:relative; display:flex; align-items:center;">
                 <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">🌙</button>
-                <button class="menu-btn" onclick="toggleMenu()">☰</button>
-                <div class="dropdown-menu" id="contactMenu">
+                <div style="position:relative;">
+                    <button class="menu-btn" onclick="toggleMenu()">☰</button>
+                    <div class="dropdown-menu" id="contactMenu" style="left:auto; right:0; transform-origin: top right;">
                     <div class="menu-header">📞 تواصل معنا</div>
                     <a href="{{ owner_link }}" target="_blank">
                         <span class="ico">
@@ -919,9 +919,15 @@ main_html = """
                         <span class="ico">🆘</span>
                         <span>طلب مساعدة</span>
                     </a>
+                    <div class="menu-divider"></div>
+                    <a href="/admin">
+                        <span class="ico">⚙️</span>
+                        <span>لوحة التحكم (للأدمن)</span>
+                    </a>
                 </div>
             </div>
         </div>
+    </div>
 
         <!-- ✅ [الإصلاح] تم حذف شريط الأخبار من هنا ونقله إلى الفوتر -->
 
@@ -1027,8 +1033,18 @@ main_html = """
         const platformGradients = {{ platform_gradients | tojson }};
 
         function toggleMenu() {
-            document.getElementById('contactMenu').classList.toggle('show');
+            const menu = document.getElementById('contactMenu');
+            menu.classList.toggle('show');
         }
+        
+        // إغلاق القائمة عند النقر خارجها
+        document.addEventListener('click', (e) => {
+            const menu = document.getElementById('contactMenu');
+            const btn = document.querySelector('.menu-btn');
+            if (menu.classList.contains('show') && !menu.contains(e.target) && !btn.contains(e.target)) {
+                menu.classList.remove('show');
+            }
+        });
 
         // ✅ [مودال طلب المساعدة]
         function openHelpModal() {
@@ -1472,32 +1488,30 @@ main_html = """
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
             
-            const digits = "01"; // أرقام ثنائية لمظهر تقني أكثر وضوحاً
-            const fontSize = 20; // حجم أكبر ليكون واضحاً جداً
+            const digits = "0123456789+()#-"; // أرقام ورموز متعلقة بالأرقام الوهمية
+            const fontSize = 18; 
             const columns = Math.floor(canvas.width / fontSize);
             const drops = [];
             
             for (let i = 0; i < columns; i++) {
-                drops[i] = Math.random() * -100; // توزيع عشوائي للبداية
+                drops[i] = Math.random() * -100;
             }
             
             function draw() {
-                // خلفية شبه شفافة لترك أثر (trail)
-                ctx.fillStyle = "rgba(7, 9, 13, 0.2)";
+                ctx.fillStyle = "rgba(7, 9, 13, 0.15)";
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
                 
-                ctx.fillStyle = "#00ffc8"; // لون تركواز مشع وواضح جداً
+                ctx.fillStyle = "#00ffc8"; 
                 ctx.font = "bold " + fontSize + "px 'Courier New'";
                 
                 for (let i = 0; i < drops.length; i++) {
                     const text = digits.charAt(Math.floor(Math.random() * digits.length));
                     ctx.fillText(text, i * fontSize, drops[i] * fontSize);
                     
-                    // سرعة أبطأ لتكون مريحة للعين
-                    if (drops[i] * fontSize > canvas.height && Math.random() > 0.98) {
+                    if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
                         drops[i] = 0;
                     }
-                    drops[i] += 0.5; 
+                    drops[i] += 0.8; // سرعة مناسبة للمطر الرقمي
                 }
             }
             
@@ -1619,22 +1633,31 @@ hr { border: 1px solid rgba(255,255,255,0.1); margin: 20px 0; }
 
     <hr>
 
-    <h3>🗑️ حذف كومبو</h3>
+    <h3>🗂️ قائمة الكومبوهات (إدارة الدول)</h3>
+    <p style="color:#94a3b8; font-size:12px; margin-bottom:10px;">يمكنك حذف كل دولة على حدة بدلاً من مسح الكل:</p>
+    <div style="max-height:250px; overflow-y:auto; background:rgba(0,0,0,0.2); padding:10px; border-radius:12px; margin-bottom:10px;">
     {% if combos %}
         {% for platform, code, name, flag in combos %}
         <div class="combo-item">
-            <span>{{ flag }} {{ name }} ({{ platform }})</span>
-            <form method="POST" style="display:inline;">
+            <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-size:20px;">{{ flag }}</span>
+                <div>
+                    <div style="font-weight:700; color:#fff;">{{ name }}</div>
+                    <div style="font-size:10px; color:#8b949e;">{{ platform }} (+{{ code }})</div>
+                </div>
+            </div>
+            <form method="POST" style="display:inline;" onsubmit="return confirm('حذف هذا الكومبو؟')">
                 <input type="hidden" name="action" value="delete">
                 <input type="hidden" name="platform" value="{{ platform }}">
                 <input type="hidden" name="country_code" value="{{ code }}">
-                <button type="submit" class="btn-danger">🗑️ حذف</button>
+                <button type="submit" class="btn-danger" style="padding:6px 12px; font-size:11px;">🗑️ حذف</button>
             </form>
         </div>
         {% endfor %}
     {% else %}
         <p style="color:#64748b; text-align:center; padding:20px;">🤷‍♂️ لا توجد كومبوهات حالياً</p>
     {% endif %}
+    </div>
 
     <hr>
     <div style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15)); padding:14px; border-radius:12px; border:1px solid rgba(245, 158, 11, 0.4); margin-bottom:10px;">
