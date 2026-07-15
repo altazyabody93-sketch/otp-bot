@@ -339,13 +339,50 @@ main_html = """
             content:''; position:fixed; inset:0; z-index:9999; pointer-events:none;
             background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.4) 100%);
         }
+        
+        /* [خلفية الأرقام المتساقطة] Matrix Canvas */
+        #matrix-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            opacity: 0.15;
+        }
 
-        .app { max-width:480px; margin:0 auto; background:#0d1117; min-height:100vh; display:flex; flex-direction:column; }
+        .app { max-width:480px; margin:0 auto; background:rgba(13, 17, 23, 0.9); backdrop-filter:blur(5px); min-height:100vh; display:flex; flex-direction:column; position:relative; }
 
         /* ============= HEADER ============= */
         .top-bar { background:#0d1117; padding:14px 16px; display:flex; align-items:center; justify-content:flex-start; gap:12px; border-bottom:1px solid #21262d; position:sticky; top:0; z-index:50; }
         .brand { display:flex; align-items:center; gap:10px; flex:0 0 auto; }
-        .brand-icon { width:36px; height:36px; border-radius:10px; background:linear-gradient(135deg, #1f6feb, #388bfd); display:flex; align-items:center; justify-content:center; font-size:18px; }
+        .brand-icon { 
+            width:36px; height:36px; border-radius:10px; 
+            background:linear-gradient(135deg, #1f6feb, #388bfd); 
+            display:flex; align-items:center; justify-content:center; font-size:18px;
+            position: relative;
+            animation: rocketFly 4s ease-in-out infinite;
+        }
+        
+        @keyframes rocketFly {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            25% { transform: translateY(-3px) rotate(-5deg); }
+            50% { transform: translateY(2px) rotate(5deg); }
+            75% { transform: translateY(-4px) rotate(-2deg); }
+        }
+        
+        .brand-icon::after {
+            content: '🔥';
+            position: absolute;
+            bottom: -5px;
+            font-size: 10px;
+            animation: rocketFire 0.2s infinite alternate;
+        }
+        
+        @keyframes rocketFire {
+            from { transform: scale(1) translateY(0); opacity: 0.8; }
+            to { transform: scale(1.3) translateY(2px); opacity: 1; }
+        }
         .brand-text { font-size:16px; font-weight:700; color:#fff; }
         .top-actions { display:flex; gap:6px; margin-right:auto; }
         .menu-btn { background:transparent; border:none; color:#8b949e; font-size:22px; cursor:pointer; padding:4px 8px; }
@@ -830,6 +867,7 @@ main_html = """
     </style>
 </head>
 <body>
+    <canvas id="matrix-bg"></canvas>
     <div class="app">
         <!-- HEADER -->
         <div class="top-bar">
@@ -1228,20 +1266,43 @@ main_html = """
         async function refreshNumber() {
             const country = document.getElementById('country').value;
             if (!currentPlatform || !country) return;
+            
+            // إظهار حالة التحميل على الزر نفسه
+            const refreshBtn = document.getElementById('numberCountdown');
+            const originalHTML = refreshBtn.innerHTML;
+            refreshBtn.innerHTML = '<span class="countdown-icon emoji-spin">⏳</span> <span>جاري التبديل...</span>';
+            refreshBtn.style.pointerEvents = 'none';
+
             stopMonitoring();
             currentNumberIndex++;
-            document.getElementById('status').textContent = '⏳ جاري التبديل للرقم التالي...';
-            const res = await fetch('/api/get_number', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform:currentPlatform, country, index: currentNumberIndex})});
-            const data = await res.json();
-            if (data.number) {
-                currentNumber = data.number;
-                animateNumber(document.getElementById('numberDisplay'), data.number);
-                document.getElementById('status').textContent = '🔄 تم التبديل!';
+            
+            try {
+                const res = await fetch('/api/get_number', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform:currentPlatform, country, index: currentNumberIndex})});
+                const data = await res.json();
+                
+                if (data.number) {
+                    currentNumber = data.number;
+                    animateNumber(document.getElementById('numberDisplay'), data.number);
+                    document.getElementById('status').textContent = '🔄 تم التبديل للرقم التالي!';
+                } else {
+                    // إذا انتهت الأرقام، نرجع للأول
+                    currentNumberIndex = 0;
+                    const resRetry = await fetch('/api/get_number', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform:currentPlatform, country, index: 0})});
+                    const dataRetry = await resRetry.json();
+                    if (dataRetry.number) {
+                        currentNumber = dataRetry.number;
+                        animateNumber(document.getElementById('numberDisplay'), dataRetry.number);
+                        document.getElementById('status').textContent = 'ℹ️ انتهت الأرقام، العودة للأول...';
+                    }
+                }
                 startMonitoring();
-            } else {
-                currentNumberIndex = 0; // العودة للبداية إذا انتهت الأرقام
-                document.getElementById('status').textContent = 'ℹ️ انتهت الأرقام، العودة للأول...';
-                refreshNumber();
+            } catch(e) {
+                document.getElementById('status').textContent = '❌ فشل التبديل، حاول مرة أخرى';
+            } finally {
+                // إعادة الزر لحالته الطبيعية ليظل قابلاً للضغط دائماً
+                refreshBtn.innerHTML = originalHTML;
+                refreshBtn.style.pointerEvents = 'auto';
+                refreshBtn.style.display = 'flex'; // التأكد من بقائه ظاهراً
             }
         }
 
@@ -1395,7 +1456,51 @@ main_html = """
             } catch(e) {}
         }
 
+        // [تأثير Matrix] أرقام تتساقط في الخلفية
+        function initMatrix() {
+            const canvas = document.getElementById('matrix-bg');
+            const ctx = canvas.getContext('2d');
+            
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            const digits = "0123456789";
+            const fontSize = 14;
+            const columns = canvas.width / fontSize;
+            const drops = [];
+            
+            for (let i = 0; i < columns; i++) {
+                drops[i] = 1;
+            }
+            
+            function draw() {
+                ctx.fillStyle = "rgba(7, 9, 13, 0.1)";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                ctx.fillStyle = "#388bfd"; // لون الأرقام (أزرق ليتناسب مع الموقع)
+                ctx.font = fontSize + "px Courier New";
+                
+                for (let i = 0; i < drops.length; i++) {
+                    const text = digits.charAt(Math.floor(Math.random() * digits.length));
+                    ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+                    
+                    if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
+                        drops[i] = 0;
+                    }
+                    drops[i]++;
+                }
+            }
+            
+            setInterval(draw, 33);
+            
+            window.addEventListener('resize', () => {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            });
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
+            initMatrix();
             initPlatformSelector();
             loadCachedOtps();
             startAllCountdowns();
@@ -1558,6 +1663,16 @@ hr { border: 1px solid rgba(255,255,255,0.1); margin: 20px 0; }
     </div>
 
     <hr>
+    <div style="background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(185, 28, 28, 0.1)); padding:14px; border-radius:12px; border:1px solid rgba(239, 68, 68, 0.4); margin-bottom:10px;">
+        <h3 style="margin-top:0; color:#ef4444;">🔥 تنظيف البيانات</h3>
+        <p style="color:#cbd5e1; font-size:12px; margin-bottom:10px;">حذف جميع سجلات الأكواد المسحوبة من الموقع نهائياً</p>
+        <form method="POST" onsubmit="return confirm('هل أنت متأكد من حذف جميع الأكواد المسحوبة؟ لا يمكن التراجع!')">
+            <input type="hidden" name="action" value="clear_otps">
+            <button type="submit" class="btn-danger" style="margin-top:0;">🗑️ حذف جميع الأكواد المسحوبة</button>
+        </form>
+    </div>
+
+    <hr>
     <a href="/"><button class="btn-secondary">🔙 العودة للصفحة الرئيسية</button></a>
 </div>
 
@@ -1662,6 +1777,15 @@ def admin():
                 conn.commit()
                 conn.close()
                 return redirect(url_for('admin'))
+
+        # ===== حذف جميع الأكواد المسحوبة =====
+        elif request.form.get('action') == 'clear_otps':
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            c.execute("DELETE FROM otp_logs")
+            conn.commit()
+            conn.close()
+            return redirect(url_for('admin'))
 
         # ===== رفع كومبو =====
         else:
