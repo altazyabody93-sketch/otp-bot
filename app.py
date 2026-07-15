@@ -277,179 +277,283 @@ main_html = """
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
     <style>
         * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-        html, body { font-family:'Cairo',sans-serif; background:#0a0d14; color:#e6e6e6; overflow-x:hidden; }
+        html, body { font-family:'Cairo',sans-serif; background:#07090d; color:#c9d1d9; overflow-x:hidden; }
         body { min-height:100vh; }
-
-        /* خلفية متحركة مع نجوم */
+        /* [تقليل الإضاءة] overlay يخفف السطوع على العيون */
         body::before {
-            content:''; position:fixed; inset:0; z-index:-2;
-            background: radial-gradient(circle at 20% 20%, rgba(0, 200, 150, 0.05), transparent 40%),
-                        radial-gradient(circle at 80% 70%, rgba(100, 50, 200, 0.05), transparent 40%);
-            animation: bgShift 15s ease-in-out infinite alternate;
+            content:''; position:fixed; inset:0; z-index:9999; pointer-events:none;
+            background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.4) 100%);
         }
-        @keyframes bgShift { 0%{ transform:scale(1);} 100%{ transform:scale(1.05);} }
-        
-        .stars { position:fixed; inset:0; z-index:-1; pointer-events:none; }
-        .star { position:absolute; background:#fff; border-radius:50%; box-shadow: 0 0 3px rgba(255,255,255,0.4); }
-        
-        .app { max-width:480px; margin:0 auto; background:#0a0d14; min-height:100vh; display:flex; flex-direction:column; }
 
-        /* ============= TOP BAR ============= */
-        .top-bar { 
-            background:rgba(10, 13, 20, 0.95); backdrop-filter:blur(10px);
-            padding:12px 16px; display:flex; align-items:center; justify-content:space-between; 
-            border-bottom:1px solid rgba(0, 200, 150, 0.1); position:sticky; top:0; z-index:50;
+        .app { max-width:480px; margin:0 auto; background:#0d1117; min-height:100vh; display:flex; flex-direction:column; }
+
+        /* ============= HEADER ============= */
+        .top-bar { background:#0d1117; padding:14px 16px; display:flex; align-items:center; justify-content:flex-start; gap:12px; border-bottom:1px solid #21262d; position:sticky; top:0; z-index:50; }
+        .brand { display:flex; align-items:center; gap:10px; flex:0 0 auto; }
+        .brand-icon { width:36px; height:36px; border-radius:10px; background:linear-gradient(135deg, #1f6feb, #388bfd); display:flex; align-items:center; justify-content:center; font-size:18px; }
+        .brand-text { font-size:16px; font-weight:700; color:#fff; }
+        .top-actions { display:flex; gap:6px; margin-right:auto; }
+        .menu-btn { background:transparent; border:none; color:#8b949e; font-size:22px; cursor:pointer; padding:4px 8px; }
+
+        /* ============= [شريط الأخبار] يتحرك تحت الشريط العلوي ============= */
+        .news-ticker {
+            background: linear-gradient(90deg, #1c2128, #21262d, #1c2128);
+            border-bottom: 1px solid #30363d;
+            padding: 8px 0;
+            overflow: hidden;
+            position: relative;
+            direction: ltr;
         }
-        .brand { display:flex; align-items:center; gap:10px; }
-        .brand-icon { width:36px; height:36px; border-radius:10px; background:linear-gradient(135deg, #00c896, #00f0d8); display:flex; align-items:center; justify-content:center; font-size:18px; }
-        .brand-text { font-size:16px; font-weight:700; color:#00f0d8; text-shadow: 0 0 8px rgba(0, 240, 216, 0.3); }
-        .menu-btn { background:transparent; border:none; color:#00c896; font-size:22px; cursor:pointer; padding:4px 8px; transition:all 0.3s; }
-        .menu-btn:hover { color:#00f0d8; transform:scale(1.1); }
-        
-        /* شريط المعلومات */
-        .info-ticker {
-            background:rgba(0, 200, 150, 0.03); border-bottom:1px solid rgba(0, 200, 150, 0.1);
-            padding:8px 0; overflow:hidden; position:sticky; top:55px; z-index:49;
+        .news-ticker::before, .news-ticker::after {
+            content: ''; position: absolute; top: 0; bottom: 0; width: 40px; z-index: 2; pointer-events: none;
         }
-        .ticker-text {
-            display:inline-block; white-space:nowrap; padding-right:100%;
-            animation: ticker 25s linear infinite; color:#00c896; font-weight:600; font-size:12px;
+        .news-ticker::before { left: 0; background: linear-gradient(90deg, #1c2128, transparent); }
+        .news-ticker::after  { right: 0; background: linear-gradient(-90deg, #1c2128, transparent); }
+        .ticker-label {
+            position: absolute; top: 0; right: 0; bottom: 0; left: 0;
+            display: none;
         }
-        @keyframes ticker { 0%{ transform:translateX(100%);} 100%{ transform:translateX(-100%);} }
-        
-        .dropdown-menu { display:none; position:absolute; top:55px; left:16px; right:16px; background:rgba(10, 13, 20, 0.95); backdrop-filter:blur(15px); border:1px solid rgba(0, 200, 150, 0.2); border-radius:10px; padding:6px; z-index:100; box-shadow:0 4px 12px rgba(0,0,0,0.4); flex-direction:column; gap:2px; }
-        .dropdown-menu.show { display:flex; animation: slideDown 0.3s ease; }
-        @keyframes slideDown { from{ opacity:0; transform:translateY(-10px);} to{ opacity:1; transform:translateY(0);} }
-        .dropdown-menu a { display:flex; align-items:center; gap:10px; color:#cbd5e1; text-decoration:none; padding:11px 14px; border-radius:8px; font-size:14px; font-weight:600; white-space:nowrap; transition:all 0.3s; }
-        .dropdown-menu a:hover { background:rgba(0, 200, 150, 0.1); color:#00f0d8; }
+        .ticker-content {
+            display: flex; gap: 60px;
+            padding: 0 30px;
+            white-space: nowrap;
+            animation: tickerScroll 35s linear infinite;
+            font-weight: 600; font-size: 12px; color: #c9d1d9;
+            align-items: center;
+        }
+        .ticker-content:hover { animation-play-state: paused; }
+        @keyframes tickerScroll {
+            0%   { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+        .ticker-item { display: inline-flex; align-items: center; gap: 6px; }
+        .ticker-emoji { font-size: 14px; display: inline-block; }
+        .ticker-name {
+            background: linear-gradient(90deg, #58a6ff, #a371f7, #f78166, #58a6ff);
+            background-size: 300% 300%;
+            -webkit-background-clip: text; background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: nameScroll 4s ease infinite;
+            display: inline-block; font-weight: 800;
+        }
+        @keyframes nameScroll {
+            0%,100% { background-position: 0% 50%; }
+            50%     { background-position: 100% 50%; }
+        }
+        body.light .news-ticker { background: linear-gradient(90deg, #f6f8fa, #eaeef2, #f6f8fa); border-bottom-color: #d0d7de; }
+        body.light .ticker-content { color: #1f2328; }
+        .dropdown-menu { display:none; position:absolute; top:55px; left:16px; right:16px; background:#1c2128; border:1px solid #30363d; border-radius:10px; padding:6px; z-index:100; box-shadow:0 4px 12px rgba(0,0,0,0.4); flex-direction:column; gap:2px; }
+        .dropdown-menu.show { display:flex; }
+        .dropdown-menu a { display:flex; align-items:center; gap:10px; color:#e6e6e6; text-decoration:none; padding:11px 14px; border-radius:8px; font-size:14px; font-weight:600; white-space:nowrap; }
+        .dropdown-menu a:hover { background:#21262d; color:#58a6ff; }
         .dropdown-menu a .ico { font-size:18px; }
 
         /* ============= MAIN CONTENT ============= */
         .main { padding:16px; flex:1; }
 
         .hero { text-align:center; padding:24px 12px 20px; }
-        .hero h1 { font-size:24px; font-weight:800; color:#00f0d8; margin-bottom:6px; text-shadow: 0 0 10px rgba(0, 240, 216, 0.3); }
+        .hero h1 { font-size:24px; font-weight:800; color:#fff; margin-bottom:6px; }
         .hero p { font-size:14px; color:#8b949e; line-height:1.5; }
         .hero p .crown { display:inline-block; animation:bounce 1.5s infinite; }
         @keyframes bounce { 0%,100%{ transform:translateY(0);} 50%{ transform:translateY(-3px);} }
+        /* [إيموجي متحركة] بشكل مبهر */
+        .emoji-float { display:inline-block; animation: emojiFloat 3s ease-in-out infinite; }
+        .emoji-float:nth-of-type(2) { animation-delay: 0.4s; }
+        @keyframes emojiFloat {
+            0%,100% { transform: translateY(0) rotate(0deg) scale(1); }
+            25%     { transform: translateY(-5px) rotate(-10deg) scale(1.1); }
+            50%     { transform: translateY(-2px) rotate(0deg) scale(0.95); }
+            75%     { transform: translateY(-6px) rotate(10deg) scale(1.12); }
+        }
+        .emoji-wave { display:inline-block; animation: emojiWave 2.2s ease-in-out infinite; transform-origin: 70% 70%; }
+        @keyframes emojiWave {
+            0%,100% { transform: rotate(0deg); }
+            15%     { transform: rotate(15deg); }
+            30%     { transform: rotate(-10deg); }
+            45%     { transform: rotate(15deg); }
+            60%,100%{ transform: rotate(0deg); }
+        }
+        .emoji-spin { display:inline-block; animation: emojiSpin 5s linear infinite; }
+        @keyframes emojiSpin {
+            0%   { transform: rotate(0deg) scale(1); }
+            50%  { transform: rotate(180deg) scale(1.2); }
+            100% { transform: rotate(360deg) scale(1); }
+        }
+        .emoji-pulse-soft { display:inline-block; animation: emojiPulseSoft 2.5s ease-in-out infinite; }
+        @keyframes emojiPulseSoft {
+            0%,100% { transform: scale(1); }
+            50%     { transform: scale(1.18); }
+        }
 
-        .section-title { font-size:15px; font-weight:700; color:#e6e6e6; margin:18px 4px 12px; display:flex; align-items:center; gap:8px; }
-        .section-title .icon { color:#00c896; animation: pulse 2s infinite; }
-        @keyframes pulse { 0%,100%{ transform:scale(1);} 50%{ transform:scale(1.1);} }
+        .section-title { font-size:15px; font-weight:700; color:#fff; margin:18px 4px 12px; display:flex; align-items:center; gap:8px; }
+        .section-title .icon { color:#58a6ff; }
 
         /* ============= PLATFORMS GRID ============= */
         .platforms { display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; margin-bottom:8px; }
         .platform-btn {
             display:flex; align-items:center; gap:10px; padding:12px 14px;
-            background:rgba(20, 30, 48, 0.6); border:1px solid rgba(0, 200, 150, 0.15); border-radius:10px;
-            color:#e6e6e6; cursor:pointer; transition:all 0.3s;
+            background:#1c2128; border:1px solid #30363d; border-radius:10px;
+            color:#e6e6e6; cursor:pointer; transition:all 0.15s ease;
             font-size:14px; font-weight:600; font-family:'Cairo',sans-serif;
         }
-        .platform-btn:hover { background:rgba(0, 200, 150, 0.1); border-color:rgba(0, 200, 150, 0.3); transform:translateY(-2px); }
+        .platform-btn:hover { background:#21262d; border-color:#484f58; }
         .platform-btn:active { transform:scale(0.98); }
-        .platform-btn.active { background:rgba(0, 200, 150, 0.15); border-color:rgba(0, 240, 216, 0.5); color:#00f0d8; box-shadow:0 0 15px rgba(0, 200, 150, 0.2); }
-        .platform-btn img { width:32px; height:32px; object-fit:contain; border-radius:8px; background:#fff; padding:2px; transition:transform 0.3s; }
-        .platform-btn.active img { transform:rotate(360deg) scale(1.1); }
+        .platform-btn.active { background:var(--platform-color, #1f6feb); border-color:var(--platform-color, #1f6feb); color:#fff; box-shadow:0 0 0 1px var(--platform-color, #1f6feb), 0 0 12px rgba(31,111,235,0.15); }
+        .platform-btn img { width:32px; height:32px; object-fit:contain; border-radius:8px; background:#fff; padding:2px; }
 
         /* ============= SELECT & BUTTONS ============= */
         .select-wrap { position:relative; }
         .form-control {
             width:100%; padding:14px 16px; border-radius:10px;
-            border:1px solid rgba(0, 200, 150, 0.15); background:rgba(20, 30, 48, 0.5); color:#e6e6e6;
+            border:1px solid #30363d; background:#0d1117; color:#e6e6e6;
             outline:none; font-family:'Cairo',sans-serif; font-size:14px; font-weight:600;
             appearance:none; -webkit-appearance:none;
-            background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='%2300c896' d='M6 9L1 4h10z'/></svg>");
+            background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='%238b949e' d='M6 9L1 4h10z'/></svg>");
             background-repeat:no-repeat; background-position:left 16px center; padding-left:40px;
-            transition:all 0.3s;
         }
-        .form-control:focus { border-color:rgba(0, 240, 216, 0.4); background:rgba(20, 30, 48, 0.7); box-shadow: 0 0 10px rgba(0, 200, 150, 0.2); }
+        .form-control:focus { border-color:#1f6feb; }
         .form-control:disabled { opacity:0.5; cursor:not-allowed; }
 
         .btn-primary {
             width:100%; padding:14px; border:none; border-radius:10px;
-            background: linear-gradient(135deg, #00c896, #00f0d8);
-            color:#0a0d14; font-size:15px; font-weight:700;
+            background:#238636; color:#fff; font-size:15px; font-weight:700;
             cursor:pointer; margin-top:10px; font-family:'Cairo',sans-serif;
-            transition:all 0.3s; box-shadow: 0 0 15px rgba(0, 200, 150, 0.3);
+            transition:all 0.15s ease;
         }
-        .btn-primary:hover:not(:disabled) { transform:translateY(-2px); box-shadow: 0 0 20px rgba(0, 240, 216, 0.5); }
+        .btn-primary:hover:not(:disabled) { background:#2ea043; }
         .btn-primary:active:not(:disabled) { transform:scale(0.98); }
         .btn-primary:disabled { opacity:0.5; cursor:not-allowed; }
 
         .btn-blue {
             width:100%; padding:14px; border:none; border-radius:10px;
-            background: linear-gradient(135deg, #0066cc, #0088ff);
-            color:#fff; font-size:15px; font-weight:700;
+            background:#1f6feb; color:#fff; font-size:15px; font-weight:700;
             cursor:pointer; margin-top:8px; font-family:'Cairo',sans-serif;
-            transition:all 0.3s; box-shadow: 0 0 15px rgba(0, 136, 255, 0.3);
+            transition:all 0.15s ease;
         }
-        .btn-blue:hover { transform:translateY(-2px); box-shadow: 0 0 20px rgba(0, 136, 255, 0.5); }
+        .btn-blue:hover { background:#388bfd; }
 
-        /* ============= NUMBER BOX ============= */
+        /* ============= [الرقم] بخط حلو + زر نسخ بارز ============= */
         .number-card {
-            background:rgba(20, 30, 48, 0.5); border:1px solid rgba(0, 200, 150, 0.25); border-radius:12px;
-            padding:18px; margin:16px 0; text-align:center;
-            box-shadow:0 0 0 1px rgba(0, 200, 150, 0.1), 0 0 20px rgba(0, 200, 150, 0.15);
-            animation: glowPulse 3s infinite;
+            background: linear-gradient(135deg, #0d1117, #161b22);
+            border:1px solid #238636; border-radius:14px;
+            padding:20px 18px; margin:16px 0; text-align:center;
+            box-shadow:0 0 0 1px rgba(35, 134, 54, 0.15), 0 0 18px rgba(35, 134, 54, 0.08);
+            position: relative;
         }
-        @keyframes glowPulse { 0%,100%{ box-shadow:0 0 0 1px rgba(0, 200, 150, 0.1), 0 0 20px rgba(0, 200, 150, 0.15);} 50%{ box-shadow:0 0 0 1px rgba(0, 200, 150, 0.2), 0 0 30px rgba(0, 200, 150, 0.25);} }
-        .number-card .number { font-family:'JetBrains Mono', 'Courier New',monospace; font-size:28px; font-weight:bold; color:#00f0d8; letter-spacing:2px; text-shadow: 0 0 8px rgba(0, 240, 216, 0.4); animation: numberPulse 0.6s ease; }
-        @keyframes numberPulse { from{ transform:scale(0.95); opacity:0.8;} to{ transform:scale(1); opacity:1;} }
-        .copy-btn-mini { background:rgba(0, 200, 150, 0.1); border:1px solid rgba(0, 200, 150, 0.3); color:#00c896; padding:6px 10px; border-radius:8px; cursor:pointer; font-size:12px; margin-top:8px; transition:all 0.3s; }
-        .copy-btn-mini:hover { color:#00f0d8; border-color:rgba(0, 240, 216, 0.5); background:rgba(0, 200, 150, 0.15); }
+        .number-card .number {
+            font-family: 'Courier New', monospace;
+            font-size: 28px;
+            font-weight: 900;
+            color: #3fb950;
+            letter-spacing: 3px;
+            text-shadow: 0 0 8px rgba(63, 185, 80, 0.4);
+            padding: 6px 0;
+        }
+        .number-card .number .digit {
+            display: inline-block;
+            opacity: 0;
+            transform: translateY(10px) scale(0.7);
+            animation: digitDrop 0.4s ease forwards;
+        }
+        @keyframes digitDrop {
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .copy-btn-mini {
+            background: linear-gradient(135deg, #1f6feb, #388bfd);
+            border: 1px solid #388bfd;
+            color: #fff;
+            padding: 6px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 700;
+            margin-top: 4px;
+            transition: all 0.2s;
+            box-shadow: 0 0 10px rgba(31, 111, 235, 0.3);
+        }
+        .copy-btn-mini:hover {
+            background: linear-gradient(135deg, #388bfd, #58a6ff);
+            transform: translateY(-1px);
+            box-shadow: 0 0 16px rgba(31, 111, 235, 0.5);
+        }
+        .copy-btn-mini.copied {
+            background: linear-gradient(135deg, #238636, #2ea043);
+            border-color: #2ea043;
+            box-shadow: 0 0 16px rgba(35, 134, 54, 0.5);
+        }
 
         /* ============= AUTO MONITOR STATUS ============= */
-        .auto-monitor { display:flex; align-items:center; gap:8px; padding:10px 14px; background:rgba(20, 30, 48, 0.5); border:1px solid rgba(0, 200, 150, 0.15); border-radius:10px; margin-top:8px; font-size:12px; color:#8b949e; font-weight:600; }
-        .auto-monitor .dot { width:8px; height:8px; border-radius:50%; background:#00c896; animation:pulse-dot 1.5s infinite; }
+        .auto-monitor { display:flex; align-items:center; gap:8px; padding:10px 14px; background:#0d1117; border:1px solid #21262d; border-radius:10px; margin-top:8px; font-size:12px; color:#8b949e; font-weight:600; }
+        .auto-monitor .dot { width:8px; height:8px; border-radius:50%; background:#3fb950; animation:pulse-dot 1.5s infinite; }
         @keyframes pulse-dot { 0%,100%{ opacity:1; transform:scale(1);} 50%{ opacity:0.4; transform:scale(1.3);} }
-        .auto-monitor.done { color:#00c896; }
-        .auto-monitor.done .dot { background:#00c896; animation:none; }
+        .auto-monitor.done { color:#3fb950; }
+        .auto-monitor.done .dot { background:#3fb950; animation:none; }
 
-        /* ============= OTP COUNTDOWN ============= */
-        .otp-countdown { display:inline-block; padding:2px 8px; background:rgba(0, 200, 150, 0.15); border:1px solid #00c896; color:#00c896; border-radius:6px; font-size:10px; font-weight:bold; font-family:'Courier New',monospace; margin-right:6px; }
+        /* ============= OTP COUNTDOWN 120s ============= */
+        .otp-countdown { display:inline-block; padding:2px 8px; background:rgba(63, 185, 80, 0.15); border:1px solid #3fb950; color:#3fb950; border-radius:6px; font-size:10px; font-weight:bold; font-family:'Courier New',monospace; margin-right:6px; }
         .otp-countdown.warn { background:rgba(210, 153, 34, 0.15); border-color:#d29922; color:#d29922; }
         .otp-countdown.expired { background:rgba(248, 81, 73, 0.15); border-color:#f85149; color:#f85149; }
 
         /* ============= OTP PLATFORM SECTIONS ============= */
         .otp-section { margin-bottom:14px; }
-        .otp-section-header { display:flex; align-items:center; gap:8px; padding:8px 12px; background:rgba(20, 30, 48, 0.5); border:1px solid rgba(0, 200, 150, 0.15); border-radius:8px; margin-bottom:6px; cursor:pointer; transition:all 0.3s; }
-        .otp-section-header:hover { background:rgba(0, 200, 150, 0.1); border-color:rgba(0, 200, 150, 0.3); }
+        .otp-section-header { display:flex; align-items:center; gap:8px; padding:8px 12px; background:#1c2128; border:1px solid #30363d; border-radius:8px; margin-bottom:6px; cursor:pointer; transition:background 0.15s; }
+        .otp-section-header:hover { background:#21262d; border-color:#484f58; }
         .otp-section-header .platform-icon { width:24px; height:24px; border-radius:6px; padding:2px; background:#fff; }
-        .otp-section-header .platform-name { font-size:13px; font-weight:700; color:#00f0d8; }
+        .otp-section-header .platform-name { font-size:13px; font-weight:700; color:#fff; }
         .otp-section-header .platform-count { font-size:11px; color:#8b949e; margin-right:auto; }
         .otp-section-header .toggle-arrow { color:#8b949e; font-size:12px; transition:transform 0.2s; }
         .otp-section-header.collapsed .toggle-arrow { transform:rotate(-90deg); }
         .otp-section-items { display:flex; flex-direction:column; gap:6px; }
         .otp-section-items.hidden { display:none; }
+        body.light .otp-section-header { background:#f6f8fa; border-color:#d0d7de; }
+        body.light .otp-section-header .platform-name { color:#1f2328; }
 
         /* ============= OTP LIST ============= */
         .otp-list { display:flex; flex-direction:column; gap:8px; margin-top:12px; }
         .otp-item {
-            background:rgba(20, 30, 48, 0.5); border:1px solid rgba(0, 200, 150, 0.15); border-radius:10px;
+            background:#1c2128; border:1px solid #30363d; border-radius:10px;
             padding:12px 14px; display:flex; justify-content:space-between; align-items:center;
-            animation: slideIn 0.4s ease;
         }
-        @keyframes slideIn { from{ opacity:0; transform:translateX(20px);} to{ opacity:1; transform:translateX(0);} }
-        .otp-item .otp-code { font-family:'JetBrains Mono', 'Courier New',monospace; font-size:16px; font-weight:bold; color:#00f0d8; }
+        .otp-item .otp-code { font-family:'Courier New',monospace; font-size:16px; font-weight:bold; color:#3fb950; }
         .otp-item .otp-info { font-size:11px; color:#8b949e; margin-top:2px; }
-        .otp-item .copy-btn { background:rgba(0, 200, 150, 0.1); border:1px solid rgba(0, 200, 150, 0.3); color:#00c896; padding:4px 10px; border-radius:6px; cursor:pointer; font-size:11px; font-weight:600; transition:all 0.3s; }
-        .otp-item .copy-btn:hover { background:rgba(0, 200, 150, 0.2); color:#00f0d8; }
+        .otp-item .copy-btn { background:transparent; border:1px solid #30363d; color:#58a6ff; padding:4px 10px; border-radius:6px; cursor:pointer; font-size:11px; font-weight:600; }
 
         .empty-state { text-align:center; padding:30px 16px; color:#8b949e; font-size:13px; }
         .empty-state .icon { font-size:36px; margin-bottom:8px; opacity:0.6; }
 
-        /* ============= BOTTOM TICKER ============= */
-        .bottom-ticker {
-            position:fixed; bottom:0; left:0; width:100%; 
-            background:rgba(10, 13, 20, 0.95); border-top:1px solid rgba(0, 200, 150, 0.1);
-            padding:8px 0; z-index:999; overflow:hidden;
+        /* ============= STATUS BAR ============= */
+        .status { background:#1c2128; border:1px solid #30363d; border-radius:10px; padding:12px 16px; text-align:center; margin-top:14px; color:#8b949e; font-size:13px; font-weight:600; }
+
+        /* ============= THEME TOGGLE ============= */
+        .theme-toggle { background:transparent; border:1px solid #30363d; color:#8b949e; padding:6px 10px; border-radius:8px; cursor:pointer; font-size:14px; }
+        .theme-toggle:hover { color:#58a6ff; }
+
+        /* ============= LIGHT MODE ============= */
+        body.light { background:#f6f8fa !important; color:#1f2328 !important; }
+        body.light .app { background:#ffffff !important; }
+        body.light .top-bar { background:#ffffff !important; border-bottom-color:#d0d7de !important; }
+        body.light .brand-text, body.light .hero h1, body.light .section-title { color:#1f2328 !important; }
+        body.light .hero p, body.light .status, body.light .empty-state { color:#656d76 !important; }
+        body.light .platform-btn { background:#f6f8fa; border-color:#d0d7de; color:#1f2328; }
+        body.light .platform-btn:hover { background:#eaeef2; }
+        body.light .form-control { background:#ffffff; border-color:#d0d7de; color:#1f2328; }
+        body.light .otp-item { background:#f6f8fa; border-color:#d0d7de; }
+        body.light .otp-item .otp-code { color:#1a7f37; }
+        body.light .dropdown-menu { background:#ffffff; border-color:#d0d7de; }
+        body.light .dropdown-menu a { color:#1f2328; }
+        body.light .status { background:#f6f8fa; border-color:#d0d7de; }
+        body.light .number-card { background:#f6f8fa; border-color:#1a7f37; }
+        body.light .number-card .number { color:#1a7f37; }
+
+        .footer { text-align:center; padding:20px 16px; color:#484f58; font-size:12px; border-top:1px solid #21262d; }
+        body.light .footer { color:#656d76; border-top-color:#d0d7de; }
+
+        /* ============= RESPONSIVE ============= */
+        @media (max-width:380px) {
+            .hero h1 { font-size:20px; }
+            .platform-btn { font-size:13px; padding:10px 12px; }
         }
-        .bottom-ticker-text {
-            display:inline-block; white-space:nowrap; padding-right:100%;
-            animation: bottomTicker 20s linear infinite; color:#00c896; font-weight:bold; font-size:12px;
-        }
-        @keyframes bottomTicker { 0%{ transform:translateX(100%);} 100%{ transform:translateX(-100%);} }
-    </style>    </style>
+    </style>
 </head>
 <body>
     <div class="app">
@@ -459,7 +563,7 @@ main_html = """
                 <div class="brand-icon">🚀</div>
                 <div class="brand-text">المطري OTP</div>
             </div>
-            <div style="display:flex; gap:6px; position:relative;">
+            <div class="top-actions" style="position:relative;">
                 <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">🌙</button>
                 <button class="menu-btn" onclick="toggleMenu()">☰</button>
                 <div class="dropdown-menu" id="contactMenu">
@@ -470,17 +574,42 @@ main_html = """
             </div>
         </div>
 
+        <!-- [شريط الأخبار] يتحدث عن الموقع والمطور -->
+        <div class="news-ticker">
+            <div class="ticker-content">
+                <span class="ticker-item"><span class="ticker-emoji">🚀</span> مرحباً بك في موقع المطري OTP</span>
+                <span class="ticker-item"><span class="ticker-emoji">⚡</span> أسرع موقع للحصول على الأكواد</span>
+                <span class="ticker-item"><span class="ticker-emoji">💎</span> صُنع بحب بواسطة</span>
+                <span class="ticker-item"><span class="ticker-name">المطري</span> 🔥</span>
+                <span class="ticker-item"><span class="ticker-emoji">🌍</span> دعم 195+ دولة حول العالم</span>
+                <span class="ticker-item"><span class="ticker-emoji">📱</span> واتساب • تيليجرام • فيسبوك • تيك توك</span>
+                <span class="ticker-item"><span class="ticker-emoji">🔔</span> إشعارات فورية لحظة بلحظة</span>
+                <span class="ticker-item"><span class="ticker-emoji">🎯</span> المطور المطري يقدّم لك أفضل تجربة</span>
+                <span class="ticker-item"><span class="ticker-emoji">⭐</span> شكراً لزيارتك</span>
+                <!-- مكرر للتمرير السلس -->
+                <span class="ticker-item"><span class="ticker-emoji">🚀</span> مرحباً بك في موقع المطري OTP</span>
+                <span class="ticker-item"><span class="ticker-emoji">⚡</span> أسرع موقع للحصول على الأكواد</span>
+                <span class="ticker-item"><span class="ticker-emoji">💎</span> صُنع بحب بواسطة</span>
+                <span class="ticker-item"><span class="ticker-name">المطري</span> 🔥</span>
+                <span class="ticker-item"><span class="ticker-emoji">🌍</span> دعم 195+ دولة حول العالم</span>
+                <span class="ticker-item"><span class="ticker-emoji">📱</span> واتساب • تيليجرام • فيسبوك • تيك توك</span>
+                <span class="ticker-item"><span class="ticker-emoji">🔔</span> إشعارات فورية لحظة بلحظة</span>
+                <span class="ticker-item"><span class="ticker-emoji">🎯</span> المطور المطري يقدّم لك أفضل تجربة</span>
+                <span class="ticker-item"><span class="ticker-emoji">⭐</span> شكراً لزيارتك</span>
+            </div>
+        </div>
+
         <!-- MAIN -->
         <div class="main">
             <div class="hero">
-                <h1>🚀 موقع المطري OTP</h1>
-                <p><span class="crown">👑</span> أرقام واتساب سحب أكواد تطوير مطري <span class="crown">👑</span></p>
+                <h1><span class="emoji-float">🚀</span> موقع المطري OTP</h1>
+                <p><span class="emoji-wave crown">👑</span> أرقام واتساب سحب أكواد تطوير مطري <span class="emoji-wave crown">👑</span></p>
             </div>
 
-            <div class="section-title"><span class="icon">🎯</span> اختر المنصة</div>
+            <div class="section-title"><span class="icon emoji-float">🎯</span> اختر المنصة</div>
             <div class="platforms" id="platformSelector"></div>
 
-            <div class="section-title"><span class="icon">🌍</span> اختر الدولة</div>
+            <div class="section-title"><span class="icon emoji-spin">🌍</span> اختر الدولة</div>
             <div class="select-wrap">
                 <select id="country" class="form-control" disabled>
                     <option value="">-- اختر المنصة أولاً --</option>
@@ -503,7 +632,7 @@ main_html = """
                 </div>
             </div>
 
-            <div class="section-title" style="margin-top:24px;"><span class="icon">📜</span> الأكواد المسحوبة</div>
+            <div class="section-title" style="margin-top:24px;"><span class="icon emoji-pulse-soft">📜</span> الأكواد المسحوبة</div>
             <div class="otp-list" id="otpHistory">
                 <div class="empty-state">
                     <div class="icon">⏳</div>
@@ -515,7 +644,7 @@ main_html = """
         </div>
 
         <div class="footer">
-            💎 صُنع بحب ⚡ بواسطة المطري
+            <span class="emoji-pulse-soft">💎</span> صُنع بحب <span class="emoji-spin">⚡</span> بواسطة المطري <span class="emoji-wave">🔥</span>
         </div>
     </div>
 
@@ -549,15 +678,31 @@ main_html = """
         }
         loadTheme();
 
+        // [تأثير typewriter] للرقم - يظهر حرف حرف
+        function animateNumber(element, text) {
+            element.innerHTML = '';
+            const chars = text.split('');
+            chars.forEach((ch, i) => {
+                const span = document.createElement('span');
+                span.className = 'digit';
+                span.textContent = ch;
+                span.style.animationDelay = (i * 0.08) + 's';
+                element.appendChild(span);
+            });
+        }
+
         async function copyNumber() {
             const num = document.getElementById('numberDisplay').textContent;
-            await navigator.clipboard.writeText(num);
+            try {
+                await navigator.clipboard.writeText(num);
+            } catch(e) {}
             const btn = document.getElementById('copyNumBtn');
-            const orig = btn.textContent;
-            btn.textContent = '✅ تم';
-            btn.style.color = '#3fb950';
-            btn.style.borderColor = '#3fb950';
-            setTimeout(() => { btn.textContent = orig; btn.style.color = ''; btn.style.borderColor = ''; }, 1500);
+            btn.classList.add('copied');
+            btn.innerHTML = '✅ تم النسخ';
+            setTimeout(() => {
+                btn.classList.remove('copied');
+                btn.innerHTML = '📋 نسخ';
+            }, 1800);
         }
 
         function copyText(text, btn) {
@@ -672,7 +817,8 @@ main_html = """
             const data = await res.json();
             if (data.number) {
                 currentNumber = data.number;
-                document.getElementById('numberDisplay').textContent = data.number;
+                // [تأثير typewriter] يظهر الرقم حرف حرف بخط كبير حلو
+                animateNumber(document.getElementById('numberDisplay'), data.number);
                 document.getElementById('numberContainer').style.display = 'block';
                 document.getElementById('status').textContent = '✅ الرقم جاهز!';
                 // 🎯 تشغيل المراقبة التلقائية فوراً
@@ -692,7 +838,8 @@ main_html = """
             const data = await res.json();
             if (data.number && data.number !== currentNumber) {
                 currentNumber = data.number;
-                document.getElementById('numberDisplay').textContent = data.number;
+                // [تأثير typewriter] للرقم الجديد
+                animateNumber(document.getElementById('numberDisplay'), data.number);
                 document.getElementById('status').textContent = '🔄 تم التبديل!';
                 // إعادة تشغيل المراقبة
                 startMonitoring();
@@ -1269,15 +1416,6 @@ def monitor_channel():
 
 threading.Thread(target=monitor_channel, daemon=True).start()
 
-# ========== دعم Docker والبيئات المختلفة ==========
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    debug = os.environ.get('FLASK_ENV') == 'development'
-    
-    # في بيئة الإنتاج (Docker/Render)، يتم التشغيل عبر Gunicorn
-    if os.environ.get('PRODUCTION'):
-        # يتم تشغيله عبر Gunicorn من خلال Dockerfile
-        pass
-    else:
-        # في بيئة التطوير المحلية
-        app.run(host='0.0.0.0', port=port, debug=debug, threaded=True)
+    app.run(host='0.0.0.0', port=port, debug=False)
