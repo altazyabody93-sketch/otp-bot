@@ -36,14 +36,14 @@ def init_db():
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS combos (id INTEGER PRIMARY KEY AUTOINCREMENT, platform TEXT, country_code TEXT, country_name TEXT, country_flag TEXT, numbers TEXT, UNIQUE(platform, country_code))''')
     c.execute('''CREATE TABLE IF NOT EXISTS otp_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, number TEXT, otp TEXT, timestamp TEXT, platform TEXT, country_code TEXT, country_flag TEXT)''')
-    # ✅ [جديد] جدول الإعلانات اللي بنرسلها من البوت
     c.execute('''CREATE TABLE IF NOT EXISTS announcements (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT, content TEXT, media_url TEXT, button_text TEXT, button_url TEXT, source_msg_id INTEGER, created_at TEXT)''')
-    # ✅ [جديد] جدول طلبات المساعدة من الموقع
     c.execute('''CREATE TABLE IF NOT EXISTS help_requests (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, message TEXT, source TEXT, status TEXT DEFAULT 'pending', created_at TEXT)''')
-    # ✅ [جديد] جدول لتخزين chat_ids اللي البوت يتواصل معها
     c.execute('''CREATE TABLE IF NOT EXISTS known_chats (chat_id TEXT PRIMARY KEY, chat_type TEXT, chat_title TEXT, last_seen TEXT)''')
-    # ✅ [جديد] جدول إعدادات الأدمن (chat_id الخاص بالأدمن لاستلام طلبات المساعدة)
     c.execute('''CREATE TABLE IF NOT EXISTS admin_settings (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT)''')
+    
+    # 🔥 [تنظيف إجباري] مسح الأكواد الوهمية القديمة عند التشغيل لضمان بداية نظيفة
+    c.execute("DELETE FROM otp_logs")
+    
     conn.commit()
     conn.close()
 init_db()
@@ -340,7 +340,7 @@ main_html = """
             background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.4) 100%);
         }
         
-        /* [خلفية الأرقام المتساقطة] Matrix Canvas */
+        /* [خلفية الأرقام المتساقطة] Digital Cyber Background */
         #matrix-bg {
             position: fixed;
             top: 0;
@@ -348,14 +348,14 @@ main_html = """
             width: 100%;
             height: 100%;
             z-index: 1;
-            opacity: 0.35;
+            opacity: 0.5; /* وضوح عالي */
             pointer-events: none;
         }
 
         .app { 
             max-width:480px; margin:0 auto; 
-            background:rgba(13, 17, 23, 0.65); 
-            backdrop-filter:blur(3px); 
+            background:rgba(13, 17, 23, 0.45); /* واجهة شفافة جداً لرؤية الخلفية */
+            backdrop-filter:blur(2px); 
             min-height:100vh; display:flex; flex-direction:column; 
             position:relative; 
             z-index: 2;
@@ -1464,7 +1464,7 @@ main_html = """
             } catch(e) {}
         }
 
-        // [تأثير Matrix] أرقام تتساقط في الخلفية
+        // [تأثير Cyber Digital] أرقام كبيرة وواضحة تتساقط ببطء
         function initMatrix() {
             const canvas = document.getElementById('matrix-bg');
             const ctx = canvas.getContext('2d');
@@ -1472,34 +1472,36 @@ main_html = """
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
             
-            const digits = "0123456789";
-            const fontSize = 14;
-            const columns = canvas.width / fontSize;
+            const digits = "01"; // أرقام ثنائية لمظهر تقني أكثر وضوحاً
+            const fontSize = 20; // حجم أكبر ليكون واضحاً جداً
+            const columns = Math.floor(canvas.width / fontSize);
             const drops = [];
             
             for (let i = 0; i < columns; i++) {
-                drops[i] = 1;
+                drops[i] = Math.random() * -100; // توزيع عشوائي للبداية
             }
             
             function draw() {
-                ctx.fillStyle = "rgba(7, 9, 13, 0.1)";
+                // خلفية شبه شفافة لترك أثر (trail)
+                ctx.fillStyle = "rgba(7, 9, 13, 0.2)";
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
                 
-                ctx.fillStyle = "#388bfd"; // لون الأرقام (أزرق ليتناسب مع الموقع)
-                ctx.font = fontSize + "px Courier New";
+                ctx.fillStyle = "#00ffc8"; // لون تركواز مشع وواضح جداً
+                ctx.font = "bold " + fontSize + "px 'Courier New'";
                 
                 for (let i = 0; i < drops.length; i++) {
                     const text = digits.charAt(Math.floor(Math.random() * digits.length));
                     ctx.fillText(text, i * fontSize, drops[i] * fontSize);
                     
-                    if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
+                    // سرعة أبطأ لتكون مريحة للعين
+                    if (drops[i] * fontSize > canvas.height && Math.random() > 0.98) {
                         drops[i] = 0;
                     }
-                    drops[i]++;
+                    drops[i] += 0.5; 
                 }
             }
             
-            setInterval(draw, 33);
+            setInterval(draw, 50); // سرعة تحديث أهدأ
             
             window.addEventListener('resize', () => {
                 canvas.width = window.innerWidth;
