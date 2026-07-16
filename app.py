@@ -345,18 +345,7 @@ main_html = """
             background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.4) 100%);
         }
         
-        /* [خلفية الأرقام المتساقطة] Digital Cyber Background */
-        #matrix-bg {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: -999; /* خلف كل شيء تماماً */
-            opacity: 0.9; 
-            pointer-events: none;
-            background: #07090d;
-        }
+        /* تم حذف خلفية الماتريكس لإزالة الفراغ الأسود */
 
         .app { 
             max-width:480px; margin:0 auto; 
@@ -528,9 +517,9 @@ main_html = """
         }
 
         /* ============= MAIN CONTENT ============= */
-        .main { padding:0 16px 16px 16px; flex:1; }
+        .main { padding:0 16px 16px 16px; flex:1; display: flex; flex-direction: column; }
 
-        .hero { text-align:center; padding:10px 12px; margin-top: 15px; border-top: 1px solid #21262d; }
+        .hero { text-align:center; padding:10px 12px; margin-top: 10px; order: 3; }
         .hero h1 { font-size:18px; font-weight:800; color:#fff; margin-bottom:2px; }
         .hero p { font-size:12px; color:#8b949e; line-height:1.4; }
         .hero p .crown { display:inline-block; animation:bounce 1.5s infinite; }
@@ -564,11 +553,11 @@ main_html = """
             50%     { transform: scale(1.18); }
         }
 
-        .section-title { font-size:14px; font-weight:700; color:#fff; margin:12px 4px 8px; display:flex; align-items:center; gap:8px; }
+        .section-title { font-size:14px; font-weight:700; color:#fff; margin:12px 4px 8px; display:flex; align-items:center; gap:8px; order: 1; }
         .section-title .icon { color:#58a6ff; }
 
         /* ============= PLATFORMS GRID ============= */
-        .platforms { display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; margin-bottom:15px; }
+        .platforms { display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; margin-bottom:15px; order: 2; }
         .platform-btn {
             display:flex; align-items:center; gap:10px; padding:12px;
             background:#1c2128; border:1px solid #30363d; border-radius:12px;
@@ -883,7 +872,6 @@ main_html = """
     </style>
 </head>
 <body>
-    <canvas id="matrix-bg"></canvas>
     <div class="app">
         <!-- HEADER -->
         <div class="top-bar">
@@ -936,24 +924,24 @@ main_html = """
 
         <!-- MAIN -->
         <div class="main">
-            <div class="section-title" style="margin-top:0;"><span class="icon emoji-float">🎯</span> اختر المنصة</div>
-            <div class="platforms" id="platformSelector"></div>
+            <div class="section-title" style="margin-top:0; order:1;"><span class="icon emoji-float">🎯</span> اختر المنصة</div>
+            <div class="platforms" id="platformSelector" style="order:2;"></div>
 
-            <div class="hero">
+            <div class="hero" style="order:3; margin-top:10px; padding:10px 0; border-top:1px solid #21262d; border-bottom:1px solid #21262d; margin-bottom:10px;">
                 <h1><span class="emoji-float">🚀</span> موقع المطري OTP</h1>
                 <p><span class="emoji-wave crown">👑</span> أرقام واتساب سحب أكواد تطوير مطري <span class="emoji-wave crown">👑</span></p>
             </div>
 
-            <div class="section-title"><span class="icon emoji-spin">🌍</span> اختر الدولة</div>
-            <div class="select-wrap">
+            <div class="section-title" style="order:4;"><span class="icon emoji-spin">🌍</span> اختر الدولة</div>
+            <div class="select-wrap" style="order:5;">
                 <select id="country" class="form-control" disabled>
                     <option value="">-- اختر المنصة أولاً --</option>
                 </select>
             </div>
 
-            <button class="btn-primary" id="getNumberBtn" onclick="getNumber()" disabled>🚀 جلب رقم</button>
+            <button class="btn-primary" id="getNumberBtn" onclick="getNumber()" disabled style="order:6;">🚀 جلب رقم</button>
 
-            <div id="numberContainer" style="display:none;" dir="ltr">
+            <div id="numberContainer" style="display:none; order:7;" dir="ltr">
                 <div class="number-card" dir="ltr">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                         <span style="font-size:11px; color:#8b949e; font-weight:600;">📞 الرقم</span>
@@ -970,15 +958,15 @@ main_html = """
                 </div>
             </div>
 
-            <div class="section-title" style="margin-top:24px;"><span class="icon emoji-pulse-soft">📜</span> الأكواد المسحوبة</div>
-            <div class="otp-list" id="otpHistory">
+            <div class="section-title" style="margin-top:24px; order:8;"><span class="icon emoji-pulse-soft">📜</span> الأكواد المسحوبة</div>
+            <div class="otp-list" id="otpHistory" style="order:9;">
                 <div class="empty-state">
                     <div class="icon">⏳</div>
                     <div>في انتظار الأكواد...</div>
                 </div>
             </div>
 
-            <div class="status" id="status">⚡ اختر المنصة والدولة للبدء</div>
+            <div class="status" id="status" style="order:10;">⚡ اختر المنصة والدولة للبدء</div>
         </div>
 
         <!-- ✅ [الإصلاح] شريط الأخبار الاحترافي في الفوتر -->
