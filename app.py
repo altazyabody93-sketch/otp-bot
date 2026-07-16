@@ -1866,29 +1866,11 @@ from flask import session
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not session.get('logged_in'):
-            return redirect(url_for('admin_login'))
+        # تم تعطيل القفل بناءً على طلب المستخدم
         return f(*args, **kwargs)
     return decorated_function
 
-@app.route('/admin_login', methods=['GET', 'POST'])
-def admin_login():
-    if request.method == 'POST':
-        if request.form.get('password') == ADMIN_PASSWORD:
-            session['logged_in'] = True
-            return redirect(f"/{ADMIN_SECRET_PATH}")
-        return "❌ كلمة المرور خاطئة!"
-    return '''
-    <div dir="rtl" style="text-align:center; margin-top:100px; font-family:sans-serif; background:#0d1117; color:#fff; padding:50px; border-radius:20px;">
-        <h2>🔐 دخول الأدمن</h2>
-        <form method="POST">
-            <input type="password" name="password" placeholder="كلمة المرور" style="padding:12px; border-radius:8px; border:1px solid #30363d; background:#161b22; color:#fff;">
-            <button type="submit" style="padding:12px 25px; background:#238636; color:#fff; border:none; border-radius:8px; cursor:pointer; font-weight:bold;">دخول</button>
-        </form>
-    </div>
-    '''
-
-@app.route(f'/{ADMIN_SECRET_PATH}', methods=['GET', 'POST'])
+@app.route('/admin', methods=['GET', 'POST'])
 @login_required
 def admin():
     if request.method == 'POST':
@@ -1902,7 +1884,7 @@ def admin():
                 c.execute("DELETE FROM combos WHERE platform=? AND country_code=?", (platform, country_code))
                 conn.commit()
                 conn.close()
-                return redirect(f"/{ADMIN_SECRET_PATH}")
+                return redirect("/admin")
 
         # ===== حذف جميع الأكواد المسحوبة =====
         elif request.form.get('action') == 'clear_otps':
@@ -1915,7 +1897,7 @@ def admin():
             global _otp_cache, _otp_cache_time
             _otp_cache = None
             _otp_cache_time = 0
-            return redirect(f"/{ADMIN_SECRET_PATH}")
+            return redirect("/admin")
 
         # ===== رفع كومبو =====
         else:
