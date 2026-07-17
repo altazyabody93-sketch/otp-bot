@@ -471,94 +471,7 @@ main_html = """
         }
         body.light .news-ticker { background: linear-gradient(90deg, #f6f8fa, #eaeef2, #f6f8fa); border-bottom-color: #d0d7de; }
         body.light .ticker-content { color: #1f2328; }
-        /* ============= [القائمة المنسدلة] بتصميم احترافي مع أيقونات SVG ============= */
-        .dropdown-menu { 
-            display:flex; 
-            position:fixed; 
-            top:0;
-            left:-300px; /* زيادة الإزاحة لضمان الاختفاء التام */
-            width: 280px;
-            height: 100%; /* استخدام % بدلاً من vh لتجنب مشاكل المتصفح */
-            background: #0d1117;
-            border-right:1px solid #30363d; 
-            padding:20px 10px; 
-            z-index:10001; /* فوق الـ overlay */
-            box-shadow:none; /* إخفاء الظل عند الاختفاء */
-            flex-direction:column; 
-            gap:8px;
-            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            visibility: hidden;
-            pointer-events: none;
-        }
-        .dropdown-menu.show { 
-            transform: translateX(300px); 
-            visibility: visible; 
-            pointer-events: auto;
-            box-shadow:10px 0 50px rgba(0,0,0,0.9);
-        }
-        .menu-overlay {
-            position:fixed;
-            top:0;
-            left:0;
-            width:100%;
-            height:100%;
-            background:rgba(0,0,0,0.8);
-            backdrop-filter:blur(5px);
-            z-index:10000;
-            opacity:0;
-            visibility:hidden;
-            transition: all 0.3s ease;
-        }
-        .menu-overlay.show { 
-            opacity:1;
-            visibility:visible;
-        }
-        .dropdown-menu a { 
-            display:flex; 
-            align-items:center; 
-            gap:12px; 
-            color:#c9d1d9; 
-            text-decoration:none; 
-            padding:12px 15px; 
-            border-radius:10px; 
-            font-size:14px; 
-            font-weight:600; 
-            transition:all 0.3s ease;
-            border: 1px solid transparent;
-        }
-        .dropdown-menu a:hover { 
-            background: rgba(88,166,255,0.1);
-            color:#58a6ff; 
-            border-color: rgba(88,166,255,0.2);
-            padding-right: 20px;
-        }
-        .dropdown-menu a .ico { 
-            font-size:16px; 
-            width:28px; 
-            height:28px; 
-            display:flex; 
-            align-items:center; 
-            justify-content:center;
-            background:rgba(88,166,255,0.1);
-            border-radius:6px;
-            flex-shrink:0;
-        }
-        .dropdown-menu a:hover .ico {
-            background:rgba(88,166,255,0.2);
-        }
-        .dropdown-menu .menu-divider {
-            height:1px;
-            background:linear-gradient(90deg, transparent, #30363d, transparent);
-            margin:6px 0;
-        }
-        .dropdown-menu .menu-header {
-            font-size:11px;
-            color:#8b949e;
-            font-weight:700;
-            padding:6px 14px 2px;
-            text-transform:uppercase;
-            letter-spacing:0.5px;
-        }
+
 
         /* ============= MAIN CONTENT ============= */
         .main { padding:16px; flex:1; }
@@ -919,49 +832,16 @@ main_html = """
     <div class="app">
         <!-- HEADER -->
         <div class="top-bar">
-            <button class="menu-btn" onclick="toggleMenu()">☰</button>
-            <div class="brand" style="margin-left:auto; margin-right:auto; display:flex; align-items:center; gap:8px;">
+            <div class="brand" style="display:flex; align-items:center; gap:8px;">
                 <div class="brand-icon">🚀</div>
                 <div class="brand-text">المطري OTP</div>
             </div>
             <div class="top-actions" style="display:flex; align-items:center; gap:10px;">
+                <a href="{{ owner_link }}" target="_blank" title="واتساب" style="text-decoration:none; font-size:20px;">💬</a>
+                <a href="{{ channel_link }}" target="_blank" title="تليجرام" style="text-decoration:none; font-size:20px;">✈️</a>
                 <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">🌙</button>
-                <div class="menu-overlay" id="menuOverlay" onclick="toggleMenu()"></div>
-                <div class="dropdown-menu" id="contactMenu">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; padding:0 10px;">
-                        <div style="font-weight:900; color:#fff; font-size:18px;">🚀 القائمة</div>
-                        <button onclick="toggleMenu()" style="background:none; border:none; color:#8b949e; font-size:20px; cursor:pointer;">✕</button>
-                    </div>
-                        <div class="menu-header">📞 تواصل معنا</div>
-                        <a href="{{ owner_link }}" target="_blank">
-                            <span class="ico">💬</span>
-                            <span>واتساب المطور</span>
-                        </a>
-                        <a href="{{ wa_group }}" target="_blank">
-                            <span class="ico">👥</span>
-                            <span>جروب واتساب</span>
-                        </a>
-                        <a href="https://t.me/jsjsgsjsvh" target="_blank">
-                            <span class="ico">✈️</span>
-                            <span>قناة تليجرام</span>
-                        </a>
-                        <div class="menu-divider"></div>
-                        <a href="/learn-more">
-                            <span class="ico">📰</span>
-                            <span>اعرف المزيد</span>
-                        </a>
-                        <a href="/announcements">
-                            <span class="ico">📢</span>
-                            <span>إعلانات الموقع</span>
-                        </a>
-                        <a href="#" onclick="openHelpModal(); return false;">
-                            <span class="ico">🆘</span>
-                            <span>طلب مساعدة</span>
-                        </a>
-                        <!-- الرابط مخفي للأمان -->
-                    </div>
-                </div>
             </div>
+        </div>
         </div>
 
         <!-- ✅ [الإصلاح] تم حذف شريط الأخبار من هنا ونقله إلى الفوتر -->
@@ -1067,11 +947,7 @@ main_html = """
         const platformNames = {{ platform_names | tojson }};
         const platformGradients = {{ platform_gradients | tojson }};
 
-        function toggleMenu() {
-            document.getElementById('contactMenu').classList.toggle('show');
-            document.getElementById('menuOverlay').classList.toggle('show');
-            document.body.style.overflow = document.getElementById('contactMenu').classList.contains('show') ? 'hidden' : '';
-        }
+
 
         // ✅ [مودال طلب المساعدة]
         function openHelpModal() {
