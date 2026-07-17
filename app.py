@@ -992,7 +992,7 @@ main_html = """
                 <p><span class="emoji-wave crown">👑</span> أرقام واتساب سحب أكواد تطوير مطري <span class="emoji-wave crown">👑</span></p>
             </div>
 
-            <div class="section-title"><span class="icon emoji-float">🎯</span> اختر المنصة</div>
+            <div class="section-title" style="margin-top:0; padding-top:0;"><span class="icon emoji-float">🎯</span> اختر المنصة</div>
             <div class="platforms-wrap" id="platformsWrap">
                 <canvas class="platforms-rain" id="platformsRain"></canvas>
                 <div class="platforms-rain-bg" id="platformsRainBg"></div>
