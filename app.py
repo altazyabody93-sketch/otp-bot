@@ -350,25 +350,37 @@ main_html = """
             position: fixed;
             top: 0;
             left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: -999; /* خلف كل شيء تماماً */
-            opacity: 0.9; 
+            width: 100vw;
+            height: 100vh;
+            z-index: -999; 
+            opacity: 1; 
             pointer-events: none;
             background: #07090d;
         }
 
         .app { 
             max-width:480px; margin:0 auto; 
-            background:rgba(13, 17, 23, 0.5); 
-            backdrop-filter:blur(2px); 
+            background:rgba(13, 17, 23, 0.3); 
+            backdrop-filter:blur(1px); 
             min-height:100vh; display:flex; flex-direction:column; 
             position:relative; 
             z-index: 1;
+            padding-top: 0; /* إزالة أي فراغ علوي */
         }
 
         /* ============= HEADER ============= */
-        .top-bar { background:#0d1117; padding:14px 16px; display:flex; align-items:center; justify-content:flex-start; gap:12px; border-bottom:1px solid #21262d; position:sticky; top:0; z-index:50; }
+        .top-bar { 
+            background:#0d1117; 
+            padding:10px 16px; 
+            display:flex; 
+            align-items:center; 
+            justify-content:space-between; 
+            gap:12px; 
+            border-bottom:1px solid #21262d; 
+            position:sticky; 
+            top:0; 
+            z-index:1000; 
+        }
         .brand { display:flex; align-items:center; gap:10px; flex:0 0 auto; }
         .brand-icon { 
             width:36px; height:36px; border-radius:10px; 
@@ -886,13 +898,13 @@ main_html = """
     <div class="app">
         <!-- HEADER -->
         <div class="top-bar">
-            <div class="brand">
+            <button class="menu-btn" onclick="toggleMenu()">☰</button>
+            <div class="brand" style="margin-left:auto; margin-right:auto; display:flex; align-items:center; gap:8px;">
                 <div class="brand-icon">🚀</div>
                 <div class="brand-text">المطري OTP</div>
             </div>
             <div class="top-actions" style="display:flex; align-items:center; gap:10px;">
                 <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">🌙</button>
-                <button class="menu-btn" onclick="toggleMenu()">☰</button>
                 <div class="menu-overlay" id="menuOverlay" onclick="toggleMenu()"></div>
                 <div class="dropdown-menu" id="contactMenu">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; padding:0 10px;">
