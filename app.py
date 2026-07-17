@@ -10,12 +10,7 @@ import time
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
-app.secret_key = "secret_key_for_session_123"
 DB_PATH = "bot.db"
-
-# ✅ [جديد] إعدادات الأمان للوحة التحكم
-ADMIN_PASSWORD = "123"  # كلمة المرور للدخول
-ADMIN_SECRET_PATH = "admin_secret_77" # الرابط السري سيكون /admin_secret_77
 
 WHATSAPP_GROUP_LINK = "https://chat.whatsapp.com/IeK2gNS64fd8YSnenzt4WR"
 OWNER_PHONE = "967733723953"
@@ -40,15 +35,15 @@ def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS combos (id INTEGER PRIMARY KEY AUTOINCREMENT, platform TEXT, country_code TEXT, country_name TEXT, country_flag TEXT, numbers TEXT, UNIQUE(platform, country_code))''')
-    c.execute('''CREATE TABLE IF NOT EXISTS otp_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, number TEXT, otp TEXT, timestamp TEXT, platform TEXT, country_code TEXT, country_flag TEXT)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS otp_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, number TEXT, otp TEXT, timestamp TEXT, platform TEXT)''')
+    # ✅ [جديد] جدول الإعلانات اللي بنرسلها من البوت
     c.execute('''CREATE TABLE IF NOT EXISTS announcements (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT, content TEXT, media_url TEXT, button_text TEXT, button_url TEXT, source_msg_id INTEGER, created_at TEXT)''')
+    # ✅ [جديد] جدول طلبات المساعدة من الموقع
     c.execute('''CREATE TABLE IF NOT EXISTS help_requests (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, message TEXT, source TEXT, status TEXT DEFAULT 'pending', created_at TEXT)''')
+    # ✅ [جديد] جدول لتخزين chat_ids اللي البوت يتواصل معها
     c.execute('''CREATE TABLE IF NOT EXISTS known_chats (chat_id TEXT PRIMARY KEY, chat_type TEXT, chat_title TEXT, last_seen TEXT)''')
+    # ✅ [جديد] جدول إعدادات الأدمن (chat_id الخاص بالأدمن لاستلام طلبات المساعدة)
     c.execute('''CREATE TABLE IF NOT EXISTS admin_settings (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT)''')
-    
-    # 🔥 [تنظيف إجباري] مسح الأكواد الوهمية القديمة عند التشغيل لضمان بداية نظيفة
-    c.execute("DELETE FROM otp_logs")
-    
     conn.commit()
     conn.close()
 init_db()
@@ -339,60 +334,18 @@ main_html = """
         * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
         html, body { font-family:'Cairo',sans-serif; background:#07090d; color:#c9d1d9; overflow-x:hidden; }
         body { min-height:100vh; }
-        /* (تم حذف overlay الذي كان يخلق فراغ كبير) */
-        
-        /* [خلفية الأرقام المتساقطة] Digital Cyber Background */
-        #matrix-bg {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: -999; /* خلف كل شيء تماماً */
-            opacity: 0.9; 
-            pointer-events: none;
-            background: #07090d;
+        /* [تقليل الإضاءة] overlay يخفف السطوع على العيون */
+        body::before {
+            content:''; position:fixed; inset:0; z-index:9999; pointer-events:none;
+            background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.4) 100%);
         }
 
-        .app { 
-            max-width:480px; margin:0 auto; 
-            background:rgba(13, 17, 23, 0.5); 
-            backdrop-filter:blur(2px); 
-            min-height:100vh; display:flex; flex-direction:column; 
-            position:relative; 
-            z-index: 1;
-        }
+        .app { max-width:480px; margin:0 auto; background:#0d1117; min-height:100vh; display:flex; flex-direction:column; }
 
         /* ============= HEADER ============= */
         .top-bar { background:#0d1117; padding:14px 16px; display:flex; align-items:center; justify-content:flex-start; gap:12px; border-bottom:1px solid #21262d; position:sticky; top:0; z-index:50; }
         .brand { display:flex; align-items:center; gap:10px; flex:0 0 auto; }
-        .brand-icon { 
-            width:36px; height:36px; border-radius:10px; 
-            background:linear-gradient(135deg, #1f6feb, #388bfd); 
-            display:flex; align-items:center; justify-content:center; font-size:18px;
-            position: relative;
-            animation: rocketFly 4s ease-in-out infinite;
-        }
-        
-        @keyframes rocketFly {
-            0%, 100% { transform: translateY(0) rotate(0deg); }
-            25% { transform: translateY(-3px) rotate(-5deg); }
-            50% { transform: translateY(2px) rotate(5deg); }
-            75% { transform: translateY(-4px) rotate(-2deg); }
-        }
-        
-        .brand-icon::after {
-            content: '🔥';
-            position: absolute;
-            bottom: -5px;
-            font-size: 10px;
-            animation: rocketFire 0.2s infinite alternate;
-        }
-        
-        @keyframes rocketFire {
-            from { transform: scale(1) translateY(0); opacity: 0.8; }
-            to { transform: scale(1.3) translateY(2px); opacity: 1; }
-        }
+        .brand-icon { width:36px; height:36px; border-radius:10px; background:linear-gradient(135deg, #1f6feb, #388bfd); display:flex; align-items:center; justify-content:center; font-size:18px; }
         .brand-text { font-size:16px; font-weight:700; color:#fff; }
         .top-actions { display:flex; gap:6px; margin-right:auto; }
         .menu-btn { background:transparent; border:none; color:#8b949e; font-size:22px; cursor:pointer; padding:4px 8px; }
@@ -401,12 +354,12 @@ main_html = """
         .news-ticker {
             background: linear-gradient(135deg, #1c2128 0%, #21262d 50%, #1c2128 100%);
             border: 1px solid #30363d;
-            padding: 5px 0;
+            padding: 7px 0;
             overflow: hidden;
             position: relative;
             direction: ltr;
             border-radius: 8px;
-            margin: 0 16px 5px 16px;
+            margin: 0 16px 8px 16px;
             max-width: calc(100% - 32px);
             box-shadow: 0 2px 8px rgba(0,0,0,0.2);
         }
@@ -450,60 +403,59 @@ main_html = """
         body.light .ticker-content { color: #1f2328; }
         /* ============= [القائمة المنسدلة] بتصميم احترافي مع أيقونات SVG ============= */
         .dropdown-menu { 
-            display:flex; 
+            display:none; 
             position:fixed; 
-            top:0;
-            left:-280px; 
-            width: 260px;
-            height: 100vh;
-            background: #0d1117;
-            border-right:1px solid #30363d; 
-            padding:20px 10px; 
-            z-index:10000; 
-            box-shadow:10px 0 30px rgba(0,0,0,0.8); 
+            top:60px;
+            left:50%; 
+            transform:translateX(-50%);
+            width: calc(100% - 32px);
+            max-width:360px;
+            background:linear-gradient(180deg, #1c2128 0%, #161b22 100%);
+            border:1px solid #30363d; 
+            border-radius:14px; 
+            padding:10px; 
+            z-index:9999; 
+            box-shadow:0 12px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(88,166,255,0.08); 
             flex-direction:column; 
-            gap:8px;
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            visibility: hidden;
+            gap:4px;
+            box-sizing:border-box;
+            animation: menuSlide 0.25s ease;
         }
-        .dropdown-menu.show { left:0; visibility: visible; }
-        .menu-overlay {
-            display:none;
-            position:fixed;
-            inset:0;
-            background:rgba(0,0,0,0.7);
-            backdrop-filter:blur(4px);
-            z-index:9999;
+        .dropdown-menu.show { display:flex; }
+        @keyframes menuSlide {
+            from { opacity:0; transform:translateY(-8px); }
+            to   { opacity:1; transform:translateY(0); }
         }
-        .menu-overlay.show { display:block; }
         .dropdown-menu a { 
             display:flex; 
             align-items:center; 
             gap:12px; 
-            color:#c9d1d9; 
+            color:#e6e6e6; 
             text-decoration:none; 
-            padding:12px 15px; 
+            padding:12px 14px; 
             border-radius:10px; 
             font-size:14px; 
             font-weight:600; 
-            transition:all 0.3s ease;
-            border: 1px solid transparent;
+            white-space:nowrap; 
+            transition:all 0.15s ease;
+            border:1px solid transparent;
+            width:100%;
         }
         .dropdown-menu a:hover { 
-            background: rgba(88,166,255,0.1);
+            background:linear-gradient(135deg, #21262d 0%, #1c2128 100%); 
             color:#58a6ff; 
-            border-color: rgba(88,166,255,0.2);
-            padding-right: 20px;
+            border-color:#30363d;
+            transform:translateX(-3px);
         }
         .dropdown-menu a .ico { 
-            font-size:16px; 
-            width:28px; 
-            height:28px; 
+            font-size:20px; 
+            width:32px; 
+            height:32px; 
             display:flex; 
             align-items:center; 
             justify-content:center;
             background:rgba(88,166,255,0.1);
-            border-radius:6px;
+            border-radius:8px;
             flex-shrink:0;
         }
         .dropdown-menu a:hover .ico {
@@ -526,9 +478,9 @@ main_html = """
         /* ============= MAIN CONTENT ============= */
         .main { padding:16px; flex:1; }
 
-        .hero { text-align:center; padding: 0; margin: 0; } 
-        .hero h1 { font-size:22px; font-weight:800; color:#fff; margin-bottom:4px; }
-        .hero p { font-size:13px; color:#8b949e; line-height:1.4; }
+        .hero { text-align:center; padding:24px 12px 20px; }
+        .hero h1 { font-size:24px; font-weight:800; color:#fff; margin-bottom:6px; }
+        .hero p { font-size:14px; color:#8b949e; line-height:1.5; }
         .hero p .crown { display:inline-block; animation:bounce 1.5s infinite; }
         @keyframes bounce { 0%,100%{ transform:translateY(0);} 50%{ transform:translateY(-3px);} }
         /* [إيموجي متحركة] بشكل مبهر */
@@ -560,74 +512,21 @@ main_html = """
             50%     { transform: scale(1.18); }
         }
 
-        .section-title { font-size:14px; font-weight:700; color:#fff; margin:12px 4px 8px; display:flex; align-items:center; gap:8px; }
+        .section-title { font-size:15px; font-weight:700; color:#fff; margin:18px 4px 12px; display:flex; align-items:center; gap:8px; }
         .section-title .icon { color:#58a6ff; }
 
         /* ============= PLATFORMS GRID ============= */
-        .platforms { display:grid; grid-template-columns:repeat(2, 1fr); gap:8px; margin-bottom:5px; }
+        .platforms { display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; margin-bottom:8px; }
         .platform-btn {
-            display:flex; align-items:center; gap:8px; padding:10px 12px;
+            display:flex; align-items:center; gap:10px; padding:12px 14px;
             background:#1c2128; border:1px solid #30363d; border-radius:10px;
             color:#e6e6e6; cursor:pointer; transition:all 0.15s ease;
-            font-size:13px; font-weight:600; font-family:'Cairo',sans-serif;
+            font-size:14px; font-weight:600; font-family:'Cairo',sans-serif;
         }
         .platform-btn:hover { background:#21262d; border-color:#484f58; }
         .platform-btn:active { transform:scale(0.98); }
         .platform-btn.active { background:var(--platform-color, #1f6feb); border-color:var(--platform-color, #1f6feb); color:#fff; box-shadow:0 0 0 1px var(--platform-color, #1f6feb), 0 0 12px rgba(31,111,235,0.15); }
         .platform-btn img { width:32px; height:32px; object-fit:contain; border-radius:8px; background:#fff; padding:2px; }
-        /* ✅ تكبير المنصات */
-        .platforms-wrap .platform-btn {
-            padding: 14px 14px; font-size: 15px; min-height: 58px;
-            background: rgba(22,27,34,0.85); backdrop-filter: blur(2px);
-        }
-        .platforms-wrap .platform-btn img {
-            width: 38px; height: 38px; border-radius: 10px; padding: 3px;
-        }
-
-        /* ✅ خلفية الأرقام والرموز المتساقطة خلف المنصات */
-        .platforms-wrap {
-            position: relative;
-            border-radius: 14px;
-            overflow: hidden;
-            isolation: isolate;
-            padding: 6px;
-        }
-        .platforms-wrap::before {
-            content: '';
-            position: absolute; inset: 0;
-            background: linear-gradient(180deg, rgba(7,9,13,0.45) 0%, rgba(7,9,13,0.75) 100%);
-            z-index: 1; pointer-events: none;
-        }
-        .platforms-wrap canvas.platforms-rain {
-            position: absolute; inset: 0; width: 100%; height: 100%;
-            z-index: 0; opacity: 0.6; pointer-events: none;
-        }
-        .platforms-wrap .platforms-rain-bg {
-            position: absolute; inset: 0; z-index: 2;
-            pointer-events: none; overflow: hidden;
-        }
-        .platforms-wrap .platforms { position: relative; z-index: 3; }
-        .platforms-wrap .falling-symbol {
-            position: absolute; top: -24px;
-            font-family: 'Courier New', monospace;
-            font-weight: 900;
-            color: #1f6feb;
-            text-shadow: 0 0 8px currentColor, 0 0 14px currentColor;
-            animation: symbolFall linear infinite;
-            user-select: none;
-        }
-        .platforms-wrap .falling-symbol.green  { color: #3fb950; }
-        .platforms-wrap .falling-symbol.gold   { color: #f0b429; }
-        .platforms-wrap .falling-symbol.cyan   { color: #58a6ff; }
-        .platforms-wrap .falling-symbol.pink   { color: #f78166; }
-        .platforms-wrap .falling-symbol.purple { color: #a371f7; }
-        .platforms-wrap .falling-symbol.white  { color: #ffffff; }
-        @keyframes symbolFall {
-            0%   { transform: translateY(-30px) rotate(0deg); opacity: 0; }
-            8%   { opacity: 1; }
-            92%  { opacity: 1; }
-            100% { transform: translateY(380px) rotate(380deg); opacity: 0; }
-        }
 
         /* ============= SELECT & BUTTONS ============= */
         .select-wrap { position:relative; }
@@ -643,9 +542,9 @@ main_html = """
         .form-control:disabled { opacity:0.5; cursor:not-allowed; }
 
         .btn-primary {
-            width:100%; padding:12px; border:none; border-radius:10px;
-            background:#238636; color:#fff; font-size:14px; font-weight:700;
-            cursor:pointer; margin-top:8px; font-family:'Cairo',sans-serif;
+            width:100%; padding:14px; border:none; border-radius:10px;
+            background:#238636; color:#fff; font-size:15px; font-weight:700;
+            cursor:pointer; margin-top:10px; font-family:'Cairo',sans-serif;
             transition:all 0.15s ease;
         }
         .btn-primary:hover:not(:disabled) { background:#2ea043; }
@@ -680,49 +579,6 @@ main_html = """
             unicode-bidi: bidi-override;
             display: inline-block;
         }
-        .number-countdown-wrap {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-            margin-top: 10px;
-            padding: 6px 12px;
-            background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(168, 85, 247, 0.15));
-            border: 1px solid rgba(139, 92, 246, 0.4);
-            border-radius: 999px;
-            font-size: 12px;
-            font-weight: 700;
-            color: #c4b5fd;
-            width: fit-content;
-            margin-left: auto;
-            margin-right: auto;
-        }
-        .number-countdown-wrap .countdown-icon {
-            animation: tickRotate 2s linear infinite;
-            display: inline-block;
-        }
-        @keyframes tickRotate {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        .number-countdown-wrap .countdown-value {
-            font-family: 'Courier New', monospace;
-            color: #fbbf24;
-            font-weight: 900;
-            min-width: 28px;
-            text-align: center;
-        }
-        .number-countdown-wrap.warn {
-            border-color: rgba(245, 158, 11, 0.6);
-            background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15));
-        }
-        .number-countdown-wrap.warn .countdown-value { color: #fbbf24; }
-        .number-countdown-wrap.expired {
-            border-color: rgba(239, 68, 68, 0.6);
-            background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(220, 38, 38, 0.2));
-        }
-        .number-countdown-wrap.expired .countdown-value { color: #ef4444; }
-        .number-countdown-wrap.expired .countdown-icon { animation: none; }
         .number-card .number .digit {
             display: inline-block;
             opacity: 0;
@@ -789,38 +645,15 @@ main_html = """
             padding:12px 14px; display:flex; justify-content:space-between; align-items:center;
         }
         .otp-item .otp-code {
-            font-family: 'Courier New', monospace;
-            font-size: 18px;
-            font-weight: 900;
-            color: #ff6b9d;
-            background: linear-gradient(135deg, #ff6b9d 0%, #c084fc 50%, #38bdf8 100%);
-            -webkit-background-clip: text;
-            background-clip: text;
-            -webkit-text-fill-color: transparent;
-            letter-spacing: 2px;
-            text-shadow: 0 0 12px rgba(255, 107, 157, 0.5);
-            animation: codeGlow 2s ease-in-out infinite;
-        }
-        @keyframes codeGlow {
-            0%, 100% { filter: brightness(1) drop-shadow(0 0 4px rgba(255, 107, 157, 0.3)); }
-            50% { filter: brightness(1.2) drop-shadow(0 0 10px rgba(255, 107, 157, 0.6)); }
-        }
-        .otp-code .key-emoji {
-            -webkit-text-fill-color: initial;
-            background: none;
-            animation: keyBounce 1.5s ease-in-out infinite;
-            display: inline-block;
-        }
-        @keyframes keyBounce {
-            0%, 100% { transform: rotate(0deg) scale(1); }
-            25% { transform: rotate(-10deg) scale(1.1); }
-            75% { transform: rotate(10deg) scale(1.1); }
+            font-family:'Courier New',monospace;
+            font-size:18px;
+            font-weight:900;
+            color:#fbbf24;
+            text-shadow: 0 0 10px rgba(251, 191, 36, 0.4);
+            letter-spacing: 3px;
         }
         .otp-item .otp-info { font-size:11px; color:#8b949e; margin-top:2px; }
         .otp-item .copy-btn { background:transparent; border:1px solid #30363d; color:#58a6ff; padding:4px 10px; border-radius:6px; cursor:pointer; font-size:11px; font-weight:600; }
-        .otp-item .delete-btn { background:transparent; border:1px solid #30363d; color:#f85149; padding:4px 8px; border-radius:6px; cursor:pointer; font-size:12px; font-weight:600; margin-right:4px; transition:all 0.2s; }
-        .otp-item .delete-btn:hover { background:#da3633; color:#fff; border-color:#da3633; }
-        .otp-item { gap:4px; flex-wrap:wrap; }
 
         .empty-state { text-align:center; padding:30px 16px; color:#8b949e; font-size:13px; }
         .empty-state .icon { font-size:36px; margin-bottom:8px; opacity:0.6; }
@@ -934,7 +767,6 @@ main_html = """
     </style>
 </head>
 <body>
-    <canvas id="matrix-bg"></canvas>
     <div class="app">
         <!-- HEADER -->
         <div class="top-bar">
@@ -942,43 +774,46 @@ main_html = """
                 <div class="brand-icon">🚀</div>
                 <div class="brand-text">المطري OTP</div>
             </div>
-            <div class="top-actions" style="display:flex; align-items:center; gap:10px;">
+            <div class="top-actions" style="position:relative;">
                 <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">🌙</button>
                 <button class="menu-btn" onclick="toggleMenu()">☰</button>
-                <div class="menu-overlay" id="menuOverlay" onclick="toggleMenu()"></div>
                 <div class="dropdown-menu" id="contactMenu">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; padding:0 10px;">
-                        <div style="font-weight:900; color:#fff; font-size:18px;">🚀 القائمة</div>
-                        <button onclick="toggleMenu()" style="background:none; border:none; color:#8b949e; font-size:20px; cursor:pointer;">✕</button>
-                    </div>
-                        <div class="menu-header">📞 تواصل معنا</div>
-                        <a href="{{ owner_link }}" target="_blank">
-                            <span class="ico">💬</span>
-                            <span>واتساب المطور</span>
-                        </a>
-                        <a href="{{ wa_group }}" target="_blank">
-                            <span class="ico">👥</span>
-                            <span>جروب واتساب</span>
-                        </a>
-                        <a href="https://t.me/jsjsgsjsvh" target="_blank">
-                            <span class="ico">✈️</span>
-                            <span>قناة تليجرام</span>
-                        </a>
-                        <div class="menu-divider"></div>
-                        <a href="/learn-more">
-                            <span class="ico">📰</span>
-                            <span>اعرف المزيد</span>
-                        </a>
-                        <a href="/announcements">
-                            <span class="ico">📢</span>
-                            <span>إعلانات الموقع</span>
-                        </a>
-                        <a href="#" onclick="openHelpModal(); return false;">
-                            <span class="ico">🆘</span>
-                            <span>طلب مساعدة</span>
-                        </a>
-                        <!-- الرابط مخفي للأمان -->
-                    </div>
+                    <div class="menu-header">📞 تواصل معنا</div>
+                    <a href="{{ owner_link }}" target="_blank">
+                        <span class="ico">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                        </span>
+                        <span>تواصل معي على واتساب</span>
+                    </a>
+                    <a href="{{ wa_group }}" target="_blank">
+                        <span class="ico">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="#25D366"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.95 9.95 0 004.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.825 9.825 0 0012.04 2zm5.45 13.91c-.23.64-1.36 1.24-1.86 1.31-.47.07-1.07.1-1.73-.1-.4-.13-.92-.31-1.59-.62-2.79-1.21-4.61-4.02-4.75-4.21-.14-.18-1.13-1.5-1.13-2.86 0-1.36.71-2.03.96-2.31.25-.28.55-.35.74-.35.19 0 .37 0 .53.01.17.01.4-.06.62.47.23.55.79 1.91.86 2.05.07.14.12.31.02.49-.1.18-.14.29-.28.45-.14.16-.3.36-.42.48-.14.14-.29.3-.12.58.16.28.72 1.19 1.55 1.93 1.07.95 1.97 1.25 2.25 1.39.28.14.44.12.6-.07.16-.19.7-.81.88-1.09.18-.28.37-.23.62-.14.25.09 1.6.75 1.87.89.28.14.46.21.53.32.07.11.07.65-.16 1.29z"/></svg>
+                        </span>
+                        <span>جروب واتساب الرسمي</span>
+                    </a>
+                    <a href="https://t.me/jsjsgsjsvh" target="_blank">
+                        <span class="ico">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="#26A5E4"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.479.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
+                        </span>
+                        <span>قناة تليجرام</span>
+                    </a>
+                    <div class="menu-divider"></div>
+                    <a href="/learn-more">
+                        <span class="ico">📰</span>
+                        <span>اعرف المزيد عن الموقع</span>
+                    </a>
+                    <a href="/announcements">
+                        <span class="ico">📢</span>
+                        <span>إعلانات الموقع</span>
+                    </a>
+                    <a href="/admin-announcements">
+                        <span class="ico">⚙️</span>
+                        <span>لوحة تحكم الإعلانات</span>
+                    </a>
+                    <a href="#" onclick="openHelpModal(); return false;">
+                        <span class="ico">🆘</span>
+                        <span>طلب مساعدة</span>
+                    </a>
                 </div>
             </div>
         </div>
@@ -992,12 +827,8 @@ main_html = """
                 <p><span class="emoji-wave crown">👑</span> أرقام واتساب سحب أكواد تطوير مطري <span class="emoji-wave crown">👑</span></p>
             </div>
 
-            <div class="section-title" style="margin-top:0; padding-top:0;"><span class="icon emoji-float">🎯</span> اختر المنصة</div>
-            <div class="platforms-wrap" id="platformsWrap">
-                <canvas class="platforms-rain" id="platformsRain"></canvas>
-                <div class="platforms-rain-bg" id="platformsRainBg"></div>
-                <div class="platforms" id="platformSelector"></div>
-            </div>
+            <div class="section-title"><span class="icon emoji-float">🎯</span> اختر المنصة</div>
+            <div class="platforms" id="platformSelector"></div>
 
             <div class="section-title"><span class="icon emoji-spin">🌍</span> اختر الدولة</div>
             <div class="select-wrap">
@@ -1007,6 +838,7 @@ main_html = """
             </div>
 
             <button class="btn-primary" id="getNumberBtn" onclick="getNumber()" disabled>🚀 جلب رقم</button>
+            <button class="btn-blue" id="refreshBtn" onclick="refreshNumber()" disabled>🔄 تبديل</button>
 
             <div id="numberContainer" style="display:none;" dir="ltr">
                 <div class="number-card" dir="ltr">
@@ -1015,10 +847,6 @@ main_html = """
                         <button class="copy-btn-mini" onclick="copyNumber()" id="copyNumBtn">📋 نسخ</button>
                     </div>
                     <div class="number" id="numberDisplay">+</div>
-                    <div class="number-countdown-wrap" id="numberCountdown" style="display:none; cursor:pointer;" onclick="refreshNumber()">
-                        <span class="countdown-icon">🔄</span>
-                        <span>تبديل الرقم التالي</span>
-                    </div>
                 </div>
                 <div id="autoMonitorStatus" class="auto-monitor">
                     <span class="dot"></span> جاري المراقبة التلقائية...
@@ -1036,37 +864,37 @@ main_html = """
             <div class="status" id="status">⚡ اختر المنصة والدولة للبدء</div>
         </div>
 
-    <!-- ✅ [الإصلاح] شريط الأخبار الاحترافي في الفوتر -->
-    <div class="footer-section">
-        <div class="news-ticker">
-            <div class="ticker-content">
-                <span class="ticker-item"><span class="ticker-emoji">🚀</span> مرحباً بك في موقع المطري OTP</span>
-                <span class="ticker-item"><span class="ticker-emoji">⚡</span> أسرع موقع للحصول على الأكواد</span>
-                <span class="ticker-item"><span class="ticker-emoji">💎</span> صُنع بحب بواسطة</span>
-                <span class="ticker-item"><span class="ticker-name">المطري</span> 🔥</span>
-                <span class="ticker-item"><span class="ticker-emoji">🌍</span> دعم 195+ دولة حول العالم</span>
-                <span class="ticker-item"><span class="ticker-emoji">📱</span> واتساب • تيليجرام • فيسبوك • تيك توك</span>
-                <span class="ticker-item"><span class="ticker-emoji">🔔</span> إشعارات فورية لحظة بلحظة</span>
-                <span class="ticker-item"><span class="ticker-emoji">🎯</span> المطور المطري يقدّم لك أفضل تجربة</span>
-                <span class="ticker-item"><span class="ticker-emoji">⭐</span> شكراً لزيارتك</span>
-                <!-- مكرر للتمرير السلس -->
-                <span class="ticker-item"><span class="ticker-emoji">🚀</span> مرحباً بك في موقع المطري OTP</span>
-                <span class="ticker-item"><span class="ticker-emoji">⚡</span> أسرع موقع للحصول على الأكواد</span>
-                <span class="ticker-item"><span class="ticker-emoji">💎</span> صُنع بحب بواسطة</span>
-                <span class="ticker-item"><span class="ticker-name">المطري</span> 🔥</span>
-                <span class="ticker-item"><span class="ticker-emoji">🌍</span> دعم 195+ دولة حول العالم</span>
-                <span class="ticker-item"><span class="ticker-emoji">📱</span> واتساب • تيليجرام • فيسبوك • تيك توك</span>
-                <span class="ticker-item"><span class="ticker-emoji">🔔</span> إشعارات فورية لحظة بلحظة</span>
-                <span class="ticker-item"><span class="ticker-emoji">🎯</span> المطور المطري يقدّم لك أفضل تجربة</span>
-                <span class="ticker-item"><span class="ticker-emoji">⭐</span> شكراً لزيارتك</span>
+        <!-- ✅ [الإصلاح] شريط الأخبار الاحترافي في الفوتر -->
+        <div class="footer-section">
+            <div class="news-ticker">
+                <div class="ticker-content">
+                    <span class="ticker-item"><span class="ticker-emoji">🚀</span> مرحباً بك في موقع المطري OTP</span>
+                    <span class="ticker-item"><span class="ticker-emoji">⚡</span> أسرع موقع للحصول على الأكواد</span>
+                    <span class="ticker-item"><span class="ticker-emoji">💎</span> صُنع بحب بواسطة</span>
+                    <span class="ticker-item"><span class="ticker-name">المطري</span> 🔥</span>
+                    <span class="ticker-item"><span class="ticker-emoji">🌍</span> دعم 195+ دولة حول العالم</span>
+                    <span class="ticker-item"><span class="ticker-emoji">📱</span> واتساب • تيليجرام • فيسبوك • تيك توك</span>
+                    <span class="ticker-item"><span class="ticker-emoji">🔔</span> إشعارات فورية لحظة بلحظة</span>
+                    <span class="ticker-item"><span class="ticker-emoji">🎯</span> المطور المطري يقدّم لك أفضل تجربة</span>
+                    <span class="ticker-item"><span class="ticker-emoji">⭐</span> شكراً لزيارتك</span>
+                    <!-- مكرر للتمرير السلس -->
+                    <span class="ticker-item"><span class="ticker-emoji">🚀</span> مرحباً بك في موقع المطري OTP</span>
+                    <span class="ticker-item"><span class="ticker-emoji">⚡</span> أسرع موقع للحصول على الأكواد</span>
+                    <span class="ticker-item"><span class="ticker-emoji">💎</span> صُنع بحب بواسطة</span>
+                    <span class="ticker-item"><span class="ticker-name">المطري</span> 🔥</span>
+                    <span class="ticker-item"><span class="ticker-emoji">🌍</span> دعم 195+ دولة حول العالم</span>
+                    <span class="ticker-item"><span class="ticker-emoji">📱</span> واتساب • تيليجرام • فيسبوك • تيك توك</span>
+                    <span class="ticker-item"><span class="ticker-emoji">🔔</span> إشعارات فورية لحظة بلحظة</span>
+                    <span class="ticker-item"><span class="ticker-emoji">🎯</span> المطور المطري يقدّم لك أفضل تجربة</span>
+                    <span class="ticker-item"><span class="ticker-emoji">⭐</span> شكراً لزيارتك</span>
+                </div>
+            </div>
+            <div class="footer-info">
+                <span class="emoji-pulse-soft">💎</span> صُنع بحب <span class="emoji-spin">⚡</span> بواسطة <strong>المطري</strong> <span class="emoji-wave">🔥</span>
+                <br><span style="color:#484f58; font-size:11px;">جميع الحقوق محفوظة © 2025</span>
             </div>
         </div>
-        <div class="footer-info">
-            <span class="emoji-pulse-soft">💎</span> صُنع بحب <span class="emoji-spin">⚡</span> بواسطة <strong>المطري</strong> <span class="emoji-wave">🔥</span>
-            <br><span style="color:#484f58; font-size:11px;">جميع الحقوق محفوظة © 2025</span>
-        </div>
     </div>
-</div>
 
     <!-- ✅ [مودال طلب المساعدة] -->
     <div class="modal-overlay" id="helpModal" onclick="if(event.target===this) closeHelpModal()">
@@ -1092,8 +920,6 @@ main_html = """
 
         function toggleMenu() {
             document.getElementById('contactMenu').classList.toggle('show');
-            document.getElementById('menuOverlay').classList.toggle('show');
-            document.body.style.overflow = document.getElementById('contactMenu').classList.contains('show') ? 'hidden' : '';
         }
 
         // ✅ [مودال طلب المساعدة]
@@ -1167,38 +993,6 @@ main_html = """
             });
         }
 
-        // ============ [عدّاد تنازلي تحت الرقم] ============
-        let numberCountdownTimer = null;
-        function startNumberCountdown() {
-            const wrap = document.getElementById('numberCountdown');
-            const val = document.getElementById('numberCountdownValue');
-            if (!wrap || !val) return;
-            if (numberCountdownTimer) clearInterval(numberCountdownTimer);
-            wrap.style.display = 'flex';
-            wrap.classList.remove('warn', 'expired');
-            let remaining = 120;
-            val.textContent = remaining;
-            numberCountdownTimer = setInterval(() => {
-                remaining--;
-                if (remaining <= 0) {
-                    val.textContent = '0';
-                    wrap.classList.add('expired');
-                    wrap.querySelector('span:nth-child(2)').textContent = 'انتهت صلاحية الرقم ⛔';
-                    if (numberCountdownTimer) clearInterval(numberCountdownTimer);
-                    numberCountdownTimer = null;
-                    return;
-                }
-                val.textContent = remaining;
-                if (remaining <= 30) wrap.classList.add('warn');
-                else wrap.classList.remove('warn');
-            }, 1000);
-        }
-        function stopNumberCountdown() {
-            const wrap = document.getElementById('numberCountdown');
-            if (wrap) wrap.style.display = 'none';
-            if (numberCountdownTimer) { clearInterval(numberCountdownTimer); numberCountdownTimer = null; }
-        }
-
         async function copyNumber() {
             const num = document.getElementById('numberDisplay').textContent;
             try {
@@ -1252,7 +1046,6 @@ main_html = """
 
         let currentPlatform = '';
         let currentNumber = '';
-        let currentNumberIndex = 0;
         let monitorInterval = null;
         let countdownIntervals = {};   // تتبع العدادات
         let allOtpsCache = [];          // أكواد مخزنة محلياً
@@ -1321,16 +1114,16 @@ main_html = """
                 document.getElementById('status').textContent = '⚠️ يرجى اختيار المنصة والدولة';
                 return;
             }
-            currentNumberIndex = 0;
             document.getElementById('status').textContent = '⏳ جاري جلب رقم...';
-            const res = await fetch('/api/get_number', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform:currentPlatform, country, index: currentNumberIndex})});
+            const res = await fetch('/api/get_number', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform:currentPlatform, country})});
             const data = await res.json();
             if (data.number) {
                 currentNumber = data.number;
+                // [تأثير typewriter] يظهر الرقم حرف حرف بخط كبير حلو
                 animateNumber(document.getElementById('numberDisplay'), data.number);
                 document.getElementById('numberContainer').style.display = 'block';
                 document.getElementById('status').textContent = '✅ الرقم جاهز!';
-                document.getElementById('numberCountdown').style.display = 'flex';
+                // 🎯 تشغيل المراقبة التلقائية فوراً
                 startMonitoring();
             } else {
                 document.getElementById('status').textContent = '❌ لا توجد أرقام متاحة';
@@ -1339,75 +1132,44 @@ main_html = """
 
         async function refreshNumber() {
             const country = document.getElementById('country').value;
-            if (!currentPlatform || !country) return;
-            
-            // إظهار حالة التحميل على الزر نفسه
-            const refreshBtn = document.getElementById('numberCountdown');
-            const originalHTML = refreshBtn.innerHTML;
-            refreshBtn.innerHTML = '<span class="countdown-icon emoji-spin">⏳</span> <span>جاري التبديل...</span>';
-            refreshBtn.style.pointerEvents = 'none';
-
+            if (!currentPlatform || !country) {
+                alert('⚠️ اختر المنصة والدولة أولاً');
+                return;
+            }
             stopMonitoring();
-            currentNumberIndex++;
-            
-            try {
-                const res = await fetch('/api/get_number', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform:currentPlatform, country, index: currentNumberIndex})});
-                const data = await res.json();
-                
-                if (data.number) {
-                    currentNumber = data.number;
-                    animateNumber(document.getElementById('numberDisplay'), data.number);
-                    document.getElementById('status').textContent = '🔄 تم التبديل للرقم التالي!';
-                } else {
-                    // إذا انتهت الأرقام، نرجع للأول
-                    currentNumberIndex = 0;
-                    const resRetry = await fetch('/api/get_number', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform:currentPlatform, country, index: 0})});
-                    const dataRetry = await resRetry.json();
-                    if (dataRetry.number) {
-                        currentNumber = dataRetry.number;
-                        animateNumber(document.getElementById('numberDisplay'), dataRetry.number);
-                        document.getElementById('status').textContent = 'ℹ️ انتهت الأرقام، العودة للأول...';
-                    }
-                }
+            document.getElementById('status').textContent = '⏳ جاري تبديل الرقم...';
+            const res = await fetch('/api/get_number', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform:currentPlatform, country})});
+            const data = await res.json();
+            if (data.number) {
+                currentNumber = data.number;
+                lastSeenOtp = null;  // نعيد ضبط آخر كود شفناه
+                animateNumber(document.getElementById('numberDisplay'), data.number);
+                document.getElementById('status').textContent = '🔄 تم التبديل لرقم جديد!';
                 startMonitoring();
-            } catch(e) {
-                document.getElementById('status').textContent = '❌ فشل التبديل، حاول مرة أخرى';
-            } finally {
-                // إعادة الزر لحالته الطبيعية ليظل قابلاً للضغط دائماً
-                refreshBtn.innerHTML = originalHTML;
-                refreshBtn.style.pointerEvents = 'auto';
-                refreshBtn.style.display = 'flex'; // التأكد من بقائه ظاهراً
+            } else {
+                document.getElementById('status').textContent = '❌ لا توجد أرقام متاحة';
             }
         }
+        }
 
-        // 🎯 مراقبة تلقائية (تبدأ بعد جلب الرقم مباشرة)
+        // 🎯 مراقبة تلقائية (تبدأ بعد جلب الرقم) — تكمّل تسحب لحد ما يجيب كود جديد
+        let lastSeenOtp = null;  // آخر كود شفناه عشان نتجنب التكرار
         function startMonitoring() {
             if (!currentNumber) return;
             if (monitorInterval) clearInterval(monitorInterval);
             const status = document.getElementById('autoMonitorStatus');
             if (status) { status.classList.remove('done'); status.innerHTML = '<span class="dot"></span> جاري المراقبة التلقائية...'; }
-
-            // ✅ تتبع آخر كود عشان ما نضيف المكرر
-            let lastSeenOtpTime = 0;
-            let otpCountForNumber = 0;
-            const maxOtpRetries = 10; // أقصى عدد محاولات للرقم الواحد
-
             monitorInterval = setInterval(() => {
-                if (!currentNumber) { stopMonitoring(); return; }
-
                 fetch('/api/get_otp', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({number:currentNumber})})
                 .then(res => res.json()).then(data => {
-                    if (data.otp) {
-                        // ✅ تحقق من عدم تكرار الكود (نفس الـ timestamp)
-                        if (data.otp !== lastSeenOtpTime) {
-                            const now = new Date().toLocaleString('en-US', {timeZone:'Asia/Aden', hour12: true});
-                            addOtpToHistory(currentNumber, data.otp, now, currentPlatform);
-                            lastSeenOtpTime = data.otp;
-                            otpCountForNumber++;
-                            if (status) { status.classList.add('done'); status.innerHTML = `<span class="dot"></span> ✅ تم استلام ${otpCountForNumber} كود!`; }
-                            // تشغيل الصوت
-                            playNotificationSound();
-                        }
+                    if (data.otp && data.otp !== lastSeenOtp) {
+                        lastSeenOtp = data.otp;
+                        const now = new Date().toLocaleString('ar-YE', {timeZone:'Asia/Aden'});
+                        addOtpToHistory(currentNumber, data.otp, now, currentPlatform);
+                        if (status) { status.classList.add('done'); status.innerHTML = '<span class="dot"></span> ✅ تم استلام الكود! جاري البحث عن كود جديد...'; }
+                        // تشغيل الصوت
+                        playNotificationSound();
+                        // ✅ [تعديل] المراقبة ما توقف، تكمّل تسحب أكواد جديدة
                     }
                 }).catch(()=>{});
             }, 5000);
@@ -1415,8 +1177,6 @@ main_html = """
 
         function stopMonitoring() {
             if (monitorInterval) { clearInterval(monitorInterval); monitorInterval = null; }
-            // إيقاف العداد التنازلي تحت الرقم
-            stopNumberCountdown();
         }
 
         // ✅ إضافة كود للقائمة (الأحدث أولاً، يحفظ في localStorage)
@@ -1493,16 +1253,15 @@ main_html = """
                     <div class="otp-section-items">
                         ${items.map(o => `
                         <div class="otp-item">
-                            <div>
-                                <div class="otp-code" dir="ltr" style="direction:ltr; unicode-bidi:bidi-override; text-align:left;">
-                                    <span class="otp-countdown" data-otpid="${o.id}">⏱️ 120</span>
+                            <div style="flex:1; min-width:0;">
+                                <!-- ✅ [تعديل] الكود في سطر منفصل بعداد تحته -->
+                                <div class="otp-code" dir="ltr" style="direction:ltr; unicode-bidi:bidi-override; text-align:center; color:#fbbf24; font-size:22px; text-shadow: 0 0 12px rgba(251, 191, 36, 0.5); letter-spacing:4px; padding: 6px 0;">
                                     🔑 ${o.otp}
                                 </div>
-                                <div class="otp-info">📞 <span dir="ltr" style="display:inline-block; direction:ltr; unicode-bidi:bidi-override;">${o.number}</span></div>
-                                <div class="otp-info" style="margin-top:4px; color:#8b949e; font-size:11px;">🕒 ${o.timestamp}</div>
+                                <div class="otp-countdown" data-otpid="${o.id}" style="display:block; text-align:center; margin: 4px 0 2px;">⏱️ 120s</div>
+                                <div class="otp-info" style="text-align:center;">📞 <span dir="ltr" style="display:inline-block; direction:ltr; unicode-bidi:bidi-override;">${o.number}</span>  •  🕒 ${o.timestamp}</div>
                             </div>
                             <button class="copy-btn" onclick="copyText('${o.otp}', this)">نسخ</button>
-                            <button class="delete-btn" onclick="deleteOtp('${o.id}')" title="حذف نهائي">🗑️</button>
                         </div>
                         `).join('')}
                     </div>
@@ -1531,145 +1290,10 @@ main_html = """
             } catch(e) {}
         }
 
-        // [تأثير Cyber Digital] أرقام كبيرة وواضحة تتساقط ببطء
-        function initMatrix() {
-            const canvas = document.getElementById('matrix-bg');
-            const ctx = canvas.getContext('2d');
-            
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            
-            const digits = "0123456789+()#-*$!%&"; // رموز وأرقام متنوعة
-            const fontSize = 16; 
-            const columns = Math.floor(canvas.width / fontSize);
-            const drops = [];
-            
-            for (let i = 0; i < columns; i++) {
-                drops[i] = Math.random() * -100;
-            }
-            
-            function draw() {
-                // تقليل مسح الشاشة لترك أثر (trail) أطول وأجمل
-                ctx.fillStyle = "rgba(7, 9, 13, 0.08)";
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                
-                ctx.font = "bold " + fontSize + "px monospace";
-                
-                for (let i = 0; i < drops.length; i++) {
-                    const text = digits.charAt(Math.floor(Math.random() * digits.length));
-                    
-                    // توهج قوي وواضح
-                    ctx.shadowBlur = 12;
-                    ctx.shadowColor = "#00ffc8";
-                    ctx.fillStyle = "#00ffc8";
-                    
-                    // جعل بعض الأرقام ساطعة جداً (White highlight)
-                    if(Math.random() > 0.92) {
-                        ctx.fillStyle = "#ffffff";
-                        ctx.shadowBlur = 20;
-                        ctx.shadowColor = "#ffffff";
-                    }
-                    
-                    ctx.fillText(text, i * fontSize, drops[i] * fontSize);
-                    
-                    // إعادة تعيين التوهج لتجنب التأثير على بقية العناصر
-                    ctx.shadowBlur = 0;
-                    
-                    if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
-                        drops[i] = 0;
-                    }
-                    drops[i] += 1.2; // سرعة مناسبة
-                }
-            }
-            
-            setInterval(draw, 50); // سرعة تحديث أهدأ
-            
-            window.addEventListener('resize', () => {
-                canvas.width = window.innerWidth;
-                canvas.height = window.innerHeight;
-            });
-        }
-
-        // ✅ مطر الأرقام والرموز خلف قسم المنصات فقط
-        function initPlatformsRain() {
-            try {
-                const wrap = document.getElementById('platformsWrap');
-                const canvas = document.getElementById('platformsRain');
-                const bgLayer = document.getElementById('platformsRainBg');
-                if (!wrap || !canvas || !bgLayer) return;
-
-                const ctx = canvas.getContext('2d');
-                let w = 0, h = 0, cols = 0, drops = [];
-
-                function resize() {
-                    const rect = wrap.getBoundingClientRect();
-                    w = canvas.width = Math.max(200, Math.floor(rect.width));
-                    h = canvas.height = Math.max(200, Math.floor(rect.height));
-                    cols = Math.max(15, Math.floor(w / 16));
-                    drops = Array(cols).fill(0).map(()=>Math.random() * -40);
-                }
-                resize();
-                let resizeTimer;
-                window.addEventListener('resize', ()=>{
-                    clearTimeout(resizeTimer);
-                    resizeTimer = setTimeout(resize, 200);
-                });
-
-                const chars = '0123456789⚡🚀💎🔑👑🌍📱⚙️🔒💫';
-                function draw() {
-                    try {
-                        ctx.fillStyle = 'rgba(7, 9, 13, 0.12)';
-                        ctx.fillRect(0, 0, w, h);
-                        ctx.font = 'bold 15px "Courier New", monospace';
-                        for (let i = 0; i < drops.length; i++) {
-                            const ch = chars[Math.floor(Math.random() * chars.length)];
-                            const y = drops[i] * 16;
-                            const r = Math.random();
-                            if (r > 0.97)      ctx.fillStyle = '#ffffff';
-                            else if (r > 0.85) ctx.fillStyle = '#3fb950';
-                            else if (r > 0.6)  ctx.fillStyle = '#1f6feb';
-                            else if (r > 0.4)  ctx.fillStyle = '#a371f7';
-                            else               ctx.fillStyle = '#58a6ff';
-                            ctx.fillText(ch, i * 16, y);
-                            if (y > h && Math.random() > 0.975) drops[i] = 0;
-                            drops[i]++;
-                        }
-                    } catch(e) { return; }
-                    requestAnimationFrame(draw);
-                }
-                draw();
-
-                // رموز كبيرة متساقطة بألوان زاهية
-                const symbolSet = ['0','1','2','3','4','5','6','7','8','9','#','%','*','+','=','?','!','@'];
-                const colorClasses = ['', 'green', 'gold', 'cyan', 'pink', 'purple', 'white'];
-                function spawnSymbol() {
-                    if (!wrap.isConnected) return;
-                    const el = document.createElement('div');
-                    el.className = 'falling-symbol ' + colorClasses[Math.floor(Math.random()*colorClasses.length)];
-                    el.textContent = symbolSet[Math.floor(Math.random()*symbolSet.length)];
-                    el.style.left = (Math.random() * 100) + '%';
-                    el.style.fontSize = (14 + Math.random() * 14) + 'px';
-                    el.style.animationDuration = (4 + Math.random() * 5) + 's';
-                    el.style.opacity = (0.5 + Math.random() * 0.5).toString();
-                    bgLayer.appendChild(el);
-                    setTimeout(()=>{ if (el.parentNode) el.remove(); }, 10000);
-                }
-                for (let i = 0; i < 6; i++) setTimeout(spawnSymbol, i * 150);
-                setInterval(spawnSymbol, 500);
-            } catch(e) { console.warn('Platforms rain failed:', e); }
-        }
-
         document.addEventListener('DOMContentLoaded', () => {
-            initMatrix();
             initPlatformSelector();
             loadCachedOtps();
             startAllCountdowns();
-            // ✅ مطر الأرقام والرموز خلف المنصات
-            if (window.requestIdleCallback) {
-                requestIdleCallback(initPlatformsRain, {timeout: 1000});
-            } else {
-                setTimeout(initPlatformsRain, 300);
-            }
         });
     </script>
 </body>
@@ -1692,13 +1316,12 @@ body {
     color:#fff; min-height:100vh; display:flex; justify-content:center; align-items:center;
     padding:20px;
 }
-	.container { 
-	    background:rgba(17, 24, 39, 0.95); backdrop-filter:blur(20px);
-	    padding:30px; border-radius:25px; width:100%; max-width:500px; 
-	    border:1px solid rgba(0, 255, 200, 0.3);
-	    box-shadow: 0 0 60px rgba(0, 255, 200, 0.15);
-	    margin: 20px auto;
-	}
+.container { 
+    background:rgba(17, 24, 39, 0.85); backdrop-filter:blur(20px);
+    padding:30px; border-radius:25px; width:100%; max-width:480px; 
+    border:1px solid rgba(139, 92, 246, 0.3);
+    box-shadow: 0 0 50px rgba(139, 92, 246, 0.3);
+}
 h1 { 
     text-align:center; 
     background: linear-gradient(90deg, #00ffc8, #8b5cf6);
@@ -1776,31 +1399,22 @@ hr { border: 1px solid rgba(255,255,255,0.1); margin: 20px 0; }
 
     <hr>
 
-    <h3>🗂️ قائمة الكومبوهات (إدارة الدول)</h3>
-    <p style="color:#94a3b8; font-size:12px; margin-bottom:10px;">يمكنك حذف كل دولة على حدة بدلاً من مسح الكل:</p>
-    <div style="max-height:250px; overflow-y:auto; background:rgba(0,0,0,0.2); padding:10px; border-radius:12px; margin-bottom:10px;">
+    <h3>🗑️ حذف كومبو</h3>
     {% if combos %}
         {% for platform, code, name, flag in combos %}
         <div class="combo-item">
-            <div style="display:flex; align-items:center; gap:8px;">
-                <span style="font-size:20px;">{{ flag }}</span>
-                <div>
-                    <div style="font-weight:700; color:#fff;">{{ name }}</div>
-                    <div style="font-size:10px; color:#8b949e;">{{ platform }} (+{{ code }})</div>
-                </div>
-            </div>
-            <form method="POST" style="display:inline;" onsubmit="return confirm('حذف هذا الكومبو؟')">
+            <span>{{ flag }} {{ name }} ({{ platform }})</span>
+            <form method="POST" style="display:inline;">
                 <input type="hidden" name="action" value="delete">
                 <input type="hidden" name="platform" value="{{ platform }}">
                 <input type="hidden" name="country_code" value="{{ code }}">
-                <button type="submit" class="btn-danger" style="padding:6px 12px; font-size:11px;">🗑️ حذف</button>
+                <button type="submit" class="btn-danger">🗑️ حذف</button>
             </form>
         </div>
         {% endfor %}
     {% else %}
         <p style="color:#64748b; text-align:center; padding:20px;">🤷‍♂️ لا توجد كومبوهات حالياً</p>
     {% endif %}
-    </div>
 
     <hr>
     <div style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15)); padding:14px; border-radius:12px; border:1px solid rgba(245, 158, 11, 0.4); margin-bottom:10px;">
@@ -1816,16 +1430,6 @@ hr { border: 1px solid rgba(255,255,255,0.1); margin: 20px 0; }
     <h3>🆘 طلبات المساعدة (<span id="helpCount">0</span>)</h3>
     <div id="helpList" style="max-height:200px; overflow-y:auto; margin-bottom:10px;">
         <p style="color:#64748b; text-align:center; padding:10px; font-size:13px;">⏳ جاري التحميل...</p>
-    </div>
-
-    <hr>
-
-    <div style="background:rgba(0,0,0,0.2); padding:20px; border-radius:15px; border:1px solid rgba(0,255,200,0.2); margin-bottom:20px;">
-        <h3 style="margin-top:0; color:#00ffc8; display:flex; align-items:center; gap:8px;">📋 سجل الأكواد المسحوبة (حذف فردي)</h3>
-        <p style="color:#94a3b8; font-size:12px; margin-bottom:15px;">يمكنك حذف الكود الذي تريده بالضغط على زر الحذف بجانبه:</p>
-        <div id="otpLogsList" style="max-height:400px; overflow-y:auto; padding-right:5px;">
-            <p style="color:#64748b; text-align:center; padding:10px; font-size:13px;">⏳ جاري تحميل الأكواد...</p>
-        </div>
     </div>
 
     <hr>
@@ -1846,16 +1450,6 @@ hr { border: 1px solid rgba(255,255,255,0.1); margin: 20px 0; }
         <div id="knownChats" style="max-height:140px; overflow-y:auto; background:rgba(0,0,0,0.3); padding:8px; border-radius:8px; font-size:12px;">
             <p style="color:#64748b; text-align:center;">⏳ جاري التحميل...</p>
         </div>
-    </div>
-
-    <hr>
-    <div style="background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(185, 28, 28, 0.1)); padding:14px; border-radius:12px; border:1px solid rgba(239, 68, 68, 0.4); margin-bottom:10px;">
-        <h3 style="margin-top:0; color:#ef4444;">🔥 تنظيف البيانات</h3>
-        <p style="color:#cbd5e1; font-size:12px; margin-bottom:10px;">حذف جميع سجلات الأكواد المسحوبة من الموقع نهائياً</p>
-        <form method="POST" onsubmit="return confirm('⚠️ تحذير: سيتم حذف جميع الأكواد المسحوبة نهائياً. هل أنت متأكد؟')">
-            <input type="hidden" name="action" value="clear_otps">
-            <button type="submit" class="btn-secondary" style="background:#374151; font-size:12px; padding:10px; margin-top:0;">🗑️ مسح السجل بالكامل (تنظيف شامل)</button>
-        </form>
     </div>
 
     <hr>
@@ -1881,57 +1475,6 @@ async function loadHelpRequests() {
         `).join('');
     } catch(e) {}
 }
-
-async function loadOtpLogs() {
-    try {
-        const res = await fetch('/api/all_otps');
-        const data = await res.json();
-        const box = document.getElementById('otpLogsList');
-        if (!data.length) { box.innerHTML = '<p style="color:#64748b; text-align:center; padding:10px; font-size:13px;">📭 لا توجد أكواد مسحوبة</p>'; return; }
-        box.innerHTML = data.map(o => `
-            <div style="background:rgba(31,41,55,0.8); padding:12px; border-radius:12px; margin-bottom:10px; border:1px solid rgba(255,255,255,0.1); display:flex; justify-content:space-between; align-items:center; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
-                <div>
-                    <div style="color:#00ffc8; font-weight:900; font-size:16px; letter-spacing:1px;">🔑 ${o.otp}</div>
-                    <div style="color:#fff; margin-top:4px; font-weight:600;">📞 ${o.number} <span style="color:#8b949e; font-size:11px;">(${o.platform})</span></div>
-                    <div style="color:#8b949e; font-size:10px; margin-top:4px;">🕒 ${o.timestamp}</div>
-                </div>
-                <button onclick="deleteOtp(${o.id})" style="background:linear-gradient(135deg, #ef4444, #b91c1c); border:none; color:#fff; padding:8px 15px; border-radius:8px; cursor:pointer; font-size:12px; font-weight:800; box-shadow: 0 2px 10px rgba(239,68,68,0.3);">🗑️ حذف</button>
-            </div>
-        `).join('');
-    } catch(e) {}
-}
-
-        async function deleteOtp(idOrOtp) {
-            if(!confirm('🗑️ هل تريد حذف هذا الكود المسحوب نهائياً؟')) return;
-            try {
-                // إذا كان ID محلي (يبدأ بـ timestamp_)، نبحث عن الـ OTP المرتبط به
-                let otpCode = idOrOtp;
-                if (typeof idOrOtp === 'string' && idOrOtp.includes('_')) {
-                    const localItem = allOtpsCache.find(o => o.id === idOrOtp);
-                    if (localItem) otpCode = localItem.otp;
-                }
-                // حذف حقيقي من قاعدة البيانات عبر API الجديد
-                const res = await fetch('/api/delete_otp', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({otp: otpCode})
-                });
-                const data = await res.json();
-                if(data.ok) {
-                    // إزالة من الكاش المحلي
-                    allOtpsCache = allOtpsCache.filter(o => o.otp !== otpCode);
-                    try { localStorage.setItem('allOtps', JSON.stringify(allOtpsCache.slice(0, 50))); } catch(e) {}
-                    // إزالة من الواجهة فوراً
-                    loadOtpLogs();
-                    alert('✅ تم الحذف نهائياً من قاعدة البيانات (' + (data.deleted||0) + ' كود)');
-                } else {
-                    alert('❌ فشل الحذف: ' + (data.error || 'غير معروف'));
-                }
-            } catch(e) {
-                console.error(e);
-                alert('❌ حدث خطأ تقني أثناء الحذف');
-            }
-        }
 async function loadAdminSettings() {
     try {
         const res = await fetch('/api/admin/settings');
@@ -1964,10 +1507,9 @@ async function loadKnownChats() {
         `).join('');
     } catch(e) {}
 }
-        loadHelpRequests();
-        loadOtpLogs();
-        loadAdminSettings();
-        loadKnownChats();
+loadHelpRequests();
+loadAdminSettings();
+loadKnownChats();
 setInterval(loadHelpRequests, 15000);
 setInterval(loadKnownChats, 20000);
 </script>
@@ -2001,36 +1543,8 @@ def get_all_combos_list():
     return rows
 
 # ========== صفحة الأدمن الجديدة ==========
-from functools import wraps
-from flask import session
-
-def login_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if not session.get('logged_in'):
-            return redirect(url_for('admin_login'))
-        return f(*args, **kwargs)
-    return decorated_function
-
-@app.route('/admin_login', methods=['GET', 'POST'])
-def admin_login():
-    if request.method == 'POST':
-        if request.form.get('password') == ADMIN_PASSWORD:
-            session['logged_in'] = True
-            return redirect(f"/{ADMIN_SECRET_PATH}")
-        return "❌ كلمة المرور خاطئة!"
-    return '''
-    <div dir="rtl" style="text-align:center; margin-top:100px; font-family:sans-serif; background:#0d1117; color:#fff; padding:50px; border-radius:20px;">
-        <h2>🔐 دخول الأدمن</h2>
-        <form method="POST">
-            <input type="password" name="password" placeholder="كلمة المرور" style="padding:12px; border-radius:8px; border:1px solid #30363d; background:#161b22; color:#fff;">
-            <button type="submit" style="padding:12px 25px; background:#238636; color:#fff; border:none; border-radius:8px; cursor:pointer; font-weight:bold;">دخول</button>
-        </form>
-    </div>
-    '''
-
-@app.route(f'/{ADMIN_SECRET_PATH}', methods=['GET', 'POST'])
-def admin():  # ✅ دخول مباشر بدون كلمة سر
+@app.route('/admin', methods=['GET', 'POST'])
+def admin():
     if request.method == 'POST':
         # ===== حذف كومبو =====
         if request.form.get('action') == 'delete':
@@ -2042,20 +1556,7 @@ def admin():  # ✅ دخول مباشر بدون كلمة سر
                 c.execute("DELETE FROM combos WHERE platform=? AND country_code=?", (platform, country_code))
                 conn.commit()
                 conn.close()
-                return redirect(f"/{ADMIN_SECRET_PATH}")
-
-        # ===== حذف جميع الأكواد المسحوبة =====
-        elif request.form.get('action') == 'clear_otps':
-            conn = sqlite3.connect(DB_PATH)
-            c = conn.cursor()
-            c.execute("DELETE FROM otp_logs")
-            conn.commit()
-            conn.close()
-            # مسح الكاش
-            global _otp_cache, _otp_cache_time
-            _otp_cache = {'data': None, 'time': 0}
-            _otp_cache_time = 0
-            return redirect(f"/{ADMIN_SECRET_PATH}")
+                return redirect(url_for('admin'))
 
         # ===== رفع كومبو =====
         else:
@@ -2088,18 +1589,11 @@ def api_countries():
 @app.route('/api/get_number', methods=['POST'])
 def api_get_number():
     d = request.json
-    platform = d.get('platform')
-    country = d.get('country')
-    index = int(d.get('index', 0))
-    nums = get_numbers(platform, country)
+    nums = get_numbers(d['platform'], d['country'])
     if not nums:
         return jsonify({'number': None})
-    
-    # اختيار الرقم بناءً على الفهرس (index) لضمان التنقل اليدوي
-    if index >= len(nums):
-        return jsonify({'number': None, 'end': True})
-    
-    return jsonify({'number': nums[index]})
+    # ✅ [إصلاح] نرجّع رقم عشوائي من القائمة (نفس الرقم بدون عكس)
+    return jsonify({'number': random.choice(nums)})
 
 @app.route('/api/get_otp', methods=['POST'])
 def api_get_otp():
@@ -2591,47 +2085,6 @@ def api_admin_settings():
         set_admin_setting('site_url', data['site_url'].strip())
     return jsonify({'ok': True})
 
-@app.route('/api/admin/delete_otp', methods=['POST'])
-def api_admin_delete_otp():
-    otp_id = request.json.get('id')
-    if otp_id:
-        try:
-            conn = sqlite3.connect(DB_PATH)
-            c = conn.cursor()
-            c.execute("DELETE FROM otp_logs WHERE id=?", (otp_id,))
-            conn.commit()
-            conn.close()
-            # مسح كافة أشكال الكاش لضمان اختفاء الكود فوراً
-            global _otp_cache, _otp_cache_time
-            _otp_cache = {'data': None, 'time': 0}
-            _otp_cache_time = 0
-            return jsonify({'ok': True})
-        except Exception as e:
-            return jsonify({'ok': False, 'error': str(e)})
-    return jsonify({'ok': False})
-
-# ✅ API جديد: حذف كود بالـ OTP نفسه (بدون id، بدون login)
-@app.route('/api/delete_otp', methods=['POST'])
-def api_delete_otp_by_code():
-    data = request.json or {}
-    otp = (data.get('otp') or '').strip()
-    if not otp:
-        return jsonify({'ok': False, 'error': 'OTP required'}), 400
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute("DELETE FROM otp_logs WHERE otp=?", (otp,))
-        deleted = c.rowcount
-        conn.commit()
-        conn.close()
-        # مسح الكاش
-        global _otp_cache, _otp_cache_time
-        _otp_cache = {'data': None, 'time': 0}
-        _otp_cache_time = 0
-        return jsonify({'ok': True, 'deleted': deleted})
-    except Exception as e:
-        return jsonify({'ok': False, 'error': str(e)}), 500
-
 # ========== ✅ API: طلبات المساعدة ==========
 @app.route('/api/admin/help_requests', methods=['GET'])
 def api_help_requests():
@@ -2712,112 +2165,6 @@ def api_help():
     except Exception as e:
         print(f"❌ فشل إرسال طلب المساعدة للبوت: {e}")
     return jsonify({'ok': True, 'id': help_id})
-
-# ========== ✅ صفحة الإعلانات ==========
-announcements_html = """
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>إعلانات الموقع - المطري OTP</title>
-<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
-<style>
-* { margin:0; padding:0; box-sizing:border-box; }
-body { font-family:'Cairo',sans-serif; background:#07090d; color:#c9d1d9; min-height:100vh; }
-.container { max-width:480px; margin:0 auto; padding:16px; }
-.header {
-    background: linear-gradient(135deg, #1f6feb, #388bfd);
-    padding: 24px 20px; border-radius: 14px; margin-bottom: 20px;
-    box-shadow: 0 4px 20px rgba(31, 111, 235, 0.3);
-    text-align: center;
-}
-.header h1 { color:#fff; font-size: 22px; font-weight: 900; margin-bottom: 4px; }
-.header p { color: rgba(255,255,255,0.85); font-size: 13px; }
-.ann-card {
-    background: #1c2128; border: 1px solid #30363d; border-radius: 12px;
-    padding: 16px; margin-bottom: 12px;
-    transition: all 0.2s;
-}
-.ann-card:hover { border-color: #58a6ff; transform: translateY(-2px); }
-.ann-type {
-    display: inline-block; padding: 3px 10px; border-radius: 6px;
-    font-size: 11px; font-weight: 700; margin-bottom: 8px;
-}
-.ann-type.text { background: #1f6feb; color: #fff; }
-.ann-type.image { background: #238636; color: #fff; }
-.ann-type.video { background: #d29922; color: #fff; }
-.ann-content { color: #e6e6e6; font-size: 14px; line-height: 1.6; margin-bottom: 10px; }
-.ann-media { max-width: 100%; max-height: 180px; width: auto; border-radius: 8px; margin-bottom: 10px; object-fit: contain; display:block; margin-left:auto; margin-right:auto; }
-.ann-video-wrap { position:relative; max-height:180px; border-radius:8px; overflow:hidden; margin-bottom:10px; background:#000; }
-.ann-video-wrap video { width:100%; max-height:180px; display:block; }
-.ann-video-wrap::after { content:'🎥 اضغط للتشغيل'; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#fff; font-size:13px; font-weight:800; background:rgba(0,0,0,0.4); pointer-events:none; }
-.ann-btn {
-    display: inline-block; padding: 10px 20px; background: linear-gradient(135deg, #238636, #2ea043);
-    color: #fff; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 14px;
-}
-.ann-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(35, 134, 54, 0.4); }
-.ann-time { color: #6e7681; font-size: 11px; margin-top: 8px; }
-.empty { text-align: center; padding: 40px 16px; color: #6e7681; }
-.back-btn {
-    display: inline-block; padding: 10px 20px; background: #30363d; color: #fff;
-    text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 14px; margin-bottom: 16px;
-}
-.back-btn:hover { background: #484f58; }
-</style>
-</head>
-<body>
-<div class="container">
-    <a href="/" class="back-btn">🔙 العودة للرئيسية</a>
-    <div class="header">
-        <h1>📢 إعلانات الموقع</h1>
-        <p>تابع آخر الإعلانات والتحديثات</p>
-    </div>
-    <div id="annList">
-        <div class="empty">⏳ جاري التحميل...</div>
-    </div>
-</div>
-<script>
-async function loadAnnouncements() {
-    try {
-        const res = await fetch('/api/announcements');
-        const data = await res.json();
-        const container = document.getElementById('annList');
-        if (!data.length) {
-            container.innerHTML = '<div class="empty">📭 لا توجد إعلانات حالياً</div>';
-            return;
-        }
-        container.innerHTML = data.map(a => {
-            let media = '';
-            if (a.type === 'image' && a.media_url) {
-                media = `<img src="${a.media_url}" class="ann-media" alt="" loading="lazy" onclick="window.open('${a.media_url}','_blank')">`;
-            } else if (a.type === 'video' && a.media_url) {
-                media = `<div class="ann-video-wrap"><video src="${a.media_url}" controls preload="metadata"></video></div>`;
-            }
-            const btn = a.button_url ? `<a href="${a.button_url}" target="_blank" class="ann-btn">${a.button_text || 'افتح الرابط'}</a>` : '';
-            return `
-                <div class="ann-card">
-                    <span class="ann-type ${a.type}">${a.type === 'text' ? '📝' : a.type === 'image' ? '🖼️' : '🎥'} ${a.type}</span>
-                    ${media}
-                    <div class="ann-content">${a.content || ''}</div>
-                    ${btn}
-                    <div class="ann-time">🕒 ${a.created_at}</div>
-                </div>
-            `;
-        }).join('');
-    } catch(e) {
-        document.getElementById('annList').innerHTML = '<div class="empty">❌ فشل تحميل الإعلانات</div>';
-    }
-}
-loadAnnouncements();
-</script>
-</body>
-</html>
-"""
-
-@app.route('/announcements')
-def announcements_page():
-    return render_template_string(announcements_html)
 
 # ========== ✅ صفحة إدارة الإعلانات (للأدمن) ==========
 announcements_manager_html = """
@@ -3032,6 +2379,227 @@ body { font-family:'Cairo',sans-serif; background:#07090d; color:#c9d1d9; min-he
 @app.route('/learn-more')
 def learn_more_page():
     return render_template_string(learn_more_html)
+
+# ========== ✅ صفحة الإعلانات (للمستخدمين) ==========
+announcements_html = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>إعلانات الموقع - المطري OTP</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Cairo',sans-serif; background:#07090d; color:#c9d1d9; min-height:100vh; }
+.container { max-width:480px; margin:0 auto; padding:16px; }
+.header {
+    background: linear-gradient(135deg, #1f6feb, #388bfd);
+    padding: 24px 20px; border-radius: 14px; margin-bottom: 20px;
+    box-shadow: 0 4px 20px rgba(31, 111, 235, 0.3);
+    text-align: center;
+}
+.header h1 { color:#fff; font-size: 22px; font-weight: 900; margin-bottom: 4px; }
+.header p { color: rgba(255,255,255,0.85); font-size: 13px; }
+.ann-card {
+    background: #1c2128; border: 1px solid #30363d; border-radius: 12px;
+    padding: 16px; margin-bottom: 12px;
+    transition: all 0.2s;
+}
+.ann-card:hover { border-color: #58a6ff; transform: translateY(-2px); }
+.ann-type {
+    display: inline-block; padding: 3px 10px; border-radius: 6px;
+    font-size: 11px; font-weight: 700; margin-bottom: 8px;
+}
+.ann-type.text { background: #1f6feb; color: #fff; }
+.ann-type.image { background: #238636; color: #fff; }
+.ann-type.video { background: #d29922; color: #fff; }
+.ann-content { color: #e6e6e6; font-size: 14px; line-height: 1.6; margin-bottom: 10px; white-space: pre-wrap; }
+.ann-media { max-width: 100%; border-radius: 8px; margin-bottom: 10px; }
+.ann-btn {
+    display: inline-block; padding: 10px 20px; background: linear-gradient(135deg, #238636, #2ea043);
+    color: #fff; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 14px;
+}
+.ann-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(35, 134, 54, 0.4); }
+.ann-time { color: #6e7681; font-size: 11px; margin-top: 8px; }
+.empty { text-align: center; padding: 40px 16px; color: #6e7681; }
+.back-btn {
+    display: inline-block; padding: 10px 20px; background: #30363d; color: #fff;
+    text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 14px; margin-bottom: 16px;
+}
+.back-btn:hover { background: #484f58; }
+</style>
+</head>
+<body>
+<div class="container">
+    <a href="/" class="back-btn">🔙 العودة للرئيسية</a>
+    <div class="header">
+        <h1>📢 إعلانات الموقع</h1>
+        <p>تابع آخر الإعلانات والتحديثات</p>
+    </div>
+    <div id="annList">
+        <div class="empty">⏳ جاري التحميل...</div>
+    </div>
+</div>
+<script>
+async function loadAnnouncements() {
+    try {
+        const res = await fetch('/api/announcements');
+        const data = await res.json();
+        const container = document.getElementById('annList');
+        if (!data.length) {
+            container.innerHTML = '<div class="empty">📭 لا توجد إعلانات حالياً</div>';
+            return;
+        }
+        container.innerHTML = data.map(a => {
+            let media = '';
+            if (a.type === 'image' && a.media_url) {
+                media = `<img src="${a.media_url}" class="ann-media" alt="">`;
+            } else if (a.type === 'video' && a.media_url) {
+                media = `<video src="${a.media_url}" class="ann-media" controls></video>`;
+            }
+            const btn = a.button_url ? `<a href="${a.button_url}" target="_blank" class="ann-btn">${a.button_text || 'افتح الرابط'}</a>` : '';
+            const typeEmoji = a.type === 'text' ? '📝' : a.type === 'image' ? '🖼️' : '🎥';
+            return `
+                <div class="ann-card">
+                    <span class="ann-type ${a.type}">${typeEmoji} ${a.type}</span>
+                    ${media}
+                    <div class="ann-content">${a.content || ''}</div>
+                    ${btn}
+                    <div class="ann-time">🕒 ${a.created_at}</div>
+                </div>
+            `;
+        }).join('');
+    } catch(e) {
+        document.getElementById('annList').innerHTML = '<div class="empty">❌ فشل تحميل الإعلانات</div>';
+    }
+}
+loadAnnouncements();
+setInterval(loadAnnouncements, 30000);  // تحديث كل 30 ثانية
+</script>
+</body>
+</html>
+"""
+
+@app.route('/announcements')
+def announcements_page():
+    return render_template_string(announcements_html)
+
+# ========== ✅ صفحة إدارة الإعلانات (للأدمن) ==========
+admin_announcements_html = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>لوحة تحكم الإعلانات</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Cairo',sans-serif; background:#07090d; color:#c9d1d9; min-height:100vh; }
+.container { max-width:480px; margin:0 auto; padding:16px; }
+.header {
+    background: linear-gradient(135deg, #d29922, #fb8500);
+    padding: 20px; border-radius: 14px; margin-bottom: 20px; text-align: center;
+    box-shadow: 0 4px 20px rgba(210, 153, 34, 0.3);
+}
+.header h1 { color:#fff; font-size: 20px; font-weight: 900; margin-bottom: 4px; }
+.header p { color: rgba(255,255,255,0.9); font-size: 13px; }
+.actions { display: flex; gap: 10px; margin-bottom: 16px; }
+.btn { flex:1; padding:12px; border:none; border-radius:10px; font-family:'Cairo',sans-serif; font-weight:700; font-size:14px; cursor:pointer; transition:all 0.2s; }
+.btn-danger { background: linear-gradient(135deg, #da3633, #b91c1c); color:#fff; }
+.btn-danger:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(218, 54, 51, 0.4); }
+.btn-back { background:#30363d; color:#fff; }
+.btn-back:hover { background:#484f58; }
+.ann-card {
+    background: #1c2128; border: 1px solid #30363d; border-radius: 12px;
+    padding: 14px; margin-bottom: 10px; display: flex; gap: 12px; align-items: flex-start;
+}
+.ann-thumb {
+    width: 70px; height: 70px; border-radius: 8px; background: #0d1117;
+    display: flex; align-items: center; justify-content: center; font-size: 28px; flex-shrink: 0;
+    overflow: hidden;
+}
+.ann-thumb img { width:100%; height:100%; object-fit:cover; }
+.ann-info { flex:1; min-width: 0; }
+.ann-type-badge { display: inline-block; padding: 2px 8px; border-radius: 5px; font-size: 10px; font-weight: 700; margin-bottom: 4px; }
+.ann-type-badge.text { background:#1f6feb; color:#fff; }
+.ann-type-badge.image { background:#238636; color:#fff; }
+.ann-type-badge.video { background:#d29922; color:#fff; }
+.ann-content { color:#e6e6e6; font-size:13px; line-height:1.4; margin: 4px 0; word-wrap: break-word; }
+.ann-time { color:#6e7681; font-size:11px; }
+.del-btn {
+    background: rgba(218, 54, 51, 0.15); border:1px solid #da3633; color:#f85149;
+    padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 700;
+    font-family: 'Cairo', sans-serif; transition: all 0.2s; flex-shrink: 0;
+}
+.del-btn:hover { background:#da3633; color:#fff; }
+.empty { text-align:center; padding:40px; color:#6e7681; }
+</style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>⚙️ لوحة تحكم الإعلانات</h1>
+        <p>إدارة إعلانات الموقع</p>
+    </div>
+    <div class="actions">
+        <button class="btn btn-back" onclick="location.href='/'">🔙 الرئيسية</button>
+        <button class="btn btn-danger" onclick="clearAll()">🗑️ حذف الكل</button>
+    </div>
+    <div id="annList"><div class="empty">⏳ جاري التحميل...</div></div>
+</div>
+<script>
+async function loadAnnouncements() {
+    try {
+        const res = await fetch('/api/announcements');
+        const data = await res.json();
+        const container = document.getElementById('annList');
+        if (!data.length) { container.innerHTML = '<div class="empty">📭 لا توجد إعلانات</div>'; return; }
+        container.innerHTML = data.map(a => {
+            let thumb = a.type === 'image' ? '🖼️' : a.type === 'video' ? '🎥' : '📝';
+            if (a.media_url && a.type === 'image') thumb = `<img src="${a.media_url}" alt="">`;
+            return `
+            <div class="ann-card" id="ann-${a.id}">
+                <div class="ann-thumb">${thumb}</div>
+                <div class="ann-info">
+                    <span class="ann-type-badge ${a.type}">${a.type}</span>
+                    <div class="ann-content">${(a.content || '').substring(0, 80)}${a.content && a.content.length > 80 ? '...' : ''}</div>
+                    <div class="ann-time">🕒 ${a.created_at}</div>
+                </div>
+                <button class="del-btn" onclick="deleteAnn(${a.id}, this)">🗑️</button>
+            </div>`;
+        }).join('');
+    } catch(e) {
+        document.getElementById('annList').innerHTML = '<div class="empty">❌ خطأ في التحميل</div>';
+    }
+}
+async function deleteAnn(id, btn) {
+    if (!confirm('حذف هذا الإعلان؟')) return;
+    btn.disabled = true; btn.textContent = '⏳';
+    try {
+        await fetch('/api/announcement/delete', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id: id})});
+    } catch(e) {}
+    const card = document.getElementById('ann-' + id);
+    if (card) { card.style.opacity='0'; setTimeout(() => card.remove(), 300); }
+}
+async function clearAll() {
+    if (!confirm('⚠️ حذف كل الإعلانات؟')) return;
+    try {
+        await fetch('/api/announcement/delete_all', {method:'POST'});
+        loadAnnouncements();
+    } catch(e) { alert('❌ خطأ'); }
+}
+loadAnnouncements();
+setInterval(loadAnnouncements, 10000);
+</script>
+</body>
+</html>
+"""
+
+@app.route('/admin-announcements')
+def admin_announcements_page():
+    return render_template_string(admin_announcements_html)
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
