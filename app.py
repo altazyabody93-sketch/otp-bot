@@ -337,7 +337,14 @@ main_html = """
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
     <style>
         * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-        html, body { font-family:'Cairo',sans-serif; background:#07090d; color:#c9d1d9; overflow-x:hidden; }
+        html, body { 
+            font-family:'Cairo',sans-serif; 
+            background:#07090d; 
+            color:#c9d1d9; 
+            overflow-x:hidden; 
+            width: 100%;
+            position: relative;
+        }
         body { min-height:100vh; }
         /* [تقليل الإضاءة] overlay يخفف السطوع على العيون */
         body::before {
@@ -469,29 +476,43 @@ main_html = """
             display:flex; 
             position:fixed; 
             top:0;
-            left:-280px; 
-            width: 260px;
-            height: 100vh;
+            left:-300px; /* زيادة الإزاحة لضمان الاختفاء التام */
+            width: 280px;
+            height: 100%; /* استخدام % بدلاً من vh لتجنب مشاكل المتصفح */
             background: #0d1117;
             border-right:1px solid #30363d; 
             padding:20px 10px; 
-            z-index:10000; 
-            box-shadow:10px 0 30px rgba(0,0,0,0.8); 
+            z-index:10001; /* فوق الـ overlay */
+            box-shadow:none; /* إخفاء الظل عند الاختفاء */
             flex-direction:column; 
             gap:8px;
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
             visibility: hidden;
+            pointer-events: none;
         }
-        .dropdown-menu.show { left:0; visibility: visible; }
+        .dropdown-menu.show { 
+            transform: translateX(300px); 
+            visibility: visible; 
+            pointer-events: auto;
+            box-shadow:10px 0 50px rgba(0,0,0,0.9);
+        }
         .menu-overlay {
-            display:none;
             position:fixed;
-            inset:0;
-            background:rgba(0,0,0,0.7);
-            backdrop-filter:blur(4px);
-            z-index:9999;
+            top:0;
+            left:0;
+            width:100%;
+            height:100%;
+            background:rgba(0,0,0,0.8);
+            backdrop-filter:blur(5px);
+            z-index:10000;
+            opacity:0;
+            visibility:hidden;
+            transition: all 0.3s ease;
         }
-        .menu-overlay.show { display:block; }
+        .menu-overlay.show { 
+            opacity:1;
+            visibility:visible;
+        }
         .dropdown-menu a { 
             display:flex; 
             align-items:center; 
