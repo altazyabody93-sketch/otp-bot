@@ -526,7 +526,7 @@ main_html = """
         /* ============= MAIN CONTENT ============= */
         .main { padding:16px; flex:1; }
 
-        .hero { text-align:center; padding: 4px 12px 4px; } 
+        .hero { text-align:center; padding:15px 12px 10px; }
         .hero h1 { font-size:22px; font-weight:800; color:#fff; margin-bottom:4px; }
         .hero p { font-size:13px; color:#8b949e; line-height:1.4; }
         .hero p .crown { display:inline-block; animation:bounce 1.5s infinite; }
@@ -575,59 +575,16 @@ main_html = """
         .platform-btn:active { transform:scale(0.98); }
         .platform-btn.active { background:var(--platform-color, #1f6feb); border-color:var(--platform-color, #1f6feb); color:#fff; box-shadow:0 0 0 1px var(--platform-color, #1f6feb), 0 0 12px rgba(31,111,235,0.15); }
         .platform-btn img { width:32px; height:32px; object-fit:contain; border-radius:8px; background:#fff; padding:2px; }
-        /* ✅ تكبير المنصات */
-        .platforms-wrap .platform-btn {
+        /* ✅ تكبير المنصات (الكلاس القديم .platforms-wrap لم يعد موجوداً — تم نقل الأنماط لـ .platforms) */
+        .platforms .platform-btn {
             padding: 14px 14px; font-size: 15px; min-height: 58px;
             background: rgba(22,27,34,0.85); backdrop-filter: blur(2px);
         }
-        .platforms-wrap .platform-btn img {
+        .platforms .platform-btn img {
             width: 38px; height: 38px; border-radius: 10px; padding: 3px;
         }
 
-        /* ✅ خلفية الأرقام والرموز المتساقطة خلف المنصات */
-        .platforms-wrap {
-            position: relative;
-            border-radius: 14px;
-            overflow: hidden;
-            isolation: isolate;
-            padding: 6px;
-        }
-        .platforms-wrap::before {
-            content: '';
-            position: absolute; inset: 0;
-            background: linear-gradient(180deg, rgba(7,9,13,0.45) 0%, rgba(7,9,13,0.75) 100%);
-            z-index: 1; pointer-events: none;
-        }
-        .platforms-wrap canvas.platforms-rain {
-            position: absolute; inset: 0; width: 100%; height: 100%;
-            z-index: 0; opacity: 0.6; pointer-events: none;
-        }
-        .platforms-wrap .platforms-rain-bg {
-            position: absolute; inset: 0; z-index: 2;
-            pointer-events: none; overflow: hidden;
-        }
-        .platforms-wrap .platforms { position: relative; z-index: 3; }
-        .platforms-wrap .falling-symbol {
-            position: absolute; top: -24px;
-            font-family: 'Courier New', monospace;
-            font-weight: 900;
-            color: #1f6feb;
-            text-shadow: 0 0 8px currentColor, 0 0 14px currentColor;
-            animation: symbolFall linear infinite;
-            user-select: none;
-        }
-        .platforms-wrap .falling-symbol.green  { color: #3fb950; }
-        .platforms-wrap .falling-symbol.gold   { color: #f0b429; }
-        .platforms-wrap .falling-symbol.cyan   { color: #58a6ff; }
-        .platforms-wrap .falling-symbol.pink   { color: #f78166; }
-        .platforms-wrap .falling-symbol.purple { color: #a371f7; }
-        .platforms-wrap .falling-symbol.white  { color: #ffffff; }
-        @keyframes symbolFall {
-            0%   { transform: translateY(-30px) rotate(0deg); opacity: 0; }
-            8%   { opacity: 1; }
-            92%  { opacity: 1; }
-            100% { transform: translateY(380px) rotate(380deg); opacity: 0; }
-        }
+        /* ✅ [تم حذف] خلفية الأرقام والرموز المتساقطة خلف المنصات (كانت تخلق فراغ فوق) */
 
         /* ============= SELECT & BUTTONS ============= */
         .select-wrap { position:relative; }
@@ -993,11 +950,7 @@ main_html = """
             </div>
 
             <div class="section-title"><span class="icon emoji-float">🎯</span> اختر المنصة</div>
-            <div class="platforms-wrap" id="platformsWrap">
-                <canvas class="platforms-rain" id="platformsRain"></canvas>
-                <div class="platforms-rain-bg" id="platformsRainBg"></div>
-                <div class="platforms" id="platformSelector"></div>
-            </div>
+            <div class="platforms" id="platformSelector"></div>
 
             <div class="section-title"><span class="icon emoji-spin">🌍</span> اختر الدولة</div>
             <div class="select-wrap">
@@ -1590,73 +1543,9 @@ main_html = """
             });
         }
 
-        // ✅ مطر الأرقام والرموز خلف قسم المنصات فقط
+        // ✅ [تم تعطيله] مطر الأرقام والرموز خلف قسم المنصات — كان يخلق فراغ كبير فوق المنصات
         function initPlatformsRain() {
-            try {
-                const wrap = document.getElementById('platformsWrap');
-                const canvas = document.getElementById('platformsRain');
-                const bgLayer = document.getElementById('platformsRainBg');
-                if (!wrap || !canvas || !bgLayer) return;
-
-                const ctx = canvas.getContext('2d');
-                let w = 0, h = 0, cols = 0, drops = [];
-
-                function resize() {
-                    const rect = wrap.getBoundingClientRect();
-                    w = canvas.width = Math.max(200, Math.floor(rect.width));
-                    h = canvas.height = Math.max(200, Math.floor(rect.height));
-                    cols = Math.max(15, Math.floor(w / 16));
-                    drops = Array(cols).fill(0).map(()=>Math.random() * -40);
-                }
-                resize();
-                let resizeTimer;
-                window.addEventListener('resize', ()=>{
-                    clearTimeout(resizeTimer);
-                    resizeTimer = setTimeout(resize, 200);
-                });
-
-                const chars = '0123456789⚡🚀💎🔑👑🌍📱⚙️🔒💫';
-                function draw() {
-                    try {
-                        ctx.fillStyle = 'rgba(7, 9, 13, 0.12)';
-                        ctx.fillRect(0, 0, w, h);
-                        ctx.font = 'bold 15px "Courier New", monospace';
-                        for (let i = 0; i < drops.length; i++) {
-                            const ch = chars[Math.floor(Math.random() * chars.length)];
-                            const y = drops[i] * 16;
-                            const r = Math.random();
-                            if (r > 0.97)      ctx.fillStyle = '#ffffff';
-                            else if (r > 0.85) ctx.fillStyle = '#3fb950';
-                            else if (r > 0.6)  ctx.fillStyle = '#1f6feb';
-                            else if (r > 0.4)  ctx.fillStyle = '#a371f7';
-                            else               ctx.fillStyle = '#58a6ff';
-                            ctx.fillText(ch, i * 16, y);
-                            if (y > h && Math.random() > 0.975) drops[i] = 0;
-                            drops[i]++;
-                        }
-                    } catch(e) { return; }
-                    requestAnimationFrame(draw);
-                }
-                draw();
-
-                // رموز كبيرة متساقطة بألوان زاهية
-                const symbolSet = ['0','1','2','3','4','5','6','7','8','9','#','%','*','+','=','?','!','@'];
-                const colorClasses = ['', 'green', 'gold', 'cyan', 'pink', 'purple', 'white'];
-                function spawnSymbol() {
-                    if (!wrap.isConnected) return;
-                    const el = document.createElement('div');
-                    el.className = 'falling-symbol ' + colorClasses[Math.floor(Math.random()*colorClasses.length)];
-                    el.textContent = symbolSet[Math.floor(Math.random()*symbolSet.length)];
-                    el.style.left = (Math.random() * 100) + '%';
-                    el.style.fontSize = (14 + Math.random() * 14) + 'px';
-                    el.style.animationDuration = (4 + Math.random() * 5) + 's';
-                    el.style.opacity = (0.5 + Math.random() * 0.5).toString();
-                    bgLayer.appendChild(el);
-                    setTimeout(()=>{ if (el.parentNode) el.remove(); }, 10000);
-                }
-                for (let i = 0; i < 6; i++) setTimeout(spawnSymbol, i * 150);
-                setInterval(spawnSymbol, 500);
-            } catch(e) { console.warn('Platforms rain failed:', e); }
+            return; // معطّل — يحافظ على المنصات بدون الفراغ
         }
 
         document.addEventListener('DOMContentLoaded', () => {
@@ -1664,12 +1553,7 @@ main_html = """
             initPlatformSelector();
             loadCachedOtps();
             startAllCountdowns();
-            // ✅ مطر الأرقام والرموز خلف المنصات
-            if (window.requestIdleCallback) {
-                requestIdleCallback(initPlatformsRain, {timeout: 1000});
-            } else {
-                setTimeout(initPlatformsRain, 300);
-            }
+            // ✅ [تم حذف] مطر الأرقام والرموز خلف المنصات
         });
     </script>
 </body>
