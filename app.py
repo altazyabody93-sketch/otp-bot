@@ -338,26 +338,10 @@ main_html = """
     <style>
         * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
         html, body { font-family:'Cairo',sans-serif; background:#07090d; color:#c9d1d9; overflow-x:hidden; }
-        body { min-height:100vh; }
-        /* (تم حذف overlay الذي كان يخلق فراغ كبير) */
-        
-        /* [خلفية الأرقام المتساقطة] Digital Cyber Background */
-        #matrix-bg {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: -999; /* خلف كل شيء تماماً */
-            opacity: 0.9; 
-            pointer-events: none;
-            background: #07090d;
-        }
-
+                body { min-height:100vh; }
         .app { 
             max-width:480px; margin:0 auto; 
-            background:rgba(13, 17, 23, 0.5); 
-            backdrop-filter:blur(2px); 
+            background:rgba(13, 17, 23, 0.95); 
             min-height:100vh; display:flex; flex-direction:column; 
             position:relative; 
             z-index: 1;
@@ -524,9 +508,9 @@ main_html = """
         }
 
         /* ============= MAIN CONTENT ============= */
-        .main { padding:16px; flex:1; }
+        .main { padding:0 16px 16px 16px; flex:1; display: flex; flex-direction: column; }
 
-        .hero { text-align:center; padding:15px 12px 10px; }
+        .hero { text-align:center; padding:10px 12px; margin-top: 10px; order: 3; border-top: 1px solid #21262d; border-bottom: 1px solid #21262d; margin-bottom: 10px; } 
         .hero h1 { font-size:22px; font-weight:800; color:#fff; margin-bottom:4px; }
         .hero p { font-size:13px; color:#8b949e; line-height:1.4; }
         .hero p .crown { display:inline-block; animation:bounce 1.5s infinite; }
@@ -560,11 +544,11 @@ main_html = """
             50%     { transform: scale(1.18); }
         }
 
-        .section-title { font-size:14px; font-weight:700; color:#fff; margin:12px 4px 8px; display:flex; align-items:center; gap:8px; }
+        .section-title { font-size:14px; font-weight:700; color:#fff; margin:12px 4px 8px; display:flex; align-items:center; gap:8px; order: 1; }
         .section-title .icon { color:#58a6ff; }
 
         /* ============= PLATFORMS GRID ============= */
-        .platforms { display:grid; grid-template-columns:repeat(2, 1fr); gap:8px; margin-bottom:5px; }
+        .platforms { display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; margin-bottom:15px; order: 2; }
         .platform-btn {
             display:flex; align-items:center; gap:8px; padding:10px 12px;
             background:#1c2128; border:1px solid #30363d; border-radius:10px;
@@ -575,16 +559,17 @@ main_html = """
         .platform-btn:active { transform:scale(0.98); }
         .platform-btn.active { background:var(--platform-color, #1f6feb); border-color:var(--platform-color, #1f6feb); color:#fff; box-shadow:0 0 0 1px var(--platform-color, #1f6feb), 0 0 12px rgba(31,111,235,0.15); }
         .platform-btn img { width:32px; height:32px; object-fit:contain; border-radius:8px; background:#fff; padding:2px; }
-        /* ✅ تكبير المنصات (الكلاس القديم .platforms-wrap لم يعد موجوداً — تم نقل الأنماط لـ .platforms) */
-        .platforms .platform-btn {
+        /* ✅ تكبير المنصات */
+        .platforms-wrap .platform-btn {
             padding: 14px 14px; font-size: 15px; min-height: 58px;
             background: rgba(22,27,34,0.85); backdrop-filter: blur(2px);
         }
-        .platforms .platform-btn img {
+        .platforms-wrap .platform-btn img {
             width: 38px; height: 38px; border-radius: 10px; padding: 3px;
         }
 
-        /* ✅ [تم حذف] خلفية الأرقام والرموز المتساقطة خلف المنصات (كانت تخلق فراغ فوق) */
+        /* ✅ خلفية الأرقام والرموز المتساقطة خلف المنصات */
+        .platforms-wrap { position: relative; order: 2; }
 
         /* ============= SELECT & BUTTONS ============= */
         .select-wrap { position:relative; }
@@ -891,7 +876,6 @@ main_html = """
     </style>
 </head>
 <body>
-    <canvas id="matrix-bg"></canvas>
     <div class="app">
         <!-- HEADER -->
         <div class="top-bar">
@@ -944,24 +928,26 @@ main_html = """
 
         <!-- MAIN -->
         <div class="main">
-            <div class="hero">
+            <div class="section-title" style="margin-top:0; order:1;"><span class="icon emoji-float">🎯</span> اختر المنصة</div>
+            <div class="platforms-wrap" style="order:2;">
+                <div class="platforms" id="platformSelector"></div>
+            </div>
+
+            <div class="hero" style="order:3;">
                 <h1><span class="emoji-float">🚀</span> موقع المطري OTP</h1>
                 <p><span class="emoji-wave crown">👑</span> أرقام واتساب سحب أكواد تطوير مطري <span class="emoji-wave crown">👑</span></p>
             </div>
 
-            <div class="section-title"><span class="icon emoji-float">🎯</span> اختر المنصة</div>
-            <div class="platforms" id="platformSelector"></div>
-
-            <div class="section-title"><span class="icon emoji-spin">🌍</span> اختر الدولة</div>
-            <div class="select-wrap">
+            <div class="section-title" style="order:4;"><span class="icon emoji-spin">🌍</span> اختر الدولة</div>
+            <div class="select-wrap" style="order:5;">
                 <select id="country" class="form-control" disabled>
                     <option value="">-- اختر المنصة أولاً --</option>
                 </select>
             </div>
 
-            <button class="btn-primary" id="getNumberBtn" onclick="getNumber()" disabled>🚀 جلب رقم</button>
+            <button class="btn-primary" id="getNumberBtn" onclick="getNumber()" disabled style="order:6;">🚀 جلب رقم</button>
 
-            <div id="numberContainer" style="display:none;" dir="ltr">
+            <div id="numberContainer" style="display:none; order:7;" dir="ltr">
                 <div class="number-card" dir="ltr">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                         <span style="font-size:11px; color:#8b949e; font-weight:600;">📞 الرقم</span>
@@ -978,15 +964,15 @@ main_html = """
                 </div>
             </div>
 
-            <div class="section-title" style="margin-top:24px;"><span class="icon emoji-pulse-soft">📜</span> الأكواد المسحوبة</div>
-            <div class="otp-list" id="otpHistory">
+            <div class="section-title" style="margin-top:24px; order:8;"><span class="icon emoji-pulse-soft">📜</span> الأكواد المسحوبة</div>
+            <div class="otp-list" id="otpHistory" style="order:9;">
                 <div class="empty-state">
                     <div class="icon">⏳</div>
                     <div>في انتظار الأكواد...</div>
                 </div>
             </div>
 
-            <div class="status" id="status">⚡ اختر المنصة والدولة للبدء</div>
+            <div class="status" id="status" style="order:10;">⚡ اختر المنصة والدولة للبدء</div>
         </div>
 
         <!-- ✅ [الإصلاح] شريط الأخبار الاحترافي في الفوتر -->
@@ -1485,75 +1471,10 @@ main_html = """
         }
 
         // [تأثير Cyber Digital] أرقام كبيرة وواضحة تتساقط ببطء
-        function initMatrix() {
-            const canvas = document.getElementById('matrix-bg');
-            const ctx = canvas.getContext('2d');
-            
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            
-            const digits = "0123456789+()#-*$!%&"; // رموز وأرقام متنوعة
-            const fontSize = 16; 
-            const columns = Math.floor(canvas.width / fontSize);
-            const drops = [];
-            
-            for (let i = 0; i < columns; i++) {
-                drops[i] = Math.random() * -100;
-            }
-            
-            function draw() {
-                // تقليل مسح الشاشة لترك أثر (trail) أطول وأجمل
-                ctx.fillStyle = "rgba(7, 9, 13, 0.08)";
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                
-                ctx.font = "bold " + fontSize + "px monospace";
-                
-                for (let i = 0; i < drops.length; i++) {
-                    const text = digits.charAt(Math.floor(Math.random() * digits.length));
-                    
-                    // توهج قوي وواضح
-                    ctx.shadowBlur = 12;
-                    ctx.shadowColor = "#00ffc8";
-                    ctx.fillStyle = "#00ffc8";
-                    
-                    // جعل بعض الأرقام ساطعة جداً (White highlight)
-                    if(Math.random() > 0.92) {
-                        ctx.fillStyle = "#ffffff";
-                        ctx.shadowBlur = 20;
-                        ctx.shadowColor = "#ffffff";
-                    }
-                    
-                    ctx.fillText(text, i * fontSize, drops[i] * fontSize);
-                    
-                    // إعادة تعيين التوهج لتجنب التأثير على بقية العناصر
-                    ctx.shadowBlur = 0;
-                    
-                    if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
-                        drops[i] = 0;
-                    }
-                    drops[i] += 1.2; // سرعة مناسبة
-                }
-            }
-            
-            setInterval(draw, 50); // سرعة تحديث أهدأ
-            
-            window.addEventListener('resize', () => {
-                canvas.width = window.innerWidth;
-                canvas.height = window.innerHeight;
-            });
-        }
-
-        // ✅ [تم تعطيله] مطر الأرقام والرموز خلف قسم المنصات — كان يخلق فراغ كبير فوق المنصات
-        function initPlatformsRain() {
-            return; // معطّل — يحافظ على المنصات بدون الفراغ
-        }
-
         document.addEventListener('DOMContentLoaded', () => {
-            initMatrix();
             initPlatformSelector();
             loadCachedOtps();
             startAllCountdowns();
-            // ✅ [تم حذف] مطر الأرقام والرموز خلف المنصات
         });
     </script>
 </body>
@@ -1896,24 +1817,7 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-@app.route('/admin_login', methods=['GET', 'POST'])
-def admin_login():
-    if request.method == 'POST':
-        if request.form.get('password') == ADMIN_PASSWORD:
-            session['logged_in'] = True
-            return redirect(f"/{ADMIN_SECRET_PATH}")
-        return "❌ كلمة المرور خاطئة!"
-    return '''
-    <div dir="rtl" style="text-align:center; margin-top:100px; font-family:sans-serif; background:#0d1117; color:#fff; padding:50px; border-radius:20px;">
-        <h2>🔐 دخول الأدمن</h2>
-        <form method="POST">
-            <input type="password" name="password" placeholder="كلمة المرور" style="padding:12px; border-radius:8px; border:1px solid #30363d; background:#161b22; color:#fff;">
-            <button type="submit" style="padding:12px 25px; background:#238636; color:#fff; border:none; border-radius:8px; cursor:pointer; font-weight:bold;">دخول</button>
-        </form>
-    </div>
-    '''
-
-@app.route(f'/{ADMIN_SECRET_PATH}', methods=['GET', 'POST'])
+@app.route('/admin', methods=['GET', 'POST'])
 def admin():  # ✅ دخول مباشر بدون كلمة سر
     if request.method == 'POST':
         # ===== حذف كومبو =====
@@ -1926,7 +1830,7 @@ def admin():  # ✅ دخول مباشر بدون كلمة سر
                 c.execute("DELETE FROM combos WHERE platform=? AND country_code=?", (platform, country_code))
                 conn.commit()
                 conn.close()
-                return redirect(f"/{ADMIN_SECRET_PATH}")
+                return redirect("/admin")
 
         # ===== حذف جميع الأكواد المسحوبة =====
         elif request.form.get('action') == 'clear_otps':
@@ -1939,7 +1843,7 @@ def admin():  # ✅ دخول مباشر بدون كلمة سر
             global _otp_cache, _otp_cache_time
             _otp_cache = {'data': None, 'time': 0}
             _otp_cache_time = 0
-            return redirect(f"/{ADMIN_SECRET_PATH}")
+            return redirect("/admin")
 
         # ===== رفع كومبو =====
         else:
