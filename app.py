@@ -339,11 +339,7 @@ main_html = """
         * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
         html, body { font-family:'Cairo',sans-serif; background:#07090d; color:#c9d1d9; overflow-x:hidden; }
         body { min-height:100vh; }
-        /* [تقليل الإضاءة] overlay يخفف السطوع على العيون */
-        body::before {
-            content:''; position:fixed; inset:0; z-index:5; pointer-events:none;
-            background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.4) 100%);
-        }
+        /* (تم حذف overlay الذي كان يخلق فراغ كبير) */
         
         /* [خلفية الأرقام المتساقطة] Digital Cyber Background */
         #matrix-bg {
