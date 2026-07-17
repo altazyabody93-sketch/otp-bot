@@ -526,7 +526,7 @@ main_html = """
         /* ============= MAIN CONTENT ============= */
         .main { padding:16px; flex:1; }
 
-        .hero { text-align:center; padding:15px 12px 10px; }
+        .hero { text-align:center; padding: 4px 12px 4px; } 
         .hero h1 { font-size:22px; font-weight:800; color:#fff; margin-bottom:4px; }
         .hero p { font-size:13px; color:#8b949e; line-height:1.4; }
         .hero p .crown { display:inline-block; animation:bounce 1.5s infinite; }
