@@ -15,8 +15,8 @@ app.secret_key = "supersecretkey_change_this"
 DB_PATH = "bot.db"
 
 # ========== الإعدادات الأساسية ==========
-ADMIN_PASSWORD = "admin123"  # كلمة السر للدخول للوحة التحكم
-ADMIN_SECRET_PATH = "admin_secret_77" # الرابط السري سيكون /admin_secret_77
+ADMIN_PASSWORD = "admin123"
+ADMIN_SECRET_PATH = "admin_secret_77"
 
 WHATSAPP_GROUP_LINK = "https://chat.whatsapp.com/IeK2gNS64fd8YSnenzt4WR"
 OWNER_PHONE = "967733723953"
@@ -26,26 +26,31 @@ TELEGRAM_BOT_TOKEN = "8814038881:AAGyuACUYA4YPKlJQhAyUMkpRNiV0u1gNuU"
 CHANNEL_USERNAME = "@jsjsgsjsvh"
 ASSISTANT_BOT_TOKEN = "8845420882:AAHZ-7qhCL3_ddDT3am4zWNtBRBy3mVDgws"
 OWNER_TELEGRAM_ID = "@ABOD_90N"
-TELEGRAM_GROUP_INVITE = "https://t.me/ABOD_90N"
 ANNOUNCEMENTS_CHANNEL = "https://t.me/ABOD_90N"
 
-# ========== قاعدة البيانات ==========
+# ========== قاعدة البيانات المطورة ==========
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     
+    # الجداول الأساسية
     c.execute('''CREATE TABLE IF NOT EXISTS combos (id INTEGER PRIMARY KEY AUTOINCREMENT, platform TEXT, country_code TEXT, country_name TEXT, country_flag TEXT, numbers TEXT, UNIQUE(platform, country_code))''')
     c.execute('''CREATE TABLE IF NOT EXISTS otp_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, number TEXT, otp TEXT, timestamp TEXT, platform TEXT, country_code TEXT, country_flag TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS announcements (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT, content TEXT, media_url TEXT, button_text TEXT, button_url TEXT, source_msg_id INTEGER, created_at TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS help_requests (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, message TEXT, source TEXT, status TEXT DEFAULT 'pending', created_at TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS known_chats (chat_id TEXT PRIMARY KEY, chat_type TEXT, chat_title TEXT, last_seen TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS admin_settings (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, username TEXT, first_name TEXT, last_name TEXT, country_code TEXT, assigned_number TEXT, is_banned INTEGER DEFAULT 0, join_date TEXT)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS site_stats (id INTEGER PRIMARY KEY AUTOINCREMENT, ip TEXT, user_agent TEXT, visit_time TEXT, action TEXT)''')
+    
+    # جداول جديدة للميزات المطلوبة
     c.execute('''CREATE TABLE IF NOT EXISTS site_texts (key TEXT PRIMARY KEY, value TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS site_links (key TEXT PRIMARY KEY, value TEXT, icon TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS site_settings (key TEXT PRIMARY KEY, value TEXT)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, username TEXT, first_name TEXT, last_name TEXT, country_code TEXT, assigned_number TEXT, is_banned INTEGER DEFAULT 0, join_date TEXT, total_otps INTEGER DEFAULT 0)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS platform_order (id INTEGER PRIMARY KEY AUTOINCREMENT, platform TEXT, sort_order INTEGER DEFAULT 0)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS otp_attempts (id INTEGER PRIMARY KEY AUTOINCREMENT, number TEXT, otp TEXT, attempt_time TEXT, success INTEGER DEFAULT 0)''')
     
-    # إدخال النصوص الافتراضية
+    # النصوص الافتراضية
     default_texts = {
         'site_title': '🚀 المطري OTP',
         'site_subtitle': '👑 أرقام واتساب سحب أكواد تطوير مطري 👑',
@@ -54,12 +59,16 @@ def init_db():
         'btn_start_monitor': '📡 بدء السحب',
         'btn_stop_monitor': '⏹️ إيقاف',
         'footer_text': '💎 صُنع بحب ⚡ بواسطة المطري',
-        'ticker_text': '🚀 المطري OTP - أسرع موقع للحصول على الأكواد 💎'
+        'ticker_text': '🚀 المطري OTP - أسرع موقع للحصول على الأكواد 💎',
+        'contact_title': '📞 تواصل معنا',
+        'help_title': '🆘 طلب مساعدة',
+        'announcements_title': '📢 إعلانات الموقع',
+        'notif_title': '🔔 كود جديد!'
     }
     for key, value in default_texts.items():
         c.execute("INSERT OR IGNORE INTO site_texts (key, value) VALUES (?, ?)", (key, value))
     
-    # إدخال الروابط الافتراضية
+    # الروابط الافتراضية
     default_links = [
         ('whatsapp_developer', OWNER_LINK, '💬'),
         ('whatsapp_group', WHATSAPP_GROUP_LINK, '👥'),
@@ -72,22 +81,34 @@ def init_db():
     for key, value, icon in default_links:
         c.execute("INSERT OR IGNORE INTO site_links (key, value, icon) VALUES (?, ?, ?)", (key, value, icon))
     
-    # إدخال إعدادات الموقع
+    # إعدادات الموقع
     default_settings = {
         'matrix_enabled': '1',
         'ticker_enabled': '1',
         'main_color': '#00ffc8',
         'secondary_color': '#8b5cf6',
         'background_color': '#0a0e1a',
-        'text_color': '#ffffff'
+        'text_color': '#ffffff',
+        'font_size': '16',
+        'platforms_rain': '1',
+        'notification_sound': '1',
+        'otp_attempts': '5',
+        'show_delete_btn': '0',
+        'stats_enabled': '1'
     }
     for key, value in default_settings.items():
         c.execute("INSERT OR IGNORE INTO site_settings (key, value) VALUES (?, ?)", (key, value))
+    
+    # ترتيب المنصات الافتراضي
+    platform_order = ['whatsapp', 'telegram', 'facebook', 'instagram', 'tiktok', 'snapchat', 'google', 'twitter']
+    for idx, platform in enumerate(platform_order):
+        c.execute("INSERT OR IGNORE INTO platform_order (platform, sort_order) VALUES (?, ?)", (platform, idx))
     
     conn.commit()
     conn.close()
 init_db()
 
+# ========== دوال المساعدة ==========
 def get_text(key):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -95,6 +116,13 @@ def get_text(key):
     row = c.fetchone()
     conn.close()
     return row[0] if row else ''
+
+def update_text(key, value):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("REPLACE INTO site_texts (key, value) VALUES (?, ?)", (key, value))
+    conn.commit()
+    conn.close()
 
 def get_link(key):
     conn = sqlite3.connect(DB_PATH)
@@ -111,28 +139,6 @@ def get_all_links():
     rows = c.fetchall()
     conn.close()
     return rows
-
-def get_setting(key):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT value FROM site_settings WHERE key=?", (key,))
-    row = c.fetchone()
-    conn.close()
-    return row[0] if row else ''
-
-def set_setting(key, value):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("REPLACE INTO site_settings (key, value) VALUES (?, ?)", (key, value))
-    conn.commit()
-    conn.close()
-
-def update_text(key, value):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("REPLACE INTO site_texts (key, value) VALUES (?, ?)", (key, value))
-    conn.commit()
-    conn.close()
 
 def update_link(key, value, icon=None):
     conn = sqlite3.connect(DB_PATH)
@@ -151,14 +157,91 @@ def delete_link(key):
     conn.commit()
     conn.close()
 
+def get_setting(key):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT value FROM site_settings WHERE key=?", (key,))
+    row = c.fetchone()
+    conn.close()
+    return row[0] if row else ''
+
+def set_setting(key, value):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("REPLACE INTO site_settings (key, value) VALUES (?, ?)", (key, value))
+    conn.commit()
+    conn.close()
+
+def get_admin_setting(key, default=""):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT value FROM admin_settings WHERE key=?", (key,))
+    row = c.fetchone()
+    conn.close()
+    return row[0] if row and row[0] else default
+
+def set_admin_setting(key, value):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("REPLACE INTO admin_settings (key, value, updated_at) VALUES (?, ?, ?)",
+              (key, value, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+    conn.commit()
+    conn.close()
+
+def notify_admin(text):
+    admin_id = get_admin_setting('admin_telegram_id')
+    if not admin_id:
+        return False
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{ASSISTANT_BOT_TOKEN}/sendMessage",
+            json={'chat_id': admin_id, 'text': text, 'parse_mode': 'HTML'},
+            timeout=10
+        )
+        return True
+    except Exception as e:
+        print(f"⚠️ فشل إشعار الأدمن: {e}")
+        return False
+
+def log_stat(ip, action, user_agent=''):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("INSERT INTO site_stats (ip, user_agent, visit_time, action) VALUES (?, ?, ?, ?)",
+                  (ip, user_agent[:255], datetime.now().strftime("%Y-%m-%d %H:%M:%S"), action))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Stat log error: {e}")
+
+def get_stats():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT COUNT(DISTINCT ip) FROM site_stats")
+    visitors = c.fetchone()[0]
+    c.execute("SELECT COUNT(*) FROM site_stats WHERE action='get_number'")
+    numbers_used = c.fetchone()[0]
+    c.execute("SELECT COUNT(*) FROM otp_logs")
+    total_otps = c.fetchone()[0]
+    today = datetime.now().strftime("%Y-%m-%d")
+    c.execute("SELECT COUNT(*) FROM otp_logs WHERE timestamp LIKE ?", (today + '%',))
+    today_otps = c.fetchone()[0]
+    c.execute("SELECT COUNT(*) FROM combos")
+    combos = c.fetchone()[0]
+    conn.close()
+    return {'visitors': visitors, 'numbers_used': numbers_used, 'total_otps': total_otps, 'today_otps': today_otps, 'combos': combos}
+
 # ========== دوال الكومبو ==========
 def get_platforms():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT DISTINCT platform FROM combos")
-    platforms = [row[0] for row in c.fetchall()]
+    c.execute("SELECT platform FROM platform_order ORDER BY sort_order")
+    rows = c.fetchall()
+    if not rows:
+        c.execute("SELECT DISTINCT platform FROM combos")
+        rows = c.fetchall()
     conn.close()
-    return platforms
+    return [row[0] for row in rows] if rows else ['whatsapp', 'telegram', 'facebook', 'instagram', 'tiktok', 'snapchat', 'google', 'twitter']
 
 def get_countries_by_platform(platform):
     conn = sqlite3.connect(DB_PATH)
@@ -198,11 +281,20 @@ def get_all_combos():
     conn.close()
     return rows
 
+def update_platform_order(platforms):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("DELETE FROM platform_order")
+    for idx, platform in enumerate(platforms):
+        c.execute("INSERT INTO platform_order (platform, sort_order) VALUES (?, ?)", (platform, idx))
+    conn.commit()
+    conn.close()
+
 # ========== دوال المستخدمين ==========
 def get_all_users():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT * FROM users ORDER BY id DESC")
+    c.execute("SELECT user_id, username, first_name, assigned_number, is_banned, total_otps FROM users ORDER BY id DESC")
     users = c.fetchall()
     conn.close()
     return users
@@ -221,7 +313,8 @@ def save_user(user_id, username="", first_name="", last_name="", country_code=No
     existing = get_user(user_id)
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     if existing:
-        c.execute("UPDATE users SET last_active=? WHERE user_id=?", (now, user_id))
+        c.execute("UPDATE users SET last_active=?, username=?, first_name=?, last_name=? WHERE user_id=?",
+                  (now, username, first_name, last_name, user_id))
     else:
         c.execute("INSERT INTO users (user_id, username, first_name, last_name, country_code, assigned_number, join_date) VALUES (?, ?, ?, ?, ?, ?, ?)",
                   (user_id, username, first_name, last_name, country_code, assigned_number, now))
@@ -242,13 +335,12 @@ def unban_user(user_id):
     conn.commit()
     conn.close()
 
-def get_user_otps(user_id, limit=50):
+def increment_user_otps(user_id):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT number, otp, timestamp, platform FROM otp_logs WHERE number IN (SELECT assigned_number FROM users WHERE user_id=?) ORDER BY id DESC LIMIT ?", (user_id, limit))
-    rows = c.fetchall()
+    c.execute("UPDATE users SET total_otps = total_otps + 1 WHERE user_id=?", (user_id,))
+    conn.commit()
     conn.close()
-    return rows
 
 # ========== شعارات SVG ==========
 PLATFORM_LOGOS = {
@@ -392,36 +484,37 @@ def get_country_info(code):
     info = COUNTRY_DATA.get(code)
     return (info["n"], info["f"]) if info else ("أخرى", "🌍")
 
-def get_admin_setting(key, default=""):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT value FROM admin_settings WHERE key=?", (key,))
-    row = c.fetchone()
-    conn.close()
-    return row[0] if row and row[0] else default
-
-def set_admin_setting(key, value):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("REPLACE INTO admin_settings (key, value, updated_at) VALUES (?, ?, ?)",
-              (key, value, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-    conn.commit()
-    conn.close()
-
-def notify_admin(text):
-    admin_id = get_admin_setting('admin_telegram_id')
-    if not admin_id:
-        return False
-    try:
-        requests.post(
-            f"https://api.telegram.org/bot{ASSISTANT_BOT_TOKEN}/sendMessage",
-            json={'chat_id': admin_id, 'text': text, 'parse_mode': 'HTML'},
-            timeout=10
-        )
-        return True
-    except Exception as e:
-        print(f"⚠️ فشل إشعار الأدمن: {e}")
-        return False
+# ========== وظائف الميزات الجديدة ==========
+def play_notification_sound():
+    """توليد صوت إشعار باستخدام Web Audio API - يتم استدعاؤها من JavaScript"""
+    return """
+    function playNotificationSound() {
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const now = ctx.currentTime;
+            // نغمة أولى
+            const o1 = ctx.createOscillator();
+            const g1 = ctx.createGain();
+            o1.connect(g1); g1.connect(ctx.destination);
+            o1.type = 'sine';
+            o1.frequency.setValueAtTime(880, now);
+            g1.gain.setValueAtTime(0.0001, now);
+            g1.gain.exponentialRampToValueAtTime(0.3, now + 0.02);
+            g1.gain.exponentialRampToValueAtTime(0.0001, now + 0.25);
+            o1.start(now); o1.stop(now + 0.3);
+            // نغمة ثانية
+            const o2 = ctx.createOscillator();
+            const g2 = ctx.createGain();
+            o2.connect(g2); g2.connect(ctx.destination);
+            o2.type = 'sine';
+            o2.frequency.setValueAtTime(1318, now + 0.18);
+            g2.gain.setValueAtTime(0.0001, now + 0.18);
+            g2.gain.exponentialRampToValueAtTime(0.3, now + 0.2);
+            g2.gain.exponentialRampToValueAtTime(0.0001, now + 0.5);
+            o2.start(now + 0.18); o2.stop(now + 0.55);
+        } catch(e) {}
+    }
+    """
 
 def login_required(f):
     @wraps(f)
@@ -431,7 +524,7 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-# ========== HTML الرئيسي ==========
+# ========== HTML الرئيسي مع كل الميزات ==========
 main_html = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -440,9 +533,16 @@ main_html = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
     <title>{{ site_title }}</title>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
-    <style>
+    <style id="themeStyles">
+        :root {
+            --main-color: {{ main_color }};
+            --secondary-color: {{ secondary_color }};
+            --bg-color: {{ background_color }};
+            --text-color: {{ text_color }};
+            --font-size: {{ font_size }}px;
+        }
         * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-        html, body { font-family:'Cairo',sans-serif; background:#07090d; color:#c9d1d9; overflow-x:hidden; }
+        html, body { font-family:'Cairo',sans-serif; background:var(--bg-color); color:var(--text-color); overflow-x:hidden; font-size:var(--font-size); }
         body { min-height:100vh; }
         
         #matrix-bg {
@@ -452,9 +552,10 @@ main_html = """
             width: 100%;
             height: 100%;
             z-index: -999;
-            opacity: 0.85;
+            opacity: {{ matrix_opacity }};
             pointer-events: none;
-            background: #07090d;
+            background: var(--bg-color);
+            display: {{ 'block' if matrix_enabled else 'none' }};
         }
 
         .app { 
@@ -468,11 +569,14 @@ main_html = """
 
         .top-bar { background:#0d1117; padding:12px 16px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #21262d; position:sticky; top:0; z-index:50; }
         .brand { display:flex; align-items:center; gap:10px; }
-        .brand-icon { width:36px; height:36px; border-radius:10px; background:linear-gradient(135deg, #1f6feb, #388bfd); display:flex; align-items:center; justify-content:center; font-size:18px; }
+        .brand-icon { width:36px; height:36px; border-radius:10px; background:linear-gradient(135deg, var(--main-color), var(--secondary-color)); display:flex; align-items:center; justify-content:center; font-size:18px; }
         .brand-text { font-size:16px; font-weight:700; color:#fff; }
         .top-actions { display:flex; gap:8px; align-items:center; }
         .menu-btn { background:transparent; border:1px solid #30363d; color:#8b949e; padding:6px 12px; border-radius:8px; cursor:pointer; font-size:16px; }
-        .menu-btn:hover { color:#58a6ff; border-color:#58a6ff; }
+        .menu-btn:hover { color:var(--main-color); border-color:var(--main-color); }
+        .font-controls { display:flex; gap:4px; align-items:center; }
+        .font-controls button { background:transparent; border:1px solid #30363d; color:#8b949e; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:14px; }
+        .font-controls button:hover { color:var(--main-color); border-color:var(--main-color); }
 
         .dropdown-menu { 
             position:fixed; 
@@ -506,64 +610,93 @@ main_html = """
             padding:10px 14px; border-radius:8px; font-size:13px; font-weight:600; 
             transition:all 0.3s ease; border:1px solid transparent;
         }
-        .dropdown-menu a:hover { background:rgba(88,166,255,0.1); color:#58a6ff; border-color:rgba(88,166,255,0.2); }
+        .dropdown-menu a:hover { background:rgba(var(--main-color-rgb, 88,166,255),0.1); color:var(--main-color); border-color:rgba(var(--main-color-rgb, 88,166,255),0.2); }
         .dropdown-menu a .ico { font-size:16px; width:24px; height:24px; display:flex; align-items:center; justify-content:center; background:rgba(88,166,255,0.1); border-radius:4px; flex-shrink:0; }
         .dropdown-menu .menu-divider { height:1px; background:linear-gradient(90deg, transparent, #30363d, transparent); margin:4px 0; }
         .dropdown-menu .menu-header { font-size:10px; color:#8b949e; font-weight:700; padding:4px 12px 2px; text-transform:uppercase; letter-spacing:0.5px; }
 
         .main { padding:12px 16px; flex:1; }
         .hero { text-align:center; padding:4px 0 8px; }
-        .hero h1 { font-size:20px; font-weight:800; color:#fff; }
-        .hero p { font-size:12px; color:#8b949e; }
+        .hero h1 { font-size:24px; font-weight:800; color:#fff; }
+        .hero p { font-size:14px; color:#8b949e; }
 
-        .section-title { font-size:13px; font-weight:700; color:#fff; margin:8px 0 6px; display:flex; align-items:center; gap:6px; }
-        .section-title .icon { color:#58a6ff; }
+        .section-title { font-size:14px; font-weight:700; color:#fff; margin:8px 0 6px; display:flex; align-items:center; gap:6px; }
+        .section-title .icon { color:var(--main-color); }
 
-        .platforms { display:grid; grid-template-columns:repeat(2, 1fr); gap:6px; margin-bottom:4px; }
+        /* منصات أكبر */
+        .platforms { display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; margin-bottom:4px; }
         .platform-btn {
-            display:flex; align-items:center; gap:8px; padding:8px 10px;
-            background:#1c2128; border:1px solid #30363d; border-radius:8px;
-            color:#e6e6e6; cursor:pointer; transition:all 0.15s ease;
-            font-size:12px; font-weight:600; font-family:'Cairo',sans-serif;
+            display:flex; align-items:center; gap:12px; padding:14px 12px;
+            background:#1c2128; border:2px solid #30363d; border-radius:12px;
+            color:#e6e6e6; cursor:pointer; transition:all 0.2s ease;
+            font-size:14px; font-weight:700; font-family:'Cairo',sans-serif;
+            min-height:60px;
         }
-        .platform-btn:hover { background:#21262d; border-color:#484f58; }
+        .platform-btn:hover { background:#21262d; border-color:#484f58; transform:translateY(-2px); }
         .platform-btn:active { transform:scale(0.97); }
-        .platform-btn.active { background:var(--platform-color, #1f6feb); border-color:var(--platform-color, #1f6feb); color:#fff; box-shadow:0 0 0 1px var(--platform-color, #1f6feb), 0 0 12px rgba(31,111,235,0.15); }
-        .platform-btn img { width:28px; height:28px; object-fit:contain; border-radius:6px; background:#fff; padding:2px; }
+        .platform-btn.active { background:var(--platform-color, #1f6feb); border-color:var(--platform-color, #1f6feb); color:#fff; box-shadow:0 0 0 2px var(--platform-color, #1f6feb), 0 0 20px rgba(31,111,235,0.2); }
+        .platform-btn img { width:36px; height:36px; object-fit:contain; border-radius:8px; background:#fff; padding:3px; }
+
+        /* خلفية الأرقام المتساقطة خلف المنصات */
+        .platforms-rain-wrap {
+            position:relative;
+            border-radius:12px;
+            overflow:hidden;
+            padding:4px;
+            background:rgba(0,0,0,0.2);
+        }
+        .platforms-rain-wrap canvas {
+            position:absolute;
+            inset:0;
+            width:100%;
+            height:100%;
+            z-index:0;
+            opacity:0.3;
+            pointer-events:none;
+        }
+        .platforms-rain-wrap .platforms {
+            position:relative;
+            z-index:1;
+        }
 
         .form-control {
-            width:100%; padding:10px 14px; border-radius:8px;
+            width:100%; padding:12px 16px; border-radius:10px;
             border:1px solid #30363d; background:#0d1117; color:#e6e6e6;
-            outline:none; font-family:'Cairo',sans-serif; font-size:13px; font-weight:600;
+            outline:none; font-family:'Cairo',sans-serif; font-size:14px; font-weight:600;
             appearance:none; -webkit-appearance:none;
             background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='%238b949e' d='M6 9L1 4h10z'/></svg>");
-            background-repeat:no-repeat; background-position:left 14px center; padding-left:36px;
+            background-repeat:no-repeat; background-position:left 16px center; padding-left:40px;
         }
-        .form-control:focus { border-color:#1f6feb; }
+        .form-control:focus { border-color:var(--main-color); }
         .form-control:disabled { opacity:0.5; cursor:not-allowed; }
 
         .btn-primary {
-            width:100%; padding:10px; border:none; border-radius:8px;
-            background:#238636; color:#fff; font-size:13px; font-weight:700;
+            width:100%; padding:14px; border:none; border-radius:10px;
+            background:linear-gradient(135deg, var(--main-color), var(--secondary-color));
+            color:#000; font-size:15px; font-weight:700;
             cursor:pointer; margin-top:6px; font-family:'Cairo',sans-serif;
             transition:all 0.15s ease;
         }
-        .btn-primary:hover:not(:disabled) { background:#2ea043; }
+        .btn-primary:hover:not(:disabled) { transform:translateY(-2px); box-shadow:0 0 20px rgba(0,255,200,0.2); }
         .btn-primary:disabled { opacity:0.5; cursor:not-allowed; }
 
         .number-card {
             background: linear-gradient(135deg, #0d1117, #161b22);
-            border:1px solid #238636; border-radius:12px;
-            padding:14px; margin:10px 0; text-align:center;
+            border:2px solid var(--main-color);
+            border-radius:14px;
+            padding:16px;
+            margin:10px 0;
+            text-align:center;
+            box-shadow:0 0 30px rgba(0,255,200,0.1);
         }
         .number-card .number {
             font-family: 'Courier New', monospace;
-            font-size: 24px;
+            font-size: 28px;
             font-weight: 900;
-            color: #3fb950;
+            color: var(--main-color);
             letter-spacing: 2px;
-            text-shadow: 0 0 8px rgba(63, 185, 80, 0.4);
-            padding: 4px 0;
+            text-shadow: 0 0 10px var(--main-color);
+            padding: 6px 0;
             direction: ltr;
             unicode-bidi: bidi-override;
             display: inline-block;
@@ -571,56 +704,53 @@ main_html = """
         .number-card .number .digit {
             display: inline-block;
             opacity: 0;
-            transform: translateY(8px) scale(0.7);
-            animation: digitDrop 0.3s ease forwards;
+            transform: translateY(10px) scale(0.7);
+            animation: digitDrop 0.4s ease forwards;
         }
         @keyframes digitDrop {
             to { opacity: 1; transform: translateY(0) scale(1); }
         }
         .copy-btn-mini {
-            background: linear-gradient(135deg, #1f6feb, #388bfd);
-            border: 1px solid #388bfd;
-            color: #fff;
-            padding: 4px 10px;
-            border-radius:6px;
+            background: linear-gradient(135deg, var(--main-color), var(--secondary-color));
+            border: 1px solid var(--main-color);
+            color: #000;
+            padding: 6px 14px;
+            border-radius:8px;
             cursor: pointer;
-            font-size:11px;
+            font-size:12px;
             font-weight:700;
             transition:all 0.2s;
         }
-        .copy-btn-mini:hover { background:linear-gradient(135deg, #388bfd, #58a6ff); }
-        .copy-btn-mini.copied { background: linear-gradient(135deg, #238636, #2ea043); border-color: #2ea043; }
+        .copy-btn-mini:hover { transform:translateY(-2px); }
+        .copy-btn-mini.copied { background: #238636; border-color:#2ea043; }
 
-        .otp-list { display:flex; flex-direction:column; gap:6px; margin-top:8px; }
+        .otp-list { display:flex; flex-direction:column; gap:8px; margin-top:8px; }
         .otp-item {
-            background:#1c2128; border:1px solid #30363d; border-radius:8px;
-            padding:8px 10px; display:flex; justify-content:space-between; align-items:center;
+            background:#1c2128; border:1px solid #30363d; border-radius:10px;
+            padding:12px 14px; display:flex; justify-content:space-between; align-items:center;
             gap:4px; flex-wrap:wrap;
         }
         .otp-item .otp-code {
             font-family: 'Courier New', monospace;
-            font-size: 15px;
+            font-size: 18px;
             font-weight: 900;
-            color: #ff6b9d;
-            background: linear-gradient(135deg, #ff6b9d 0%, #c084fc 50%, #38bdf8 100%);
-            -webkit-background-clip: text;
-            background-clip: text;
-            -webkit-text-fill-color: transparent;
+            color: var(--main-color);
             letter-spacing: 1px;
+            text-shadow: 0 0 10px var(--main-color);
         }
-        .otp-item .otp-info { font-size:10px; color:#8b949e; }
-        .otp-item .copy-btn { background:transparent; border:1px solid #30363d; color:#58a6ff; padding:3px 8px; border-radius:4px; cursor:pointer; font-size:10px; font-weight:600; }
-        .otp-item .delete-btn { background:transparent; border:1px solid #30363d; color:#f85149; padding:3px 8px; border-radius:4px; cursor:pointer; font-size:10px; font-weight:600; }
-        .otp-item .delete-btn:hover { background:#da3633; color:#fff; border-color:#da3633; }
+        .otp-item .otp-info { font-size:11px; color:#8b949e; }
+        .otp-item .otp-time { font-size:11px; color:var(--main-color); }
+        .otp-item .copy-btn { background:transparent; border:1px solid #30363d; color:#58a6ff; padding:4px 10px; border-radius:6px; cursor:pointer; font-size:11px; font-weight:600; }
+        .otp-item .copy-btn:hover { background:var(--main-color); color:#000; }
 
-        .empty-state { text-align:center; padding:20px; color:#8b949e; font-size:12px; }
-        .empty-state .icon { font-size:30px; margin-bottom:4px; opacity:0.5; }
+        .empty-state { text-align:center; padding:20px; color:#8b949e; font-size:13px; }
+        .empty-state .icon { font-size:36px; margin-bottom:4px; opacity:0.5; }
 
-        .status { background:#1c2128; border:1px solid #30363d; border-radius:8px; padding:8px 12px; text-align:center; margin-top:8px; color:#8b949e; font-size:12px; font-weight:600; }
+        .status { background:#1c2128; border:1px solid #30363d; border-radius:10px; padding:10px 14px; text-align:center; margin-top:8px; color:#8b949e; font-size:13px; font-weight:600; }
 
         .footer-section { margin-top:10px; padding:0; border-top:1px solid #21262d; }
-        .footer-info { text-align:center; padding:10px 16px; color:#8b949e; font-size:11px; font-weight:600; }
-        .footer-info strong { color:#58a6ff; }
+        .footer-info { text-align:center; padding:12px 16px; color:#8b949e; font-size:12px; font-weight:600; }
+        .footer-info strong { color:var(--main-color); }
         
         .news-ticker {
             background: linear-gradient(135deg, #1c2128 0%, #21262d 50%, #1c2128 100%);
@@ -632,6 +762,7 @@ main_html = """
             border-radius: 6px;
             margin: 0 16px 4px 16px;
             max-width: calc(100% - 32px);
+            display: {{ 'block' if ticker_enabled else 'none' }};
         }
         .news-ticker::before, .news-ticker::after {
             content: ''; position: absolute; top: 0; bottom: 0; width: 30px; z-index: 2; pointer-events: none;
@@ -643,7 +774,7 @@ main_html = """
             padding: 0 20px;
             white-space: nowrap;
             animation: tickerScroll 30s linear infinite;
-            font-weight: 600; font-size: 11px; color: #c9d1d9;
+            font-weight: 600; font-size: 12px; color: #c9d1d9;
             align-items: center;
         }
         .ticker-content:hover { animation-play-state: paused; }
@@ -652,9 +783,9 @@ main_html = """
             100% { transform: translateX(-50%); }
         }
         .ticker-item { display: inline-flex; align-items: center; gap: 4px; }
-        .ticker-emoji { font-size: 12px; }
+        .ticker-emoji { font-size: 14px; }
         .ticker-name {
-            background: linear-gradient(90deg, #58a6ff, #a371f7, #f78166, #58a6ff);
+            background: linear-gradient(90deg, var(--main-color), var(--secondary-color), var(--main-color));
             background-size: 300% 300%;
             -webkit-background-clip: text; background-clip: text;
             -webkit-text-fill-color: transparent;
@@ -664,6 +795,40 @@ main_html = """
         @keyframes nameScroll {
             0%,100% { background-position: 0% 50%; }
             50%     { background-position: 100% 50%; }
+        }
+
+        /* إشعار رأس الصفحة */
+        #topNotification {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 99999;
+            background: linear-gradient(135deg, var(--main-color), var(--secondary-color));
+            color: #000;
+            padding: 12px 16px;
+            text-align: center;
+            font-weight: 700;
+            font-size: 14px;
+            transform: translateY(-100%);
+            transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            cursor: pointer;
+        }
+        #topNotification.show {
+            transform: translateY(0);
+        }
+        #topNotification .close-notif {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: #000;
+            font-size: 18px;
+            cursor: pointer;
+            opacity: 0.7;
         }
 
         .modal-overlay {
@@ -694,54 +859,82 @@ main_html = """
             padding: 10px; font-family: 'Cairo', sans-serif; font-size: 13px;
             resize: vertical; outline: none;
         }
-        .modal-box textarea:focus { border-color: #1f6feb; }
+        .modal-box textarea:focus { border-color: var(--main-color); }
         .modal-box .modal-actions { display: flex; gap: 8px; margin-top: 12px; }
         .modal-box button {
             flex: 1; padding: 10px; border: none; border-radius: 8px;
             font-family: 'Cairo', sans-serif; font-size: 13px; font-weight: 700; cursor: pointer;
         }
-        .modal-box .btn-send { background: linear-gradient(135deg, #238636, #2ea043); color: #fff; }
+        .modal-box .btn-send { background: linear-gradient(135deg, var(--main-color), var(--secondary-color)); color: #000; }
         .modal-box .btn-cancel { background: #30363d; color: #e6e6e6; }
-        .modal-box .success-msg {
-            background: rgba(35, 134, 54, 0.15);
-            border: 1px solid #238636;
-            color: #3fb950;
-            padding: 10px;
+
+        .font-size-control {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(0,0,0,0.3);
             border-radius: 8px;
+            padding: 4px 8px;
+        }
+        .font-size-control button {
+            background: transparent;
+            border: none;
+            color: #8b949e;
+            font-size: 18px;
+            cursor: pointer;
+            padding: 0 4px;
+        }
+        .font-size-control button:hover { color: var(--main-color); }
+        .font-size-control span {
+            color: #8b949e;
+            font-size: 12px;
+            min-width: 24px;
             text-align: center;
-            font-size: 13px;
-            margin-top: 8px;
-            display:none;
         }
 
         @media (max-width:380px) {
-            .hero h1 { font-size:17px; }
-            .platform-btn { font-size:11px; padding:6px 8px; }
-            .platform-btn img { width:22px; height:22px; }
-            .number-card .number { font-size:20px; }
+            .hero h1 { font-size:20px; }
+            .platform-btn { font-size:13px; padding:12px 10px; min-height:50px; }
+            .platform-btn img { width:30px; height:30px; }
+            .number-card .number { font-size:22px; }
         }
     </style>
 </head>
 <body>
     <canvas id="matrix-bg"></canvas>
+    
+    <!-- إشعار رأس الصفحة -->
+    <div id="topNotification" onclick="this.classList.remove('show')">
+        <span id="notifMessage">🔔 كود جديد!</span>
+        <button class="close-notif" onclick="event.stopPropagation(); this.parentElement.classList.remove('show')">✕</button>
+    </div>
+    
     <div class="app">
         <div class="top-bar">
-            <div class="brand"><div class="brand-icon">🚀</div><div class="brand-text">{{ site_title }}</div></div>
+            <div class="brand">
+                <div class="brand-icon">🚀</div>
+                <div class="brand-text">{{ site_title }}</div>
+            </div>
             <div class="top-actions">
+                <div class="font-size-control">
+                    <button onclick="changeFontSize(-1)">A-</button>
+                    <span id="fontSizeDisplay">{{ font_size }}</span>
+                    <button onclick="changeFontSize(1)">A+</button>
+                </div>
                 <button class="menu-btn" onclick="toggleMenu()">☰</button>
                 <div class="menu-overlay" id="menuOverlay" onclick="toggleMenu()"></div>
                 <div class="dropdown-menu" id="contactMenu">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding:0 10px;">
-                        <div style="font-weight:900; color:#fff; font-size:15px;">🚀 القائمة</div>
+                        <div style="font-weight:900; color:#fff; font-size:15px;">🚀 {{ contact_title }}</div>
                         <button onclick="toggleMenu()" style="background:none; border:none; color:#8b949e; font-size:18px; cursor:pointer;">✕</button>
                     </div>
-                    <div class="menu-header">📞 تواصل معنا</div>
+                    <div class="menu-header">📞 {{ contact_title }}</div>
                     {% for key, value, icon in links %}
                     <a href="{{ value }}" target="_blank"><span class="ico">{{ icon }}</span> {{ key.replace('_', ' ').title() }}</a>
                     {% endfor %}
                     <div class="menu-divider"></div>
-                    <a href="/announcements"><span class="ico">📢</span> إعلانات الموقع</a>
-                    <a href="#" onclick="openHelpModal(); return false;"><span class="ico">🆘</span> طلب مساعدة</a>
+                    <a href="/announcements"><span class="ico">📢</span> {{ announcements_title }}</a>
+                    <a href="#" onclick="openHelpModal(); return false;"><span class="ico">🆘</span> {{ help_title }}</a>
                 </div>
             </div>
         </div>
@@ -753,7 +946,10 @@ main_html = """
             </div>
 
             <div class="section-title"><span class="icon">🎯</span> اختر المنصة</div>
-            <div class="platforms" id="platformSelector"></div>
+            <div class="platforms-rain-wrap" id="platformsRainWrap">
+                <canvas id="platformsRainCanvas"></canvas>
+                <div class="platforms" id="platformSelector"></div>
+            </div>
 
             <div class="section-title"><span class="icon">🌍</span> اختر الدولة</div>
             <select id="country" class="form-control" disabled>
@@ -765,16 +961,17 @@ main_html = """
             <div id="numberContainer" style="display:none;">
                 <div class="number-card">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                        <span style="font-size:10px; color:#8b949e; font-weight:600;">📞 الرقم</span>
+                        <span style="font-size:11px; color:#8b949e; font-weight:600;">📞 الرقم</span>
                         <button class="copy-btn-mini" onclick="copyNumber()" id="copyNumBtn">📋 نسخ</button>
                     </div>
                     <div class="number" id="numberDisplay">+</div>
-                    <div class="number-countdown-wrap" id="numberCountdown" style="display:flex; align-items:center; justify-content:center; gap:4px; margin-top:6px; padding:4px 10px; background:rgba(99,102,241,0.15); border:1px solid rgba(139,92,246,0.4); border-radius:999px; font-size:11px; font-weight:700; color:#c4b5fd; width:fit-content; margin-left:auto; margin-right:auto; cursor:pointer;" onclick="refreshNumber()">
+                    <div style="display:flex; align-items:center; justify-content:center; gap:6px; margin-top:6px; padding:4px 12px; background:rgba(99,102,241,0.15); border:1px solid var(--main-color); border-radius:999px; font-size:12px; font-weight:700; color:var(--main-color); width:fit-content; margin-left:auto; margin-right:auto; cursor:pointer;" onclick="refreshNumber()">
                         <span>🔄</span> <span>تبديل الرقم التالي</span>
                     </div>
+                    <div id="otpArrivalTime" style="font-size:11px; color:#8b949e; margin-top:4px;"></div>
                 </div>
-                <div id="autoMonitorStatus" style="display:flex; align-items:center; gap:6px; padding:6px 10px; background:#0d1117; border:1px solid #21262d; border-radius:6px; margin-top:6px; font-size:11px; color:#8b949e;">
-                    <span class="dot" style="width:6px; height:6px; border-radius:50%; background:#3fb950; animation:pulse-dot 1.5s infinite; display:inline-block;"></span>
+                <div id="autoMonitorStatus" style="display:flex; align-items:center; gap:6px; padding:6px 10px; background:#0d1117; border:1px solid #21262d; border-radius:6px; margin-top:6px; font-size:12px; color:#8b949e;">
+                    <span class="dot" style="width:8px; height:8px; border-radius:50%; background:var(--main-color); animation:pulse-dot 1.5s infinite; display:inline-block;"></span>
                     جاري المراقبة التلقائية...
                 </div>
             </div>
@@ -799,14 +996,13 @@ main_html = """
 
     <div class="modal-overlay" id="helpModal" onclick="if(event.target===this) closeHelpModal()">
         <div class="modal-box">
-            <h2>🆘 طلب مساعدة</h2>
+            <h2>🆘 {{ help_title }}</h2>
             <p>اشرح مشكلتك وسنرد عليك</p>
             <textarea id="helpMessage" placeholder="اكتب رسالتك هنا..."></textarea>
             <div class="modal-actions">
                 <button class="btn-cancel" onclick="closeHelpModal()">إلغاء</button>
                 <button class="btn-send" id="sendHelpBtn" onclick="sendHelpRequest()">إرسال</button>
             </div>
-            <div class="success-msg" id="helpSuccess">✅ تم إرسال رسالتك!</div>
         </div>
     </div>
 
@@ -816,17 +1012,79 @@ main_html = """
         const platformGradients = {{ platform_gradients | tojson }};
         const platformColors = {{ platform_colors | tojson }};
         const OTP_VALID_SECONDS = 120;
+        const OTP_ATTEMPTS = {{ otp_attempts }};
+        const showDeleteBtn = {{ show_delete_btn }};
+        const notifSoundEnabled = {{ notification_sound }};
 
+        // ========== متغيرات عامة ==========
+        let currentPlatform = '';
+        let currentNumber = '';
+        let currentNumberIndex = 0;
+        let monitorInterval = null;
+        let allOtpsCache = [];
+        let currentFontSize = {{ font_size }};
+        let notifTimeout = null;
+
+        // ========== صوت الإشعار ==========
+        function playNotificationSound() {
+            if (!notifSoundEnabled) return;
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const now = ctx.currentTime;
+                const o1 = ctx.createOscillator();
+                const g1 = ctx.createGain();
+                o1.connect(g1); g1.connect(ctx.destination);
+                o1.type = 'sine';
+                o1.frequency.setValueAtTime(880, now);
+                g1.gain.setValueAtTime(0.0001, now);
+                g1.gain.exponentialRampToValueAtTime(0.3, now + 0.02);
+                g1.gain.exponentialRampToValueAtTime(0.0001, now + 0.25);
+                o1.start(now); o1.stop(now + 0.3);
+                const o2 = ctx.createOscillator();
+                const g2 = ctx.createGain();
+                o2.connect(g2); g2.connect(ctx.destination);
+                o2.type = 'sine';
+                o2.frequency.setValueAtTime(1318, now + 0.18);
+                g2.gain.setValueAtTime(0.0001, now + 0.18);
+                g2.gain.exponentialRampToValueAtTime(0.3, now + 0.2);
+                g2.gain.exponentialRampToValueAtTime(0.0001, now + 0.5);
+                o2.start(now + 0.18); o2.stop(now + 0.55);
+            } catch(e) { console.log('Sound error:', e); }
+        }
+
+        // ========== إشعار رأس الصفحة ==========
+        function showTopNotification(message, duration = 5000) {
+            const el = document.getElementById('topNotification');
+            const msgEl = document.getElementById('notifMessage');
+            msgEl.textContent = message || '🔔 كود جديد!';
+            el.classList.add('show');
+            if (notifTimeout) clearTimeout(notifTimeout);
+            notifTimeout = setTimeout(() => {
+                el.classList.remove('show');
+            }, duration);
+            // صوت
+            playNotificationSound();
+        }
+
+        // ========== التحكم بالخط ==========
+        function changeFontSize(delta) {
+            currentFontSize = Math.max(14, Math.min(24, currentFontSize + delta));
+            document.documentElement.style.fontSize = currentFontSize + 'px';
+            document.getElementById('fontSizeDisplay').textContent = currentFontSize;
+            localStorage.setItem('fontSize', currentFontSize);
+        }
+
+        // ========== القائمة ==========
         function toggleMenu() {
             document.getElementById('contactMenu').classList.toggle('show');
             document.getElementById('menuOverlay').classList.toggle('show');
             document.body.style.overflow = document.getElementById('contactMenu').classList.contains('show') ? 'hidden' : '';
         }
 
+        // ========== المساعدة ==========
         function openHelpModal() {
             document.getElementById('helpModal').style.display = 'flex';
             document.getElementById('helpMessage').value = '';
-            document.getElementById('helpSuccess').style.display = 'none';
         }
         function closeHelpModal() {
             document.getElementById('helpModal').style.display = 'none';
@@ -844,9 +1102,8 @@ main_html = """
                 });
                 const data = await res.json();
                 if (data.ok) {
-                    document.getElementById('helpSuccess').style.display = 'block';
-                    document.getElementById('helpMessage').value = '';
-                    setTimeout(() => closeHelpModal(), 2000);
+                    alert('✅ تم إرسال رسالتك! سنرد عليك قريباً');
+                    closeHelpModal();
                 } else {
                     alert('❌ فشل الإرسال: ' + (data.error || 'حاول مرة أخرى'));
                 }
@@ -863,6 +1120,7 @@ main_html = """
             }
         });
 
+        // ========== نسخ ==========
         async function copyNumber() {
             const num = document.getElementById('numberDisplay').textContent;
             try { await navigator.clipboard.writeText(num); } catch(e) {}
@@ -880,6 +1138,7 @@ main_html = """
             }
         }
 
+        // ========== تأثير الرقم ==========
         function animateNumber(element, text) {
             element.innerHTML = '';
             element.setAttribute('dir', 'ltr');
@@ -895,6 +1154,7 @@ main_html = """
             });
         }
 
+        // ========== خلفية المطر الرقمي ==========
         function initMatrix() {
             const canvas = document.getElementById('matrix-bg');
             const ctx = canvas.getContext('2d');
@@ -912,8 +1172,8 @@ main_html = """
                 for (let i = 0; i < drops.length; i++) {
                     const text = digits.charAt(Math.floor(Math.random() * digits.length));
                     ctx.shadowBlur = 10;
-                    ctx.shadowColor = "#00ffc8";
-                    ctx.fillStyle = Math.random() > 0.92 ? "#ffffff" : "#00ffc8";
+                    ctx.shadowColor = getComputedStyle(document.documentElement).getPropertyValue('--main-color').trim() || '#00ffc8';
+                    ctx.fillStyle = Math.random() > 0.92 ? "#ffffff" : getComputedStyle(document.documentElement).getPropertyValue('--main-color').trim() || '#00ffc8';
                     ctx.fillText(text, i * fontSize, drops[i] * fontSize);
                     ctx.shadowBlur = 0;
                     if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) drops[i] = 0;
@@ -928,15 +1188,46 @@ main_html = """
         }
         initMatrix();
 
-        let currentPlatform = '';
-        let currentNumber = '';
-        let currentNumberIndex = 0;
-        let monitorInterval = null;
-        let allOtpsCache = [];
+        // ========== مطر الأرقام خلف المنصات ==========
+        function initPlatformsRain() {
+            const canvas = document.getElementById('platformsRainCanvas');
+            const wrap = document.getElementById('platformsRainWrap');
+            if (!canvas || !wrap) return;
+            const ctx = canvas.getContext('2d');
+            let w, h, cols, drops;
+            function resize() {
+                const rect = wrap.getBoundingClientRect();
+                w = canvas.width = Math.max(100, rect.width);
+                h = canvas.height = Math.max(100, rect.height);
+                cols = Math.max(10, Math.floor(w / 14));
+                drops = Array(cols).fill(0).map(()=>Math.random() * -30);
+            }
+            resize();
+            window.addEventListener('resize', resize);
+            const chars = '0123456789';
+            function draw() {
+                ctx.clearRect(0, 0, w, h);
+                ctx.font = 'bold 12px monospace';
+                for (let i = 0; i < drops.length; i++) {
+                    const text = chars[Math.floor(Math.random() * chars.length)];
+                    const color = getComputedStyle(document.documentElement).getPropertyValue('--main-color').trim() || '#00ffc8';
+                    ctx.fillStyle = Math.random() > 0.9 ? '#ffffff' : color;
+                    ctx.globalAlpha = 0.2 + Math.random() * 0.3;
+                    ctx.fillText(text, i * 14, drops[i] * 12);
+                    ctx.globalAlpha = 1;
+                    if (drops[i] * 12 > h && Math.random() > 0.97) drops[i] = 0;
+                    drops[i] += 0.6 + Math.random() * 0.3;
+                }
+                requestAnimationFrame(draw);
+            }
+            draw();
+        }
 
+        // ========== تهيئة المنصات ==========
         function initPlatformSelector() {
             const selector = document.getElementById('platformSelector');
             selector.innerHTML = '';
+            const platforms = {{ platforms|tojson }};
             const platformColors = {
                 whatsapp: '#25D366',
                 telegram: '#26A5E4',
@@ -947,7 +1238,8 @@ main_html = """
                 google: '#4285F4',
                 twitter: '#1DA1F2'
             };
-            Object.keys(platformNames).forEach(platform => {
+            platforms.forEach(platform => {
+                if (!platformNames[platform]) return;
                 const btn = document.createElement('button');
                 btn.type = 'button';
                 btn.className = 'platform-btn';
@@ -988,79 +1280,112 @@ main_html = """
             document.getElementById('getNumberBtn').disabled = !this.value;
         });
 
-        async function getNumber() {
+        // ========== جلب الرقم مع محاولات متعددة ==========
+        async function getNumber(attempt = 0) {
             const country = document.getElementById('country').value;
             if (!currentPlatform || !country) {
                 document.getElementById('status').textContent = '⚠️ يرجى اختيار المنصة والدولة';
                 return;
             }
-            currentNumberIndex = 0;
+            currentNumberIndex = attempt;
             document.getElementById('status').textContent = '⏳ جاري جلب رقم...';
-            const res = await fetch('/api/get_number', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform:currentPlatform, country, index: currentNumberIndex})});
-            const data = await res.json();
-            if (data.number) {
-                currentNumber = data.number;
-                animateNumber(document.getElementById('numberDisplay'), data.number);
-                document.getElementById('numberContainer').style.display = 'block';
-                document.getElementById('status').textContent = '✅ الرقم جاهز!';
-                document.getElementById('numberCountdown').style.display = 'flex';
-                startMonitoring();
-            } else {
-                document.getElementById('status').textContent = '❌ لا توجد أرقام متاحة';
+            try {
+                const res = await fetch('/api/get_number', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({platform: currentPlatform, country, index: currentNumberIndex})
+                });
+                const data = await res.json();
+                if (data.number) {
+                    currentNumber = data.number;
+                    animateNumber(document.getElementById('numberDisplay'), data.number);
+                    document.getElementById('numberContainer').style.display = 'block';
+                    document.getElementById('status').textContent = '✅ الرقم جاهز!';
+                    document.getElementById('otpArrivalTime').textContent = '';
+                    startMonitoring();
+                    // تسجيل إحصائية
+                    fetch('/api/log_stat', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({action: 'get_number'})
+                    });
+                } else if (attempt < OTP_ATTEMPTS - 1) {
+                    // محاولة مرة أخرى
+                    setTimeout(() => getNumber(attempt + 1), 2000);
+                    document.getElementById('status').textContent = `⏳ جاري المحاولة ${attempt + 2}/${OTP_ATTEMPTS}...`;
+                } else {
+                    document.getElementById('status').textContent = '❌ لا توجد أرقام متاحة بعد ' + OTP_ATTEMPTS + ' محاولات';
+                }
+            } catch(e) {
+                if (attempt < OTP_ATTEMPTS - 1) {
+                    setTimeout(() => getNumber(attempt + 1), 3000);
+                } else {
+                    document.getElementById('status').textContent = '❌ فشل جلب الرقم';
+                }
             }
         }
 
+        // ========== تبديل الرقم ==========
         async function refreshNumber() {
             const country = document.getElementById('country').value;
             if (!currentPlatform || !country) return;
-            const refreshBtn = document.getElementById('numberCountdown');
-            refreshBtn.innerHTML = '⏳ جاري التبديل...';
-            refreshBtn.style.pointerEvents = 'none';
+            const refreshBtn = document.querySelector('.number-card [onclick*="refreshNumber"]');
+            if (refreshBtn) refreshBtn.innerHTML = '⏳ جاري التبديل...';
             stopMonitoring();
             currentNumberIndex++;
             try {
-                const res = await fetch('/api/get_number', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform:currentPlatform, country, index: currentNumberIndex})});
+                const res = await fetch('/api/get_number', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({platform: currentPlatform, country, index: currentNumberIndex})
+                });
                 const data = await res.json();
                 if (data.number) {
                     currentNumber = data.number;
                     animateNumber(document.getElementById('numberDisplay'), data.number);
                     document.getElementById('status').textContent = '🔄 تم التبديل!';
+                    document.getElementById('otpArrivalTime').textContent = '';
+                    startMonitoring();
                 } else {
                     currentNumberIndex = 0;
-                    const resRetry = await fetch('/api/get_number', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform:currentPlatform, country, index: 0})});
-                    const dataRetry = await resRetry.json();
-                    if (dataRetry.number) {
-                        currentNumber = dataRetry.number;
-                        animateNumber(document.getElementById('numberDisplay'), dataRetry.number);
-                        document.getElementById('status').textContent = 'ℹ️ العودة للأول...';
-                    }
+                    await getNumber(0);
                 }
-                startMonitoring();
             } catch(e) {
                 document.getElementById('status').textContent = '❌ فشل التبديل';
             }
-            refreshBtn.innerHTML = '<span>🔄</span> <span>تبديل الرقم التالي</span>';
-            refreshBtn.style.pointerEvents = 'auto';
-            refreshBtn.style.display = 'flex';
+            if (refreshBtn) refreshBtn.innerHTML = '🔄 تبديل الرقم التالي';
         }
 
+        // ========== المراقبة التلقائية ==========
         function startMonitoring() {
             if (!currentNumber) return;
             if (monitorInterval) clearInterval(monitorInterval);
             const status = document.getElementById('autoMonitorStatus');
             if (status) status.innerHTML = '<span class="dot"></span> جاري المراقبة التلقائية...';
             let lastSeenOtpTime = 0;
+            let attempts = 0;
             monitorInterval = setInterval(() => {
                 if (!currentNumber) { stopMonitoring(); return; }
-                fetch('/api/get_otp', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({number:currentNumber})})
-                .then(res => res.json()).then(data => {
+                fetch('/api/get_otp', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({number: currentNumber})
+                })
+                .then(res => res.json())
+                .then(data => {
                     if (data.otp && data.otp !== lastSeenOtpTime) {
                         const now = new Date().toLocaleString('en-US', {timeZone:'Asia/Aden', hour12: true});
                         addOtpToHistory(currentNumber, data.otp, now, currentPlatform);
                         lastSeenOtpTime = data.otp;
+                        attempts = 0;
                         if (status) status.innerHTML = `<span class="dot"></span> ✅ تم استلام كود!`;
+                        // إشعار رأس الصفحة
+                        showTopNotification('🔑 كود جديد: ' + data.otp);
+                        // وقت وصول الكود
+                        document.getElementById('otpArrivalTime').textContent = '🕒 تم الاستلام: ' + new Date().toLocaleTimeString('ar-YE');
                     }
-                }).catch(()=>{});
+                })
+                .catch(() => {});
             }, 4000);
         }
 
@@ -1068,15 +1393,22 @@ main_html = """
             if (monitorInterval) { clearInterval(monitorInterval); monitorInterval = null; }
         }
 
+        // ========== إضافة كود للقائمة ==========
         function addOtpToHistory(number, otp, timestamp, platform) {
             const container = document.getElementById('otpHistory');
             if (container.querySelector('.empty-state')) container.innerHTML = '';
-            const otpData = {id: Date.now() + '_' + Math.random().toString(36).slice(2,6), number, otp, timestamp, platform: platform || currentPlatform || 'unknown', otpTime: Date.now()};
+            const otpData = {
+                id: Date.now() + '_' + Math.random().toString(36).slice(2,6),
+                number, otp, timestamp,
+                platform: platform || currentPlatform || 'unknown',
+                otpTime: Date.now()
+            };
             allOtpsCache.unshift(otpData);
             try { localStorage.setItem('allOtps', JSON.stringify(allOtpsCache.slice(0, 30))); } catch(e) {}
             renderOtpSections();
         }
 
+        // ========== عرض الأكواد ==========
         function renderOtpSections() {
             const container = document.getElementById('otpHistory');
             if (!allOtpsCache.length) {
@@ -1095,21 +1427,22 @@ main_html = """
                 const logoUrl = platformLogos[platform] || '';
                 const name = platformNames[platform] || platform;
                 html += `
-                <div style="margin-bottom:8px;">
-                    <div style="display:flex; align-items:center; gap:4px; padding:4px 8px; background:#1c2128; border:1px solid #30363d; border-radius:6px; margin-bottom:4px;">
-                        <img src="${logoUrl}" style="width:18px; height:18px; border-radius:4px; padding:2px; background:#fff;" onerror="this.style.display='none'">
-                        <span style="font-size:12px; font-weight:700; color:#fff;">${name}</span>
-                        <span style="font-size:10px; color:#8b949e; margin-right:auto;">${items.length}</span>
+                <div style="margin-bottom:10px;">
+                    <div style="display:flex; align-items:center; gap:6px; padding:6px 10px; background:#1c2128; border:1px solid #30363d; border-radius:8px; margin-bottom:4px;">
+                        <img src="${logoUrl}" style="width:22px; height:22px; border-radius:4px; padding:2px; background:#fff;" onerror="this.style.display='none'">
+                        <span style="font-size:13px; font-weight:700; color:#fff;">${name}</span>
+                        <span style="font-size:11px; color:#8b949e; margin-right:auto;">${items.length}</span>
                     </div>
                     ${items.map(o => `
                     <div class="otp-item">
                         <div>
-                            <div class="otp-code" dir="ltr" style="direction:ltr; unicode-bidi:bidi-override; text-align:left; font-size:14px;">🔑 ${o.otp}</div>
+                            <div class="otp-code" dir="ltr" style="direction:ltr; unicode-bidi:bidi-override; text-align:left; font-size:16px;">🔑 ${o.otp}</div>
                             <div class="otp-info">📞 ${o.number} • 🕒 ${o.timestamp}</div>
+                            <div class="otp-time">⏱️ تم الاستلام: ${o.otpTime ? new Date(o.otpTime).toLocaleTimeString('ar-YE') : '—'}</div>
                         </div>
                         <div style="display:flex; gap:4px;">
                             <button class="copy-btn" onclick="copyText('${o.otp}', this)">نسخ</button>
-                            <button class="delete-btn" onclick="deleteOtp('${o.id}')">🗑️</button>
+                            ${showDeleteBtn ? `<button class="copy-btn" onclick="deleteOtp('${o.id}')" style="color:#f85149;border-color:#f85149;">🗑️</button>` : ''}
                         </div>
                     </div>
                     `).join('')}
@@ -1118,6 +1451,7 @@ main_html = """
             container.innerHTML = html;
         }
 
+        // ========== حذف كود ==========
         async function deleteOtp(id) {
             if(!confirm('🗑️ حذف هذا الكود؟')) return;
             try {
@@ -1140,6 +1474,7 @@ main_html = """
             } catch(e) { alert('❌ خطأ'); }
         }
 
+        // ========== تحميل الأكواد المحفوظة ==========
         function loadCachedOtps() {
             try {
                 const cached = localStorage.getItem('allOtps');
@@ -1152,9 +1487,26 @@ main_html = """
             } catch(e) {}
         }
 
+        // ========== تهيئة الصفحة ==========
         document.addEventListener('DOMContentLoaded', () => {
+            // استرجاع حجم الخط
+            const savedFont = localStorage.getItem('fontSize');
+            if (savedFont) {
+                currentFontSize = parseInt(savedFont);
+                document.documentElement.style.fontSize = currentFontSize + 'px';
+                document.getElementById('fontSizeDisplay').textContent = currentFontSize;
+            }
+            
             initPlatformSelector();
             loadCachedOtps();
+            setTimeout(initPlatformsRain, 500);
+            
+            // إحصائيات
+            fetch('/api/log_stat', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({action: 'visit'})
+            });
         });
     </script>
 </body>
@@ -1172,9 +1524,35 @@ def home():
     btn_stop_monitor = get_text('btn_stop_monitor')
     footer_text = get_text('footer_text')
     ticker_text = get_text('ticker_text')
+    contact_title = get_text('contact_title')
+    help_title = get_text('help_title')
+    announcements_title = get_text('announcements_title')
+    
+    main_color = get_setting('main_color') or '#00ffc8'
+    secondary_color = get_setting('secondary_color') or '#8b5cf6'
+    background_color = get_setting('background_color') or '#0a0e1a'
+    text_color = get_setting('text_color') or '#ffffff'
+    font_size = get_setting('font_size') or '16'
+    matrix_enabled = get_setting('matrix_enabled') == '1'
+    ticker_enabled = get_setting('ticker_enabled') == '1'
+    platforms_rain = get_setting('platforms_rain') == '1'
+    notification_sound = get_setting('notification_sound') == '1'
+    otp_attempts = int(get_setting('otp_attempts') or '5')
+    show_delete_btn = get_setting('show_delete_btn') == '1'
+    matrix_opacity = '0.85'
     
     links = get_all_links()
-    platforms = get_platforms() or list(platform_names.keys())
+    platforms = get_platforms()
+    
+    # تحويل الألوان إلى rgb للاستخدام في js
+    import re
+    def hex_to_rgb(hex_color):
+        hex_color = hex_color.lstrip('#')
+        if len(hex_color) == 3:
+            hex_color = hex_color[0]*2 + hex_color[1]*2 + hex_color[2]*2
+        return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    
+    main_rgb = hex_to_rgb(main_color)
     
     return render_template_string(
         main_html,
@@ -1186,12 +1564,28 @@ def home():
         btn_stop_monitor=btn_stop_monitor,
         footer_text=footer_text,
         ticker_text=ticker_text,
+        contact_title=contact_title,
+        help_title=help_title,
+        announcements_title=announcements_title,
         links=links,
         platforms=platforms,
         platform_logos=PLATFORM_LOGOS,
         platform_names=platform_names,
         platform_gradients=PLATFORM_GRADIENTS,
-        platform_colors=platform_colors
+        platform_colors=platform_colors,
+        main_color=main_color,
+        secondary_color=secondary_color,
+        background_color=background_color,
+        text_color=text_color,
+        font_size=font_size,
+        matrix_enabled=matrix_enabled,
+        ticker_enabled=ticker_enabled,
+        matrix_opacity=matrix_opacity,
+        platforms_rain=platforms_rain,
+        notification_sound=notification_sound,
+        otp_attempts=otp_attempts,
+        show_delete_btn=show_delete_btn,
+        main_rgb=','.join(str(c) for c in main_rgb)
     )
 
 # ========== صفحة الإعلانات ==========
@@ -1201,25 +1595,25 @@ announcements_html = """
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>إعلانات الموقع</title>
+<title>{{ announcements_title }}</title>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 body { font-family:'Cairo',sans-serif; background:#07090d; color:#c9d1d9; min-height:100vh; }
 .container { max-width:480px; margin:0 auto; padding:16px; }
-.header { background:linear-gradient(135deg, #1f6feb, #388bfd); padding:20px; border-radius:14px; margin-bottom:16px; text-align:center; }
-.header h1 { color:#fff; font-size:20px; font-weight:900; }
-.header p { color:rgba(255,255,255,0.85); font-size:12px; }
+.header { background:linear-gradient(135deg, {{ main_color }}, {{ secondary_color }}); padding:20px; border-radius:14px; margin-bottom:16px; text-align:center; }
+.header h1 { color:#000; font-size:20px; font-weight:900; }
+.header p { color:rgba(0,0,0,0.7); font-size:12px; }
 .ann-card { background:#1c2128; border:1px solid #30363d; border-radius:12px; padding:14px; margin-bottom:10px; }
-.ann-card:hover { border-color:#58a6ff; }
+.ann-card:hover { border-color:{{ main_color }}; }
 .ann-type { display:inline-block; padding:2px 8px; border-radius:4px; font-size:10px; font-weight:700; margin-bottom:6px; }
-.ann-type.text { background:#1f6feb; color:#fff; }
+.ann-type.text { background:{{ main_color }}; color:#000; }
 .ann-type.image { background:#238636; color:#fff; }
 .ann-type.video { background:#d29922; color:#fff; }
 .ann-content { color:#e6e6e6; font-size:13px; line-height:1.6; margin-bottom:8px; }
 .ann-media { max-width:100%; max-height:150px; border-radius:8px; margin-bottom:8px; object-fit:contain; display:block; margin-left:auto; margin-right:auto; }
 .ann-video-wrap video { width:100%; max-height:150px; border-radius:8px; display:block; }
-.ann-btn { display:inline-block; padding:8px 16px; background:linear-gradient(135deg, #238636, #2ea043); color:#fff; text-decoration:none; border-radius:8px; font-weight:700; font-size:12px; }
+.ann-btn { display:inline-block; padding:8px 16px; background:linear-gradient(135deg, {{ main_color }}, {{ secondary_color }}); color:#000; text-decoration:none; border-radius:8px; font-weight:700; font-size:12px; }
 .ann-btn:hover { transform:translateY(-1px); }
 .ann-time { color:#6e7681; font-size:10px; margin-top:6px; }
 .empty { text-align:center; padding:30px 16px; color:#6e7681; }
@@ -1230,7 +1624,7 @@ body { font-family:'Cairo',sans-serif; background:#07090d; color:#c9d1d9; min-he
 <body>
 <div class="container">
     <a href="/" class="back-btn">🔙 العودة</a>
-    <div class="header"><h1>📢 إعلانات الموقع</h1><p>آخر الإعلانات والتحديثات</p></div>
+    <div class="header"><h1>📢 {{ announcements_title }}</h1><p>آخر الإعلانات والتحديثات</p></div>
     <div id="annList"><div class="empty">⏳ جاري التحميل...</div></div>
 </div>
 <script>
@@ -1260,7 +1654,10 @@ loadAnnouncements();
 
 @app.route('/announcements')
 def announcements_page():
-    return render_template_string(announcements_html)
+    main_color = get_setting('main_color') or '#00ffc8'
+    secondary_color = get_setting('secondary_color') or '#8b5cf6'
+    announcements_title = get_text('announcements_title')
+    return render_template_string(announcements_html, main_color=main_color, secondary_color=secondary_color, announcements_title=announcements_title)
 
 # ========== مسارات API ==========
 @app.route('/api/countries', methods=['POST'])
@@ -1308,13 +1705,12 @@ def api_all_otps():
 
 @app.route('/api/delete_otp', methods=['POST'])
 def api_delete_otp():
-    otp = request.json.get('otp')
-    if not otp:
+    if not request.json.get('otp'):
         return jsonify({'ok': False, 'error': 'OTP required'}), 400
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
-        c.execute("DELETE FROM otp_logs WHERE otp=?", (otp,))
+        c.execute("DELETE FROM otp_logs WHERE otp=?", (request.json.get('otp'),))
         deleted = c.rowcount
         conn.commit()
         conn.close()
@@ -1361,6 +1757,18 @@ def api_help():
         print(f"❌ فشل إرسال طلب المساعدة: {e}")
     return jsonify({'ok': True})
 
+@app.route('/api/log_stat', methods=['POST'])
+def api_log_stat():
+    action = request.json.get('action', '')
+    ip = request.headers.get('X-Forwarded-For', request.remote_addr or 'unknown')
+    user_agent = request.headers.get('User-Agent', '')
+    log_stat(ip, action, user_agent)
+    return jsonify({'ok': True})
+
+@app.route('/api/stats', methods=['GET'])
+def api_get_stats():
+    return jsonify(get_stats())
+
 # ========== لوحة التحكم ==========
 @app.route('/admin_login', methods=['GET', 'POST'])
 def admin_login():
@@ -1383,6 +1791,18 @@ def admin_login():
 @app.route('/admin')
 @login_required
 def admin_dashboard():
+    stats = get_stats()
+    combos = get_all_combos()
+    links = get_all_links()
+    users = get_all_users()
+    
+    # جلب الإعدادات
+    settings = {}
+    for key in ['main_color', 'secondary_color', 'background_color', 'text_color', 'font_size', 
+                'matrix_enabled', 'ticker_enabled', 'platforms_rain', 'notification_sound', 
+                'otp_attempts', 'show_delete_btn']:
+        settings[key] = get_setting(key)
+    
     return render_template_string('''
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -1394,38 +1814,35 @@ def admin_dashboard():
     <style>
         * { margin:0; padding:0; box-sizing:border-box; }
         body { font-family:'Cairo',sans-serif; background:#0a0e1a; color:#fff; min-height:100vh; padding:20px; }
-        .container { max-width:500px; margin:0 auto; background:rgba(17,24,39,0.95); backdrop-filter:blur(20px); padding:25px; border-radius:20px; border:1px solid rgba(0,255,200,0.3); }
+        .container { max-width:600px; margin:0 auto; background:rgba(17,24,39,0.95); backdrop-filter:blur(20px); padding:25px; border-radius:20px; border:1px solid rgba(0,255,200,0.3); }
         h1 { text-align:center; background:linear-gradient(90deg,#00ffc8,#8b5cf6); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; margin-bottom:20px; font-size:24px; }
-        h3 { color:#cbd5e1; margin:15px 0 10px; }
-        .form-group { margin-bottom:12px; }
+        h2 { color:#cbd5e1; font-size:18px; margin:15px 0 10px; }
+        h3 { color:#cbd5e1; font-size:15px; margin:12px 0 8px; }
+        .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px; }
+        .stat-card { background:rgba(31,41,55,0.5); padding:14px; border-radius:10px; text-align:center; }
+        .stat-card .num { font-size:24px; font-weight:900; color:#00ffc8; }
+        .stat-card .label { font-size:11px; color:#8b949e; }
+        .form-group { margin-bottom:10px; }
         .form-group label { display:block; margin-bottom:4px; color:#cbd5e1; font-weight:700; font-size:13px; }
-        .form-control { width:100%; padding:10px; border-radius:8px; border:1px solid #30363d; background:#0d1117; color:#fff; font-family:'Cairo',sans-serif; font-size:13px; }
+        .form-control { width:100%; padding:10px 12px; border-radius:8px; border:1px solid #30363d; background:#0d1117; color:#fff; font-family:'Cairo',sans-serif; font-size:13px; }
         .form-control:focus { border-color:#00ffc8; outline:none; }
-        .btn { padding:10px 20px; border:none; border-radius:8px; font-weight:700; cursor:pointer; font-family:'Cairo',sans-serif; font-size:13px; }
+        .form-control[type="color"] { padding:4px; height:44px; }
+        .btn { padding:10px 20px; border:none; border-radius:8px; font-weight:700; cursor:pointer; font-family:'Cairo',sans-serif; font-size:13px; transition:all 0.2s; }
         .btn-primary { background:linear-gradient(135deg,#00ff88,#00d2ff); color:#000; }
         .btn-danger { background:linear-gradient(135deg,#ef4444,#b91c1c); color:#fff; }
         .btn-secondary { background:linear-gradient(135deg,#374151,#4b5563); color:#fff; }
+        .btn-sm { padding:4px 12px; font-size:11px; }
         .btn:hover { transform:translateY(-2px); }
-        .combo-item { display:flex; justify-content:space-between; align-items:center; background:rgba(31,41,55,0.7); padding:10px; border-radius:8px; margin-bottom:6px; }
-        .combo-item button { padding:4px 10px; font-size:11px; }
-        hr { border:1px solid rgba(255,255,255,0.1); margin:15px 0; }
-        .link-item { display:flex; gap:8px; align-items:center; margin-bottom:6px; flex-wrap:wrap; }
-        .link-item input { flex:1; min-width:120px; }
-        .link-item button { padding:4px 10px; font-size:11px; }
-        .status { display:inline-block; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:700; }
-        .status.active { background:#238636; }
-        .status.banned { background:#da3633; }
-        .user-item { display:flex; justify-content:space-between; align-items:center; background:rgba(31,41,55,0.5); padding:6px 10px; border-radius:6px; margin-bottom:4px; font-size:12px; }
-        .user-item button { padding:2px 8px; font-size:10px; margin:0; }
-        .otp-log-item { background:rgba(31,41,55,0.5); padding:8px 10px; border-radius:6px; margin-bottom:4px; display:flex; justify-content:space-between; align-items:center; font-size:12px; }
-        .otp-log-item button { padding:2px 8px; font-size:10px; }
-        .section { background:rgba(0,0,0,0.2); padding:12px; border-radius:10px; margin-bottom:10px; }
-        .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-        .stat-card { background:rgba(31,41,55,0.5); padding:12px; border-radius:8px; text-align:center; }
-        .stat-card .num { font-size:22px; font-weight:900; color:#00ffc8; }
-        .stat-card .label { font-size:11px; color:#8b949e; }
+        .section { background:rgba(0,0,0,0.2); padding:14px; border-radius:10px; margin-bottom:10px; }
+        .combo-item, .link-item, .user-item, .otp-item { display:flex; justify-content:space-between; align-items:center; background:rgba(31,41,55,0.5); padding:8px 12px; border-radius:6px; margin-bottom:4px; font-size:13px; gap:8px; flex-wrap:wrap; }
+        .link-item input { flex:1; min-width:80px; }
+        hr { border:1px solid rgba(255,255,255,0.1); margin:12px 0; }
         .back-link { display:block; text-align:center; color:#58a6ff; text-decoration:none; margin-top:10px; }
         .back-link:hover { text-decoration:underline; }
+        .toggle-group { display:flex; gap:10px; flex-wrap:wrap; }
+        .toggle-group .btn { flex:1; min-width:80px; text-align:center; }
+        .btn.active { background:linear-gradient(135deg,#00ff88,#00d2ff); color:#000; }
+        .btn.inactive { background:linear-gradient(135deg,#ef4444,#b91c1c); color:#fff; }
         @media (max-width:480px) { .grid-2 { grid-template-columns:1fr; } }
     </style>
 </head>
@@ -1434,41 +1851,75 @@ def admin_dashboard():
     <h1>⚙️ لوحة التحكم</h1>
     
     <!-- إحصائيات -->
-    <div class="grid-2" id="statsGrid">
-        <div class="stat-card"><div class="num" id="statUsers">0</div><div class="label">👥 المستخدمين</div></div>
-        <div class="stat-card"><div class="num" id="statOtps">0</div><div class="label">🔑 الأكواد</div></div>
-        <div class="stat-card"><div class="num" id="statToday">0</div><div class="label">📅 أكواد اليوم</div></div>
-        <div class="stat-card"><div class="num" id="statCombos">0</div><div class="label">📦 الكومبوهات</div></div>
+    <div class="grid-2">
+        <div class="stat-card"><div class="num">{{ stats.visitors }}</div><div class="label">👥 الزوار</div></div>
+        <div class="stat-card"><div class="num">{{ stats.numbers_used }}</div><div class="label">📞 الأرقام المستخدمة</div></div>
+        <div class="stat-card"><div class="num">{{ stats.total_otps }}</div><div class="label">🔑 إجمالي الأكواد</div></div>
+        <div class="stat-card"><div class="num">{{ stats.today_otps }}</div><div class="label">📅 أكواد اليوم</div></div>
+        <div class="stat-card"><div class="num">{{ stats.combos }}</div><div class="label">📦 الكومبوهات</div></div>
     </div>
     
     <hr>
     
-    <!-- مدير النصوص -->
-    <h3>✏️ مدير النصوص</h3>
+    <!-- النصوص -->
+    <h2>✏️ النصوص</h2>
     <div class="section">
-        <div class="form-group"><label>عنوان الموقع</label><input type="text" id="siteTitle" class="form-control" value="{{ site_title }}"></div>
-        <div class="form-group"><label>الوصف</label><input type="text" id="siteSubtitle" class="form-control" value="{{ site_subtitle }}"></div>
-        <div class="form-group"><label>شريط الأخبار</label><input type="text" id="tickerText" class="form-control" value="{{ ticker_text }}"></div>
+        <div class="form-group"><label>عنوان الموقع</label><input type="text" id="siteTitle" class="form-control" value="{{ texts.site_title }}"></div>
+        <div class="form-group"><label>الوصف</label><input type="text" id="siteSubtitle" class="form-control" value="{{ texts.site_subtitle }}"></div>
+        <div class="form-group"><label>شريط الأخبار</label><input type="text" id="tickerText" class="form-control" value="{{ texts.ticker_text }}"></div>
+        <div class="form-group"><label>عنوان التواصل</label><input type="text" id="contactTitle" class="form-control" value="{{ texts.contact_title }}"></div>
+        <div class="form-group"><label>عنوان المساعدة</label><input type="text" id="helpTitle" class="form-control" value="{{ texts.help_title }}"></div>
+        <div class="form-group"><label>عنوان الإعلانات</label><input type="text" id="announcementsTitle" class="form-control" value="{{ texts.announcements_title }}"></div>
         <button class="btn btn-primary" onclick="saveTexts()">💾 حفظ النصوص</button>
     </div>
     
     <hr>
     
-    <!-- مدير الروابط -->
-    <h3>🔗 مدير الروابط</h3>
-    <div class="section" id="linksSection">
+    <!-- الألوان والإعدادات -->
+    <h2>🎨 الألوان والإعدادات</h2>
+    <div class="section">
+        <div class="grid-2">
+            <div class="form-group"><label>اللون الرئيسي</label><input type="color" id="mainColor" class="form-control" value="{{ settings.main_color }}"></div>
+            <div class="form-group"><label>اللون الثانوي</label><input type="color" id="secondaryColor" class="form-control" value="{{ settings.secondary_color }}"></div>
+            <div class="form-group"><label>لون الخلفية</label><input type="color" id="bgColor" class="form-control" value="{{ settings.background_color }}"></div>
+            <div class="form-group"><label>لون النص</label><input type="color" id="textColor" class="form-control" value="{{ settings.text_color }}"></div>
+        </div>
+        <div class="form-group"><label>حجم الخط (px)</label><input type="number" id="fontSize" class="form-control" value="{{ settings.font_size }}" min="12" max="28"></div>
+        <div class="form-group"><label>عدد محاولات جلب الرقم</label><input type="number" id="otpAttempts" class="form-control" value="{{ settings.otp_attempts }}" min="1" max="10"></div>
+        <button class="btn btn-primary" onclick="saveSettings()">💾 حفظ الإعدادات</button>
+    </div>
+    
+    <hr>
+    
+    <!-- التبديلات -->
+    <h2>🔄 تفعيل/تعطيل الميزات</h2>
+    <div class="section">
+        <div class="toggle-group">
+            <button class="btn {{ 'active' if settings.matrix_enabled == '1' else 'inactive' }}" onclick="toggleSetting('matrix_enabled')">🌧️ المطر الرقمي</button>
+            <button class="btn {{ 'active' if settings.ticker_enabled == '1' else 'inactive' }}" onclick="toggleSetting('ticker_enabled')">📢 شريط الأخبار</button>
+            <button class="btn {{ 'active' if settings.platforms_rain == '1' else 'inactive' }}" onclick="toggleSetting('platforms_rain')">🌧️ مطر المنصات</button>
+            <button class="btn {{ 'active' if settings.notification_sound == '1' else 'inactive' }}" onclick="toggleSetting('notification_sound')">🔔 صوت الإشعار</button>
+            <button class="btn {{ 'active' if settings.show_delete_btn == '1' else 'inactive' }}" onclick="toggleSetting('show_delete_btn')">🗑️ زر حذف الأكواد</button>
+        </div>
+    </div>
+    
+    <hr>
+    
+    <!-- الروابط -->
+    <h2>🔗 الروابط</h2>
+    <div class="section">
         {% for key, value, icon in links %}
         <div class="link-item">
             <span>{{ icon }}</span>
-            <input type="text" class="form-control" value="{{ value }}" data-key="{{ key }}" style="flex:1;min-width:100px;">
-            <button class="btn btn-danger" onclick="deleteLink('{{ key }}')">🗑️</button>
+            <input type="text" class="form-control" value="{{ value }}" data-key="{{ key }}" style="flex:1;min-width:80px;">
+            <button class="btn btn-danger btn-sm" onclick="deleteLink('{{ key }}')">🗑️</button>
         </div>
         {% endfor %}
-        <div style="display:flex;gap:6px;margin-top:6px;">
-            <input type="text" id="newLinkKey" class="form-control" placeholder="المفتاح (مثال: instagram)" style="flex:1;">
-            <input type="text" id="newLinkValue" class="form-control" placeholder="الرابط" style="flex:2;">
+        <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
+            <input type="text" id="newLinkKey" class="form-control" placeholder="المفتاح" style="flex:1;min-width:80px;">
+            <input type="text" id="newLinkValue" class="form-control" placeholder="الرابط" style="flex:2;min-width:120px;">
             <input type="text" id="newLinkIcon" class="form-control" placeholder="الأيقونة" style="flex:0.5;max-width:50px;">
-            <button class="btn btn-primary" onclick="addLink()">➕</button>
+            <button class="btn btn-primary btn-sm" onclick="addLink()">➕</button>
         </div>
         <button class="btn btn-secondary" onclick="saveLinks()" style="margin-top:6px;">💾 حفظ الروابط</button>
     </div>
@@ -1476,7 +1927,7 @@ def admin_dashboard():
     <hr>
     
     <!-- الكومبوهات -->
-    <h3>📦 الكومبوهات</h3>
+    <h2>📦 الكومبوهات</h2>
     <div class="section">
         <form method="POST" enctype="multipart/form-data" action="/admin/upload_combo">
             <div class="form-group"><label>المنصة</label>
@@ -1493,14 +1944,15 @@ def admin_dashboard():
             <div class="form-group"><label>ملف الأرقام (.txt)</label><input type="file" name="file" accept=".txt" class="form-control" required></div>
             <button type="submit" class="btn btn-primary">📤 رفع</button>
         </form>
-        <div id="combosList" style="margin-top:10px;">
+        <div style="margin-top:8px;">
             {% for platform, code, name, flag in combos %}
             <div class="combo-item">
-                <span>{{ flag }} {{ name }} ({{ platform }})</span>
+                <span>{{ flag }} {{ name }}</span>
+                <span style="font-size:11px;color:#8b949e;">{{ platform }}</span>
                 <form method="POST" action="/admin/delete_combo" style="display:inline;">
                     <input type="hidden" name="platform" value="{{ platform }}">
                     <input type="hidden" name="country_code" value="{{ code }}">
-                    <button type="submit" class="btn btn-danger">🗑️</button>
+                    <button type="submit" class="btn btn-danger btn-sm">🗑️</button>
                 </form>
             </div>
             {% endfor %}
@@ -1509,8 +1961,8 @@ def admin_dashboard():
     
     <hr>
     
-    <!-- الأكواد المسحوبة -->
-    <h3>🔑 الأكواد المسحوبة</h3>
+    <!-- الأكواد -->
+    <h2>🔑 الأكواد المسحوبة</h2>
     <div class="section" id="otpLogsList">
         <div style="text-align:center;color:#64748b;padding:10px;">⏳ جاري التحميل...</div>
     </div>
@@ -1518,7 +1970,7 @@ def admin_dashboard():
     <hr>
     
     <!-- المستخدمين -->
-    <h3>👥 المستخدمين</h3>
+    <h2>👥 المستخدمين</h2>
     <div class="section" id="usersList">
         <div style="text-align:center;color:#64748b;padding:10px;">⏳ جاري التحميل...</div>
     </div>
@@ -1526,7 +1978,7 @@ def admin_dashboard():
     <hr>
     
     <!-- إعدادات الأدمن -->
-    <h3>⚙️ إعدادات الأدمن</h3>
+    <h2>⚙️ إعدادات الأدمن</h2>
     <div class="section">
         <div class="form-group"><label>🆔 Chat ID الخاص بك</label>
         <input type="text" id="adminChatId" class="form-control" value="{{ admin_chat_id }}">
@@ -1536,11 +1988,15 @@ def admin_dashboard():
         <input type="password" id="newPassword" class="form-control" placeholder="اتركها فارغة للإبقاء على الحالية">
         <button class="btn btn-primary" onclick="changePassword()" style="margin-top:6px;">🔑 تغيير كلمة المرور</button>
         </div>
+        <div class="form-group"><label>📊 ترتيب المنصات (افصل بينها بفاصلة)</label>
+        <input type="text" id="platformOrder" class="form-control" value="{{ ','.join(platforms) }}">
+        <button class="btn btn-primary" onclick="savePlatformOrder()" style="margin-top:6px;">💾 حفظ الترتيب</button>
+        </div>
     </div>
     
     <hr>
     
-    <div style="display:flex;gap:8px;">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <form method="POST" action="/admin/clear_otps" onsubmit="return confirm('⚠️ حذف جميع الأكواد نهائياً؟')" style="flex:1;">
             <button type="submit" class="btn btn-danger" style="width:100%;">🗑️ مسح الأكواد</button>
         </form>
@@ -1549,17 +2005,7 @@ def admin_dashboard():
 </div>
 
 <script>
-async function loadStats() {
-    try {
-        const res = await fetch('/admin/api/stats');
-        const data = await res.json();
-        document.getElementById('statUsers').textContent = data.users || 0;
-        document.getElementById('statOtps').textContent = data.otps || 0;
-        document.getElementById('statToday').textContent = data.today || 0;
-        document.getElementById('statCombos').textContent = data.combos || 0;
-    } catch(e) {}
-}
-
+// ========== تحميل الأكواد ==========
 async function loadOtps() {
     try {
         const res = await fetch('/api/all_otps');
@@ -1567,15 +2013,15 @@ async function loadOtps() {
         const box = document.getElementById('otpLogsList');
         if (!data.length) { box.innerHTML = '<div style="text-align:center;color:#64748b;padding:10px;">📭 لا توجد أكواد</div>'; return; }
         box.innerHTML = data.slice(0, 30).map(o => `
-            <div class="otp-log-item">
+            <div class="otp-item">
                 <div><span style="color:#00ffc8;font-weight:900;">${o.otp}</span> <span style="color:#8b949e;font-size:10px;">(${o.platform})</span><br><span style="color:#64748b;font-size:10px;">📞 ${o.number} • ${o.timestamp}</span></div>
-                <button class="btn btn-danger" onclick="deleteOtp('${o.otp}')" style="padding:2px 8px;font-size:10px;">🗑️</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteOtpAdmin('${o.otp}')">🗑️</button>
             </div>
         `).join('');
     } catch(e) {}
 }
 
-async function deleteOtp(otp) {
+async function deleteOtpAdmin(otp) {
     if(!confirm('🗑️ حذف هذا الكود؟')) return;
     try {
         const res = await fetch('/api/delete_otp', {
@@ -1584,11 +2030,12 @@ async function deleteOtp(otp) {
             body: JSON.stringify({otp: otp})
         });
         const data = await res.json();
-        if(data.ok) { loadOtps(); loadStats(); alert('✅ تم الحذف'); }
+        if(data.ok) { loadOtps(); alert('✅ تم الحذف'); }
         else { alert('❌ فشل الحذف'); }
     } catch(e) { alert('❌ خطأ'); }
 }
 
+// ========== تحميل المستخدمين ==========
 async function loadUsers() {
     try {
         const res = await fetch('/admin/api/users');
@@ -1597,9 +2044,9 @@ async function loadUsers() {
         if (!data.length) { box.innerHTML = '<div style="text-align:center;color:#64748b;padding:10px;">👤 لا توجد مستخدمين</div>'; return; }
         box.innerHTML = data.map(u => `
             <div class="user-item">
-                <div><span style="font-weight:700;">${u.username || 'مستخدم'}</span> <span class="status ${u.is_banned ? 'banned' : 'active'}">${u.is_banned ? 'محظور' : 'نشط'}</span><br><span style="color:#64748b;font-size:10px;">🆔 ${u.user_id} • 📞 ${u.assigned_number || '—'}</span></div>
+                <div><span style="font-weight:700;">${u.username || 'مستخدم'}</span> <span style="color:${u.is_banned ? '#ef4444' : '#00ffc8'};">${u.is_banned ? 'محظور' : 'نشط'}</span><br><span style="color:#64748b;font-size:10px;">🆔 ${u.user_id} • 📞 ${u.assigned_number || '—'} • 🔑 ${u.total_otps || 0}</span></div>
                 <div>
-                    <button class="btn btn-secondary" onclick="toggleBan('${u.user_id}', ${u.is_banned})" style="padding:2px 8px;font-size:10px;">${u.is_banned ? '🔓' : '🔒'}</button>
+                    <button class="btn btn-secondary btn-sm" onclick="toggleBan('${u.user_id}', ${u.is_banned})">${u.is_banned ? '🔓' : '🔒'}</button>
                 </div>
             </div>
         `).join('');
@@ -1615,16 +2062,20 @@ async function toggleBan(user_id, current) {
             body: JSON.stringify({user_id: user_id, ban: !current})
         });
         const data = await res.json();
-        if(data.ok) { loadUsers(); loadStats(); alert('✅ تم'); }
+        if(data.ok) { loadUsers(); alert('✅ تم'); }
         else { alert('❌ فشل'); }
     } catch(e) { alert('❌ خطأ'); }
 }
 
+// ========== حفظ النصوص ==========
 async function saveTexts() {
     const data = {
         site_title: document.getElementById('siteTitle').value,
         site_subtitle: document.getElementById('siteSubtitle').value,
-        ticker_text: document.getElementById('tickerText').value
+        ticker_text: document.getElementById('tickerText').value,
+        contact_title: document.getElementById('contactTitle').value,
+        help_title: document.getElementById('helpTitle').value,
+        announcements_title: document.getElementById('announcementsTitle').value
     };
     try {
         const res = await fetch('/admin/api/save_texts', {
@@ -1638,9 +2089,46 @@ async function saveTexts() {
     } catch(e) { alert('❌ خطأ'); }
 }
 
+// ========== حفظ الإعدادات ==========
+async function saveSettings() {
+    const data = {
+        main_color: document.getElementById('mainColor').value,
+        secondary_color: document.getElementById('secondaryColor').value,
+        background_color: document.getElementById('bgColor').value,
+        text_color: document.getElementById('textColor').value,
+        font_size: document.getElementById('fontSize').value,
+        otp_attempts: document.getElementById('otpAttempts').value
+    };
+    try {
+        const res = await fetch('/admin/api/save_settings', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        const result = await res.json();
+        if(result.ok) { alert('✅ تم الحفظ، ستعكس التغييرات بعد تحديث الصفحة'); location.reload(); }
+        else { alert('❌ فشل الحفظ'); }
+    } catch(e) { alert('❌ خطأ'); }
+}
+
+// ========== تبديل الإعدادات ==========
+async function toggleSetting(key) {
+    try {
+        const res = await fetch('/admin/api/toggle_setting', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({key: key})
+        });
+        const result = await res.json();
+        if(result.ok) { location.reload(); }
+        else { alert('❌ فشل'); }
+    } catch(e) { alert('❌ خطأ'); }
+}
+
+// ========== حفظ الروابط ==========
 async function saveLinks() {
     const links = {};
-    document.querySelectorAll('#linksSection .link-item input[type="text"]').forEach(inp => {
+    document.querySelectorAll('.link-item input[type="text"]').forEach(inp => {
         const key = inp.dataset.key;
         if(key) links[key] = inp.value;
     });
@@ -1718,84 +2206,73 @@ async function changePassword() {
     } catch(e) { alert('❌ خطأ'); }
 }
 
-loadStats();
+async function savePlatformOrder() {
+    const val = document.getElementById('platformOrder').value.trim();
+    if(!val) { alert('⚠️ اكتب المنصات مفصولة بفاصلة'); return; }
+    const platforms = val.split(',').map(p => p.trim());
+    try {
+        const res = await fetch('/admin/api/save_platform_order', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({platforms: platforms})
+        });
+        const result = await res.json();
+        if(result.ok) { alert('✅ تم الحفظ'); location.reload(); }
+        else { alert('❌ فشل الحفظ'); }
+    } catch(e) { alert('❌ خطأ'); }
+}
+
 loadOtps();
 loadUsers();
-setInterval(loadStats, 30000);
-setInterval(loadOtps, 30000);
 </script>
 </body>
 </html>
-''', site_title=get_text('site_title'), site_subtitle=get_text('site_subtitle'), ticker_text=get_text('ticker_text'),
-       links=get_all_links(), combos=get_all_combos(), admin_chat_id=get_admin_setting('admin_telegram_id', ''))
+''', stats=stats, combos=combos, links=links, users=users, 
+        texts={'site_title': get_text('site_title'), 'site_subtitle': get_text('site_subtitle'), 
+               'ticker_text': get_text('ticker_text'), 'contact_title': get_text('contact_title'),
+               'help_title': get_text('help_title'), 'announcements_title': get_text('announcements_title')},
+        settings=get_setting, admin_chat_id=get_admin_setting('admin_telegram_id', ''), platforms=get_platforms())
 
 # ========== مسارات API الخاصة بالأدمن ==========
-@app.route('/admin/api/stats')
-def admin_api_stats():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT COUNT(*) FROM users")
-    users = c.fetchone()[0]
-    c.execute("SELECT COUNT(*) FROM otp_logs")
-    otps = c.fetchone()[0]
-    today = datetime.now().strftime("%Y-%m-%d")
-    c.execute("SELECT COUNT(*) FROM otp_logs WHERE timestamp LIKE ?", (today + '%',))
-    today_otps = c.fetchone()[0]
-    c.execute("SELECT COUNT(*) FROM combos")
-    combos = c.fetchone()[0]
-    conn.close()
-    return jsonify({'users': users, 'otps': otps, 'today': today_otps, 'combos': combos})
-
-@app.route('/admin/api/users')
-def admin_api_users():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT user_id, username, first_name, assigned_number, is_banned FROM users ORDER BY id DESC LIMIT 50")
-    rows = c.fetchall()
-    conn.close()
-    return jsonify([{'user_id': r[0], 'username': r[1] or r[2] or 'مستخدم', 'assigned_number': r[3], 'is_banned': r[4]} for r in rows])
-
-@app.route('/admin/api/toggle_ban', methods=['POST'])
-def admin_api_toggle_ban():
-    data = request.json
-    user_id = data.get('user_id')
-    ban = data.get('ban')
-    if not user_id:
-        return jsonify({'ok': False})
-    if ban:
-        ban_user(user_id)
-    else:
-        unban_user(user_id)
-    return jsonify({'ok': True})
-
 @app.route('/admin/api/save_texts', methods=['POST'])
 def admin_api_save_texts():
-    data = request.json
-    for key, value in data.items():
+    for key, value in request.json.items():
         update_text(key, value)
+    return jsonify({'ok': True})
+
+@app.route('/admin/api/save_settings', methods=['POST'])
+def admin_api_save_settings():
+    for key, value in request.json.items():
+        set_setting(key, value)
+    return jsonify({'ok': True})
+
+@app.route('/admin/api/toggle_setting', methods=['POST'])
+def admin_api_toggle_setting():
+    key = request.json.get('key')
+    current = get_setting(key)
+    new_val = '0' if current == '1' else '1'
+    set_setting(key, new_val)
     return jsonify({'ok': True})
 
 @app.route('/admin/api/save_links', methods=['POST'])
 def admin_api_save_links():
-    data = request.json
-    for key, value in data.items():
+    for key, value in request.json.items():
         update_link(key, value)
     return jsonify({'ok': True})
 
 @app.route('/admin/api/add_link', methods=['POST'])
 def admin_api_add_link():
-    data = request.json
-    key = data.get('key')
-    value = data.get('value')
-    icon = data.get('icon', '🔗')
-    if not key or not value:
-        return jsonify({'ok': False})
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("INSERT OR REPLACE INTO site_links (key, value, icon) VALUES (?, ?, ?)", (key, value, icon))
-    conn.commit()
-    conn.close()
-    return jsonify({'ok': True})
+    key = request.json.get('key')
+    value = request.json.get('value')
+    icon = request.json.get('icon', '🔗')
+    if key and value:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("INSERT OR REPLACE INTO site_links (key, value, icon) VALUES (?, ?, ?)", (key, value, icon))
+        conn.commit()
+        conn.close()
+        return jsonify({'ok': True})
+    return jsonify({'ok': False})
 
 @app.route('/admin/api/delete_link', methods=['POST'])
 def admin_api_delete_link():
@@ -1822,6 +2299,33 @@ def admin_api_change_password():
         return jsonify({'ok': True})
     return jsonify({'ok': False})
 
+@app.route('/admin/api/save_platform_order', methods=['POST'])
+def admin_api_save_platform_order():
+    platforms = request.json.get('platforms', [])
+    if platforms:
+        update_platform_order(platforms)
+        return jsonify({'ok': True})
+    return jsonify({'ok': False})
+
+@app.route('/admin/api/users')
+def admin_api_users():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT user_id, username, first_name, assigned_number, is_banned, total_otps FROM users ORDER BY id DESC LIMIT 50")
+    rows = c.fetchall()
+    conn.close()
+    return jsonify([{'user_id': r[0], 'username': r[1] or r[2] or 'مستخدم', 'assigned_number': r[3], 'is_banned': r[4], 'total_otps': r[5] or 0} for r in rows])
+
+@app.route('/admin/api/toggle_ban', methods=['POST'])
+def admin_api_toggle_ban():
+    user_id = request.json.get('user_id')
+    ban = request.json.get('ban')
+    if ban:
+        ban_user(user_id)
+    else:
+        unban_user(user_id)
+    return jsonify({'ok': True})
+
 @app.route('/admin/upload_combo', methods=['POST'])
 def admin_upload_combo():
     platform = request.form.get('platform')
@@ -1830,18 +2334,17 @@ def admin_upload_combo():
         return redirect(url_for('admin_dashboard'))
     content = file.read().decode('utf-8')
     numbers = [line.strip() for line in content.splitlines() if line.strip()]
-    if not numbers:
-        return redirect(url_for('admin_dashboard'))
-    first = numbers[0]
-    codes = sorted(COUNTRY_DATA.keys(), key=len, reverse=True)
-    cc = None
-    for c in codes:
-        if first.startswith(c):
-            cc = c
-            break
-    if cc:
-        name, flag = get_country_info(cc)
-        save_combo(platform, cc, name, flag, numbers)
+    if numbers:
+        first = numbers[0]
+        codes = sorted(COUNTRY_DATA.keys(), key=len, reverse=True)
+        cc = None
+        for c in codes:
+            if first.startswith(c):
+                cc = c
+                break
+        if cc:
+            name, flag = get_country_info(cc)
+            save_combo(platform, cc, name, flag, numbers)
     return redirect(url_for('admin_dashboard'))
 
 @app.route('/admin/delete_combo', methods=['POST'])
