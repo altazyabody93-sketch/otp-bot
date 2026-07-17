@@ -345,7 +345,18 @@ main_html = """
             background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.4) 100%);
         }
         
-        /* تم حذف خلفية الماتريكس لإزالة الفراغ الأسود */
+        /* [خلفية الأرقام المتساقطة] Digital Cyber Background */
+        #matrix-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -999; /* خلف كل شيء تماماً */
+            opacity: 0.9; 
+            pointer-events: none;
+            background: #07090d;
+        }
 
         .app { 
             max-width:480px; margin:0 auto; 
@@ -394,14 +405,14 @@ main_html = """
         .news-ticker {
             background: linear-gradient(135deg, #1c2128 0%, #21262d 50%, #1c2128 100%);
             border: 1px solid #30363d;
-            padding: 8px 0;
+            padding: 5px 0;
             overflow: hidden;
             position: relative;
             direction: ltr;
-            border-radius: 0;
-            margin: 0;
-            width: 100%;
-            box-shadow: 0 -2px 10px rgba(0,0,0,0.3);
+            border-radius: 8px;
+            margin: 0 16px 5px 16px;
+            max-width: calc(100% - 32px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
         }
         .news-ticker::before, .news-ticker::after {
             content: ''; position: absolute; top: 0; bottom: 0; width: 40px; z-index: 2; pointer-events: none;
@@ -447,16 +458,16 @@ main_html = """
             position:fixed; 
             top:0;
             left:-280px; 
-            width: 280px;
+            width: 260px;
             height: 100vh;
             background: #0d1117;
             border-right:1px solid #30363d; 
-            padding:15px; 
+            padding:20px 10px; 
             z-index:10000; 
-            box-shadow:15px 0 40px rgba(0,0,0,0.9); 
+            box-shadow:10px 0 30px rgba(0,0,0,0.8); 
             flex-direction:column; 
-            gap:5px;
-            transition: all 0.3s ease-in-out;
+            gap:8px;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
             visibility: hidden;
         }
         .dropdown-menu.show { left:0; visibility: visible; }
@@ -517,11 +528,11 @@ main_html = """
         }
 
         /* ============= MAIN CONTENT ============= */
-        .main { padding:0 16px 16px 16px; flex:1; display: flex; flex-direction: column; }
+        .main { padding:16px; flex:1; }
 
-        .hero { text-align:center; padding:10px 12px; margin-top: 10px; order: 3; }
-        .hero h1 { font-size:18px; font-weight:800; color:#fff; margin-bottom:2px; }
-        .hero p { font-size:12px; color:#8b949e; line-height:1.4; }
+        .hero { text-align:center; padding:15px 12px 10px; }
+        .hero h1 { font-size:22px; font-weight:800; color:#fff; margin-bottom:4px; }
+        .hero p { font-size:13px; color:#8b949e; line-height:1.4; }
         .hero p .crown { display:inline-block; animation:bounce 1.5s infinite; }
         @keyframes bounce { 0%,100%{ transform:translateY(0);} 50%{ transform:translateY(-3px);} }
         /* [إيموجي متحركة] بشكل مبهر */
@@ -553,22 +564,74 @@ main_html = """
             50%     { transform: scale(1.18); }
         }
 
-        .section-title { font-size:14px; font-weight:700; color:#fff; margin:12px 4px 8px; display:flex; align-items:center; gap:8px; order: 1; }
+        .section-title { font-size:14px; font-weight:700; color:#fff; margin:12px 4px 8px; display:flex; align-items:center; gap:8px; }
         .section-title .icon { color:#58a6ff; }
 
         /* ============= PLATFORMS GRID ============= */
-        .platforms { display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; margin-bottom:15px; order: 2; }
+        .platforms { display:grid; grid-template-columns:repeat(2, 1fr); gap:8px; margin-bottom:5px; }
         .platform-btn {
-            display:flex; align-items:center; gap:10px; padding:12px;
-            background:#1c2128; border:1px solid #30363d; border-radius:12px;
-            color:#e6e6e6; cursor:pointer; transition:all 0.2s ease;
-            font-size:14px; font-weight:700; font-family:'Cairo',sans-serif;
-            justify-content: center;
+            display:flex; align-items:center; gap:8px; padding:10px 12px;
+            background:#1c2128; border:1px solid #30363d; border-radius:10px;
+            color:#e6e6e6; cursor:pointer; transition:all 0.15s ease;
+            font-size:13px; font-weight:600; font-family:'Cairo',sans-serif;
         }
         .platform-btn:hover { background:#21262d; border-color:#484f58; }
         .platform-btn:active { transform:scale(0.98); }
         .platform-btn.active { background:var(--platform-color, #1f6feb); border-color:var(--platform-color, #1f6feb); color:#fff; box-shadow:0 0 0 1px var(--platform-color, #1f6feb), 0 0 12px rgba(31,111,235,0.15); }
         .platform-btn img { width:32px; height:32px; object-fit:contain; border-radius:8px; background:#fff; padding:2px; }
+        /* ✅ تكبير المنصات */
+        .platforms-wrap .platform-btn {
+            padding: 14px 14px; font-size: 15px; min-height: 58px;
+            background: rgba(22,27,34,0.85); backdrop-filter: blur(2px);
+        }
+        .platforms-wrap .platform-btn img {
+            width: 38px; height: 38px; border-radius: 10px; padding: 3px;
+        }
+
+        /* ✅ خلفية الأرقام والرموز المتساقطة خلف المنصات */
+        .platforms-wrap {
+            position: relative;
+            border-radius: 14px;
+            overflow: hidden;
+            isolation: isolate;
+            padding: 6px;
+        }
+        .platforms-wrap::before {
+            content: '';
+            position: absolute; inset: 0;
+            background: linear-gradient(180deg, rgba(7,9,13,0.45) 0%, rgba(7,9,13,0.75) 100%);
+            z-index: 1; pointer-events: none;
+        }
+        .platforms-wrap canvas.platforms-rain {
+            position: absolute; inset: 0; width: 100%; height: 100%;
+            z-index: 0; opacity: 0.6; pointer-events: none;
+        }
+        .platforms-wrap .platforms-rain-bg {
+            position: absolute; inset: 0; z-index: 2;
+            pointer-events: none; overflow: hidden;
+        }
+        .platforms-wrap .platforms { position: relative; z-index: 3; }
+        .platforms-wrap .falling-symbol {
+            position: absolute; top: -24px;
+            font-family: 'Courier New', monospace;
+            font-weight: 900;
+            color: #1f6feb;
+            text-shadow: 0 0 8px currentColor, 0 0 14px currentColor;
+            animation: symbolFall linear infinite;
+            user-select: none;
+        }
+        .platforms-wrap .falling-symbol.green  { color: #3fb950; }
+        .platforms-wrap .falling-symbol.gold   { color: #f0b429; }
+        .platforms-wrap .falling-symbol.cyan   { color: #58a6ff; }
+        .platforms-wrap .falling-symbol.pink   { color: #f78166; }
+        .platforms-wrap .falling-symbol.purple { color: #a371f7; }
+        .platforms-wrap .falling-symbol.white  { color: #ffffff; }
+        @keyframes symbolFall {
+            0%   { transform: translateY(-30px) rotate(0deg); opacity: 0; }
+            8%   { opacity: 1; }
+            92%  { opacity: 1; }
+            100% { transform: translateY(380px) rotate(380deg); opacity: 0; }
+        }
 
         /* ============= SELECT & BUTTONS ============= */
         .select-wrap { position:relative; }
@@ -759,6 +822,9 @@ main_html = """
         }
         .otp-item .otp-info { font-size:11px; color:#8b949e; margin-top:2px; }
         .otp-item .copy-btn { background:transparent; border:1px solid #30363d; color:#58a6ff; padding:4px 10px; border-radius:6px; cursor:pointer; font-size:11px; font-weight:600; }
+        .otp-item .delete-btn { background:transparent; border:1px solid #30363d; color:#f85149; padding:4px 8px; border-radius:6px; cursor:pointer; font-size:12px; font-weight:600; margin-right:4px; transition:all 0.2s; }
+        .otp-item .delete-btn:hover { background:#da3633; color:#fff; border-color:#da3633; }
+        .otp-item { gap:4px; flex-wrap:wrap; }
 
         .empty-state { text-align:center; padding:30px 16px; color:#8b949e; font-size:13px; }
         .empty-state .icon { font-size:36px; margin-bottom:8px; opacity:0.6; }
@@ -872,6 +938,7 @@ main_html = """
     </style>
 </head>
 <body>
+    <canvas id="matrix-bg"></canvas>
     <div class="app">
         <!-- HEADER -->
         <div class="top-bar">
@@ -924,24 +991,28 @@ main_html = """
 
         <!-- MAIN -->
         <div class="main">
-            <div class="section-title" style="margin-top:0; order:1;"><span class="icon emoji-float">🎯</span> اختر المنصة</div>
-            <div class="platforms" id="platformSelector" style="order:2;"></div>
-
-            <div class="hero" style="order:3; margin-top:10px; padding:10px 0; border-top:1px solid #21262d; border-bottom:1px solid #21262d; margin-bottom:10px;">
+            <div class="hero">
                 <h1><span class="emoji-float">🚀</span> موقع المطري OTP</h1>
                 <p><span class="emoji-wave crown">👑</span> أرقام واتساب سحب أكواد تطوير مطري <span class="emoji-wave crown">👑</span></p>
             </div>
 
-            <div class="section-title" style="order:4;"><span class="icon emoji-spin">🌍</span> اختر الدولة</div>
-            <div class="select-wrap" style="order:5;">
+            <div class="section-title"><span class="icon emoji-float">🎯</span> اختر المنصة</div>
+            <div class="platforms-wrap" id="platformsWrap">
+                <canvas class="platforms-rain" id="platformsRain"></canvas>
+                <div class="platforms-rain-bg" id="platformsRainBg"></div>
+                <div class="platforms" id="platformSelector"></div>
+            </div>
+
+            <div class="section-title"><span class="icon emoji-spin">🌍</span> اختر الدولة</div>
+            <div class="select-wrap">
                 <select id="country" class="form-control" disabled>
                     <option value="">-- اختر المنصة أولاً --</option>
                 </select>
             </div>
 
-            <button class="btn-primary" id="getNumberBtn" onclick="getNumber()" disabled style="order:6;">🚀 جلب رقم</button>
+            <button class="btn-primary" id="getNumberBtn" onclick="getNumber()" disabled>🚀 جلب رقم</button>
 
-            <div id="numberContainer" style="display:none; order:7;" dir="ltr">
+            <div id="numberContainer" style="display:none;" dir="ltr">
                 <div class="number-card" dir="ltr">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                         <span style="font-size:11px; color:#8b949e; font-weight:600;">📞 الرقم</span>
@@ -958,15 +1029,15 @@ main_html = """
                 </div>
             </div>
 
-            <div class="section-title" style="margin-top:24px; order:8;"><span class="icon emoji-pulse-soft">📜</span> الأكواد المسحوبة</div>
-            <div class="otp-list" id="otpHistory" style="order:9;">
+            <div class="section-title" style="margin-top:24px;"><span class="icon emoji-pulse-soft">📜</span> الأكواد المسحوبة</div>
+            <div class="otp-list" id="otpHistory">
                 <div class="empty-state">
                     <div class="icon">⏳</div>
                     <div>في انتظار الأكواد...</div>
                 </div>
             </div>
 
-            <div class="status" id="status" style="order:10;">⚡ اختر المنصة والدولة للبدء</div>
+            <div class="status" id="status">⚡ اختر المنصة والدولة للبدء</div>
         </div>
 
         <!-- ✅ [الإصلاح] شريط الأخبار الاحترافي في الفوتر -->
@@ -1435,6 +1506,7 @@ main_html = """
                                 <div class="otp-info" style="margin-top:4px; color:#8b949e; font-size:11px;">🕒 ${o.timestamp}</div>
                             </div>
                             <button class="copy-btn" onclick="copyText('${o.otp}', this)">نسخ</button>
+                            <button class="delete-btn" onclick="deleteOtp('${o.id}')" title="حذف نهائي">🗑️</button>
                         </div>
                         `).join('')}
                     </div>
@@ -1522,11 +1594,86 @@ main_html = """
             });
         }
 
+        // ✅ مطر الأرقام والرموز خلف قسم المنصات فقط
+        function initPlatformsRain() {
+            try {
+                const wrap = document.getElementById('platformsWrap');
+                const canvas = document.getElementById('platformsRain');
+                const bgLayer = document.getElementById('platformsRainBg');
+                if (!wrap || !canvas || !bgLayer) return;
+
+                const ctx = canvas.getContext('2d');
+                let w = 0, h = 0, cols = 0, drops = [];
+
+                function resize() {
+                    const rect = wrap.getBoundingClientRect();
+                    w = canvas.width = Math.max(200, Math.floor(rect.width));
+                    h = canvas.height = Math.max(200, Math.floor(rect.height));
+                    cols = Math.max(15, Math.floor(w / 16));
+                    drops = Array(cols).fill(0).map(()=>Math.random() * -40);
+                }
+                resize();
+                let resizeTimer;
+                window.addEventListener('resize', ()=>{
+                    clearTimeout(resizeTimer);
+                    resizeTimer = setTimeout(resize, 200);
+                });
+
+                const chars = '0123456789⚡🚀💎🔑👑🌍📱⚙️🔒💫';
+                function draw() {
+                    try {
+                        ctx.fillStyle = 'rgba(7, 9, 13, 0.12)';
+                        ctx.fillRect(0, 0, w, h);
+                        ctx.font = 'bold 15px "Courier New", monospace';
+                        for (let i = 0; i < drops.length; i++) {
+                            const ch = chars[Math.floor(Math.random() * chars.length)];
+                            const y = drops[i] * 16;
+                            const r = Math.random();
+                            if (r > 0.97)      ctx.fillStyle = '#ffffff';
+                            else if (r > 0.85) ctx.fillStyle = '#3fb950';
+                            else if (r > 0.6)  ctx.fillStyle = '#1f6feb';
+                            else if (r > 0.4)  ctx.fillStyle = '#a371f7';
+                            else               ctx.fillStyle = '#58a6ff';
+                            ctx.fillText(ch, i * 16, y);
+                            if (y > h && Math.random() > 0.975) drops[i] = 0;
+                            drops[i]++;
+                        }
+                    } catch(e) { return; }
+                    requestAnimationFrame(draw);
+                }
+                draw();
+
+                // رموز كبيرة متساقطة بألوان زاهية
+                const symbolSet = ['0','1','2','3','4','5','6','7','8','9','#','%','*','+','=','?','!','@'];
+                const colorClasses = ['', 'green', 'gold', 'cyan', 'pink', 'purple', 'white'];
+                function spawnSymbol() {
+                    if (!wrap.isConnected) return;
+                    const el = document.createElement('div');
+                    el.className = 'falling-symbol ' + colorClasses[Math.floor(Math.random()*colorClasses.length)];
+                    el.textContent = symbolSet[Math.floor(Math.random()*symbolSet.length)];
+                    el.style.left = (Math.random() * 100) + '%';
+                    el.style.fontSize = (14 + Math.random() * 14) + 'px';
+                    el.style.animationDuration = (4 + Math.random() * 5) + 's';
+                    el.style.opacity = (0.5 + Math.random() * 0.5).toString();
+                    bgLayer.appendChild(el);
+                    setTimeout(()=>{ if (el.parentNode) el.remove(); }, 10000);
+                }
+                for (let i = 0; i < 6; i++) setTimeout(spawnSymbol, i * 150);
+                setInterval(spawnSymbol, 500);
+            } catch(e) { console.warn('Platforms rain failed:', e); }
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
-            // initMatrix(); // تم تعطيله لجعل الموقع أخف وأسرع
+            initMatrix();
             initPlatformSelector();
             loadCachedOtps();
             startAllCountdowns();
+            // ✅ مطر الأرقام والرموز خلف المنصات
+            if (window.requestIdleCallback) {
+                requestIdleCallback(initPlatformsRain, {timeout: 1000});
+            } else {
+                setTimeout(initPlatformsRain, 300);
+            }
         });
     </script>
 </body>
@@ -1758,19 +1905,29 @@ async function loadOtpLogs() {
     } catch(e) {}
 }
 
-        async function deleteOtp(id) {
+        async function deleteOtp(idOrOtp) {
             if(!confirm('🗑️ هل تريد حذف هذا الكود المسحوب نهائياً؟')) return;
             try {
-                const res = await fetch('/api/admin/delete_otp', {
-                    method: 'POST', 
+                // إذا كان ID محلي (يبدأ بـ timestamp_)، نبحث عن الـ OTP المرتبط به
+                let otpCode = idOrOtp;
+                if (typeof idOrOtp === 'string' && idOrOtp.includes('_')) {
+                    const localItem = allOtpsCache.find(o => o.id === idOrOtp);
+                    if (localItem) otpCode = localItem.otp;
+                }
+                // حذف حقيقي من قاعدة البيانات عبر API الجديد
+                const res = await fetch('/api/delete_otp', {
+                    method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({id: id})
+                    body: JSON.stringify({otp: otpCode})
                 });
                 const data = await res.json();
                 if(data.ok) {
-                    // إزالة العنصر من الواجهة فوراً قبل إعادة التحميل لضمان الاستجابة السريعة
+                    // إزالة من الكاش المحلي
+                    allOtpsCache = allOtpsCache.filter(o => o.otp !== otpCode);
+                    try { localStorage.setItem('allOtps', JSON.stringify(allOtpsCache.slice(0, 50))); } catch(e) {}
+                    // إزالة من الواجهة فوراً
                     loadOtpLogs();
-                    alert('✅ تم الحذف بنجاح من قاعدة البيانات');
+                    alert('✅ تم الحذف نهائياً من قاعدة البيانات (' + (data.deleted||0) + ' كود)');
                 } else {
                     alert('❌ فشل الحذف: ' + (data.error || 'غير معروف'));
                 }
@@ -1854,13 +2011,30 @@ from flask import session
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        # تم تعطيل القفل بناءً على طلب المستخدم
+        if not session.get('logged_in'):
+            return redirect(url_for('admin_login'))
         return f(*args, **kwargs)
     return decorated_function
 
-@app.route('/admin', methods=['GET', 'POST'])
-@login_required
-def admin():
+@app.route('/admin_login', methods=['GET', 'POST'])
+def admin_login():
+    if request.method == 'POST':
+        if request.form.get('password') == ADMIN_PASSWORD:
+            session['logged_in'] = True
+            return redirect(f"/{ADMIN_SECRET_PATH}")
+        return "❌ كلمة المرور خاطئة!"
+    return '''
+    <div dir="rtl" style="text-align:center; margin-top:100px; font-family:sans-serif; background:#0d1117; color:#fff; padding:50px; border-radius:20px;">
+        <h2>🔐 دخول الأدمن</h2>
+        <form method="POST">
+            <input type="password" name="password" placeholder="كلمة المرور" style="padding:12px; border-radius:8px; border:1px solid #30363d; background:#161b22; color:#fff;">
+            <button type="submit" style="padding:12px 25px; background:#238636; color:#fff; border:none; border-radius:8px; cursor:pointer; font-weight:bold;">دخول</button>
+        </form>
+    </div>
+    '''
+
+@app.route(f'/{ADMIN_SECRET_PATH}', methods=['GET', 'POST'])
+def admin():  # ✅ دخول مباشر بدون كلمة سر
     if request.method == 'POST':
         # ===== حذف كومبو =====
         if request.form.get('action') == 'delete':
@@ -1872,7 +2046,7 @@ def admin():
                 c.execute("DELETE FROM combos WHERE platform=? AND country_code=?", (platform, country_code))
                 conn.commit()
                 conn.close()
-                return redirect("/admin")
+                return redirect(f"/{ADMIN_SECRET_PATH}")
 
         # ===== حذف جميع الأكواد المسحوبة =====
         elif request.form.get('action') == 'clear_otps':
@@ -1883,9 +2057,9 @@ def admin():
             conn.close()
             # مسح الكاش
             global _otp_cache, _otp_cache_time
-            _otp_cache = None
+            _otp_cache = {'data': None, 'time': 0}
             _otp_cache_time = 0
-            return redirect("/admin")
+            return redirect(f"/{ADMIN_SECRET_PATH}")
 
         # ===== رفع كومبو =====
         else:
@@ -2398,7 +2572,6 @@ def api_delete_all_announcements():
 
 # ========== ✅ API: قائمة chat_ids المعروفة (لإعداد الأدمن) ==========
 @app.route('/api/admin/chats', methods=['GET'])
-@login_required
 def api_admin_chats():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -2409,7 +2582,6 @@ def api_admin_chats():
 
 # ========== ✅ API: حفظ إعدادات الأدمن ==========
 @app.route('/api/admin/settings', methods=['GET', 'POST'])
-@login_required
 def api_admin_settings():
     if request.method == 'GET':
         return jsonify({
@@ -2424,7 +2596,6 @@ def api_admin_settings():
     return jsonify({'ok': True})
 
 @app.route('/api/admin/delete_otp', methods=['POST'])
-@login_required
 def api_admin_delete_otp():
     otp_id = request.json.get('id')
     if otp_id:
@@ -2436,16 +2607,37 @@ def api_admin_delete_otp():
             conn.close()
             # مسح كافة أشكال الكاش لضمان اختفاء الكود فوراً
             global _otp_cache, _otp_cache_time
-            _otp_cache = None
+            _otp_cache = {'data': None, 'time': 0}
             _otp_cache_time = 0
             return jsonify({'ok': True})
         except Exception as e:
             return jsonify({'ok': False, 'error': str(e)})
     return jsonify({'ok': False})
 
+# ✅ API جديد: حذف كود بالـ OTP نفسه (بدون id، بدون login)
+@app.route('/api/delete_otp', methods=['POST'])
+def api_delete_otp_by_code():
+    data = request.json or {}
+    otp = (data.get('otp') or '').strip()
+    if not otp:
+        return jsonify({'ok': False, 'error': 'OTP required'}), 400
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("DELETE FROM otp_logs WHERE otp=?", (otp,))
+        deleted = c.rowcount
+        conn.commit()
+        conn.close()
+        # مسح الكاش
+        global _otp_cache, _otp_cache_time
+        _otp_cache = {'data': None, 'time': 0}
+        _otp_cache_time = 0
+        return jsonify({'ok': True, 'deleted': deleted})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
 # ========== ✅ API: طلبات المساعدة ==========
 @app.route('/api/admin/help_requests', methods=['GET'])
-@login_required
 def api_help_requests():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
