@@ -91,6 +91,18 @@ def init_db():
         timestamp TEXT
     )''')
     
+    # جدول تتبع نشاط المستخدمين
+    c.execute('''CREATE TABLE IF NOT EXISTS user_activity (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ip TEXT,
+        user_agent TEXT,
+        phone TEXT,
+        action TEXT,
+        platform TEXT,
+        country TEXT,
+        timestamp TEXT
+    )''')
+    
     # جدول النسخ الاحتياطية
     c.execute('''CREATE TABLE IF NOT EXISTS backups (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -127,7 +139,41 @@ def init_default_settings():
         "admin_password": "",
         "primary_color": "#00ffc8",
         "secondary_color": "#8b5cf6",
-        "accent_color": "#ec4899"
+        "accent_color": "#ec4899",
+        # 🌟 ميزات جديدة - 1️⃣ Menu Items قابلة للتعديل
+        "menu_items": json.dumps([
+            {"icon": "📞", "text": "تواصل معي", "link": "https://wa.me/967733723953", "target": "_blank"},
+            {"icon": "💬", "text": "جروب واتساب", "link": "https://chat.whatsapp.com/IeK2gNS64fd8YSnenzt4WR", "target": "_blank"},
+            {"icon": "✈️", "text": "تيليجرام", "link": "https://t.me/jsjsgsjsvh", "target": "_blank"},
+            {"icon": "❓", "text": "مساعدة", "link": "https://wa.me/967733723953?text=أحتاج مساعدة", "target": "_blank"}
+        ]),
+        # 🌟 2️⃣ إعدادات الصوت
+        "notification_sound": "true",
+        "notification_sound_type": "default",  # default, beep, bell, custom
+        "notification_volume": "0.7",
+        # 🌟 3️⃣ حجم الخط
+        "font_size": "16",
+        "platform_btn_size": "large",  # small, medium, large
+        # 🌟 4️⃣ مؤقت الرقم
+        "show_timer": "true",
+        # 🌟 5️⃣ الأرقام المتساقطة خلف المنصات
+        "platform_rain": "true",
+        # 🌟 6️⃣ ألوان العناصر الفردية
+        "color_header": "#00ffc8",
+        "color_section_title": "#00ffc8",
+        "color_number_box": "#00ff88",
+        "color_otp_text": "#00ff88",
+        "color_status_bar": "#1f2937",
+        "color_menu_btn": "#1f2937",
+        "color_dropdown": "#111827",
+        # 🌟 7️⃣ إعدادات الإشعارات
+        "show_browser_notification": "true",
+        "browser_notif_title": "🎉 كود جديد!",
+        "browser_notif_message": "تم استلام كود جديد",
+        # 🌟 8️⃣ إحصائيات إضافية
+        "track_user_activity": "true",
+        # 🌟 9️⃣ عرض أسماء المنصات
+        "show_platform_full_name": "true",
     }
     
     conn = sqlite3.connect(DB_PATH)
@@ -348,6 +394,22 @@ def log_admin_action(action, details):
     conn.commit()
     conn.close()
 
+def log_user_activity(action, phone='', platform='', country=''):
+    """تسجيل نشاط المستخدم"""
+    if get_setting('track_user_activity', 'true') != 'true':
+        return
+    try:
+        ip = request.remote_addr if request else 'unknown'
+        ua = request.headers.get('User-Agent', '')[:200] if request else ''
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("INSERT INTO user_activity (ip, user_agent, phone, action, platform, country, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                  (ip, ua, phone, action, platform, country, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        conn.commit()
+        conn.close()
+    except:
+        pass
+
 # ===========================================
 # 📦 دوال الكومبوهات
 # ===========================================
@@ -512,7 +574,31 @@ def home():
         'bg_color': get_setting('bg_color', '#0a0e1a'),
         'text_color': get_setting('text_color', '#ffffff'),
         'button_color': get_setting('button_color', '#00ffc8'),
+        'primary_color': get_setting('primary_color', '#00ffc8'),
+        'notification_sound': get_setting('notification_sound', 'true'),
+        'notification_volume': get_setting('notification_volume', '0.7'),
+        'show_browser_notification': get_setting('show_browser_notification', 'true'),
+        'browser_notif_title': get_setting('browser_notif_title', '🎉 كود جديد!'),
+        'show_timer': get_setting('show_timer', 'true') == 'true',
+        'platform_rain': get_setting('platform_rain', 'true') == 'true',
+        'font_size': get_setting('font_size', '16'),
+        'color_header': get_setting('color_header', '#00ffc8'),
+        'color_section_title': get_setting('color_section_title', '#00ffc8'),
+        'color_number_box': get_setting('color_number_box', '#00ff88'),
+        'color_otp_text': get_setting('color_otp_text', '#00ff88'),
+        'color_status_bar': get_setting('color_status_bar', '#1f2937'),
+        'color_menu_btn': get_setting('color_menu_btn', '#1f2937'),
+        'color_dropdown': get_setting('color_dropdown', '#111827'),
     }
+    
+    # الحصول على القائمة المنسدلة
+    try:
+        menu_items = json.loads(get_setting('menu_items', '[]'))
+    except:
+        menu_items = [
+            {"icon": "📞", "text": "تواصل معي", "link": settings['whatsapp_dev'], "target": "_blank"},
+            {"icon": "💬", "text": "جروب واتساب", "link": settings['whatsapp_group'], "target": "_blank"},
+        ]
     
     # الحصول على الإعلانات النشطة
     conn = sqlite3.connect(DB_PATH)
@@ -521,9 +607,13 @@ def home():
     ads = [{'type': row[0], 'content': row[1], 'link': row[2], 'button_text': row[3]} for row in c.fetchall()]
     conn.close()
     
+    # تسجيل زيارة
+    log_user_activity('visit')
+    
     return render_template('index.html', 
                           settings=settings,
                           ads=ads,
+                          menu_items=menu_items,
                           platforms=list(platform_names.keys()),
                           platform_names=platform_names,
                           platform_logos=PLATFORM_LOGOS,
@@ -555,6 +645,8 @@ def api_get_number():
                   (number, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
         conn.commit()
         conn.close()
+        # تسجيل النشاط
+        log_user_activity('get_number', number, platform, country)
         return jsonify({'number': number})
     
     return jsonify({'number': None})
@@ -647,14 +739,39 @@ def admin_panel():
         'secondary_color': get_setting('secondary_color', '#8b5cf6'),
         'accent_color': get_setting('accent_color', '#ec4899'),
         'matrix_rain': get_setting('matrix_rain', 'true'),
-        'social_links': json.loads(get_setting('social_links', '{}'))
+        'social_links': json.loads(get_setting('social_links', '{}')),
+        # إعدادات جديدة
+        'platform_rain': get_setting('platform_rain', 'true'),
+        'show_timer': get_setting('show_timer', 'true'),
+        'notification_sound': get_setting('notification_sound', 'true'),
+        'show_browser_notification': get_setting('show_browser_notification', 'true'),
+        'browser_notif_title': get_setting('browser_notif_title', '🎉 كود جديد!'),
+        'notification_volume': get_setting('notification_volume', '0.7'),
+        'font_size': get_setting('font_size', '16'),
+        'track_user_activity': get_setting('track_user_activity', 'true'),
+        'color_header': get_setting('color_header', '#00ffc8'),
+        'color_section_title': get_setting('color_section_title', '#00ffc8'),
+        'color_number_box': get_setting('color_number_box', '#00ff88'),
+        'color_otp_text': get_setting('color_otp_text', '#00ff88'),
+        'color_status_bar': get_setting('color_status_bar', '#1f2937'),
+        'color_menu_btn': get_setting('color_menu_btn', '#1f2937'),
+        'color_dropdown': get_setting('color_dropdown', '#111827'),
     }
+    
+    # القائمة المنسدلة
+    try:
+        menu_items = json.loads(get_setting('menu_items', '[]'))
+    except:
+        menu_items = [
+            {"icon": "📞", "text": "تواصل معي", "link": "https://wa.me/967733723953", "target": "_blank"},
+        ]
     
     return render_template('admin.html',
                           stats=stats,
                           combos=combos,
                           recent_codes=recent_codes,
                           settings=settings,
+                          menu_items=menu_items,
                           platform_names=platform_names)
 
 @app.route('/admin/settings', methods=['POST'])
@@ -773,6 +890,115 @@ def admin_clear_codes():
     log_admin_action('clear_codes', 'مسح جميع الأكواد')
     flash('تم مسح جميع الأكواد بنجاح', 'success')
     return redirect(url_for('admin_panel'))
+
+@app.route('/admin/delete_codes_by_filter', methods=['POST'])
+@admin_required
+def admin_delete_codes_by_filter():
+    """حذف أكواد حسب فلتر (منصة/تاريخ)"""
+    platform = request.form.get('platform', '')
+    date_from = request.form.get('date_from', '')
+    date_to = request.form.get('date_to', '')
+    
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    
+    if platform and date_from and date_to:
+        c.execute("DELETE FROM otp_logs WHERE platform=? AND timestamp BETWEEN ? AND ?",
+                  (platform, date_from, date_to))
+    elif platform:
+        c.execute("DELETE FROM otp_logs WHERE platform=?", (platform,))
+    elif date_from and date_to:
+        c.execute("DELETE FROM otp_logs WHERE timestamp BETWEEN ? AND ?", (date_from, date_to))
+    else:
+        c.execute("DELETE FROM otp_logs")
+    
+    deleted = c.rowcount
+    conn.commit()
+    conn.close()
+    
+    log_admin_action('delete_codes_filter', f'حذف {deleted} كود')
+    flash(f'تم حذف {deleted} كود بنجاح', 'success')
+    return redirect(url_for('admin_panel'))
+
+@app.route('/admin/save_menu', methods=['POST'])
+@admin_required
+def admin_save_menu():
+    """حفظ عناصر القائمة المنسدلة"""
+    try:
+        items = json.loads(request.form.get('items', '[]'))
+        set_setting('menu_items', json.dumps(items, ensure_ascii=False))
+        log_admin_action('save_menu', f'تحديث القائمة - {len(items)} عناصر')
+        flash('تم حفظ القائمة بنجاح', 'success')
+    except Exception as e:
+        flash(f'خطأ: {str(e)}', 'error')
+    return redirect(url_for('admin_panel'))
+
+@app.route('/admin/save_advanced_appearance', methods=['POST'])
+@admin_required
+def admin_save_advanced_appearance():
+    """حفظ إعدادات المظهر المتقدمة"""
+    for key in ['bg_color', 'text_color', 'button_color', 'primary_color', 'secondary_color', 'accent_color',
+                'color_header', 'color_section_title', 'color_number_box', 'color_otp_text',
+                'color_status_bar', 'color_menu_btn', 'color_dropdown', 'font_size']:
+        value = request.form.get(key, '')
+        if value:
+            set_setting(key, value)
+    
+    # Toggles
+    for key in ['matrix_rain', 'news_ticker_enabled', 'platform_rain', 'show_timer',
+                'notification_sound', 'show_browser_notification', 'track_user_activity']:
+        set_setting(key, 'true' if request.form.get(key) else 'false')
+    
+    set_setting('notification_volume', request.form.get('notification_volume', '0.7'))
+    set_setting('browser_notif_title', request.form.get('browser_notif_title', '🎉 كود جديد!'))
+    set_setting('browser_notif_message', request.form.get('browser_notif_message', 'تم استلام كود جديد'))
+    
+    log_admin_action('save_appearance', 'تحديث المظهر المتقدم')
+    flash('تم حفظ إعدادات المظهر بنجاح', 'success')
+    return redirect(url_for('admin_panel'))
+
+@app.route('/api/activity_stats')
+@admin_required
+def api_activity_stats():
+    """إحصائيات نشاط المستخدمين"""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    
+    # إجمالي الزيارات
+    c.execute("SELECT COUNT(*) FROM user_activity WHERE action='visit'")
+    total_visits = c.fetchone()[0]
+    
+    # زيارات اليوم
+    today = datetime.now().strftime("%Y-%m-%d")
+    c.execute("SELECT COUNT(*) FROM user_activity WHERE action='visit' AND timestamp LIKE ?", (f"{today}%",))
+    today_visits = c.fetchone()[0]
+    
+    # عدد الأرقام المجلوبة
+    c.execute("SELECT COUNT(*) FROM user_activity WHERE action='get_number'")
+    total_numbers = c.fetchone()[0]
+    
+    # أرقام اليوم
+    c.execute("SELECT COUNT(*) FROM user_activity WHERE action='get_number' AND timestamp LIKE ?", (f"{today}%",))
+    today_numbers = c.fetchone()[0]
+    
+    # IP فريدة اليوم
+    c.execute("SELECT COUNT(DISTINCT ip) FROM user_activity WHERE timestamp LIKE ?", (f"{today}%",))
+    unique_ips = c.fetchone()[0]
+    
+    # أكثر المنصات استخداماً
+    c.execute("SELECT platform, COUNT(*) as cnt FROM user_activity WHERE action='get_number' AND platform != '' GROUP BY platform ORDER BY cnt DESC LIMIT 5")
+    top_platforms = [{'platform': row[0], 'count': row[1]} for row in c.fetchall()]
+    
+    conn.close()
+    
+    return jsonify({
+        'total_visits': total_visits,
+        'today_visits': today_visits,
+        'total_numbers': total_numbers,
+        'today_numbers': today_numbers,
+        'unique_ips_today': unique_ips,
+        'top_platforms': top_platforms
+    })
 
 @app.route('/admin/add_ad', methods=['POST'])
 @admin_required
