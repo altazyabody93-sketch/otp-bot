@@ -1,5 +1,5 @@
-Flask>=2.3.0
-requests>=2.31.0
-gunicorn>=21.2.0
-bcrypt>=4.0.0
-pyTelegramBotAPI>=4.0.0
+Flask
+requests
+gunicorn
+bcrypt
+pyTelegramBotAPI
