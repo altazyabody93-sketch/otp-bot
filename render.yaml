@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: altazy-otp
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120
+    envVars:
+      - key: ADMIN_USER
+        value: admin
+      - key: ADMIN_PASS
+        sync: false
+      - key: APP_SECRET
+        sync: false
+      - key: BOT1_TOKEN
+        value: "8814038881:AAGyuACUYA4YPKlJQhAyUMkpRNiV0u1gNuU"
+      - key: BOT2_TOKEN
+        value: "8845420882:AAHZ-7qhCL3_ddDT3am4zWNtBRBy3mVDgws"
+      - key: BOT1_CHANNEL
+        value: "@jsjsgsjsvh"
+      - key: BOT2_CHANNEL
+        value: "@jsjsgsjsvh"
