@@ -1,18 +1,15 @@
 """
 ========================================================================
-   Almatry OTP Receiver — app.py (نسخة الـ 50 ميزة)
-   المطوّر: @altazyabody | 967733723953
-   ------------------------------------------------------------------------
-   يشغّل:  python app.py
-   متطلبات:  pip install flask bcrypt telebot requests
-   ------------------------------------------------------------------------
-   المراحل المدمجة:
-     M1: البنية + السحب التلقائي + الإحصائيات + Random Pick
-     M2: الواجهة (Dark Mode, Font Size, Matrix Rain, Audio, Push)
-     M3: لوحة الأدمن الكاملة (روابط، كومبوهات، مستخدمين، نسخ احتياطي)
-     M4: الأمان (Rate Limit, Hashing, IP Blacklist, Ban System)
-     M5: Telegram Bots + Regex + Duplicate Detection + CSV Export
-     M6: API + Heatmap + Drag & Drop + Instant Search + Auto Maintenance
+   🔐 Almatry OTP — ملف واحد متكامل (All-in-One)
+   المطوّر: @altazyabody | 📞 967733723953
+   
+   ▶️ التشغيل:  python app.py
+   📦 المتطلبات: pip install flask bcrypt pyTelegramBotAPI requests gunicorn
+   
+   🌐 الرابط: http://localhost:5000
+   🔧 الأدمن: http://localhost:5000/admin/login
+       Username: admin
+       Password: admin123
 ========================================================================
 """
 
@@ -32,7 +29,7 @@ from functools import wraps
 from collections import defaultdict
 
 from flask import (
-    Flask, request, jsonify, render_template, redirect, url_for,
+    Flask, request, jsonify, render_template_string, redirect, url_for,
     session, send_file, abort, flash, Response
 )
 import bcrypt
@@ -40,13 +37,12 @@ import telebot
 import requests
 
 # =========================================================================
-# 1) الإعدادات العامة + إدارة المفاتيح السرية
+# 1) الإعدادات العامة
 # =========================================================================
-APP_SECRET = os.environ.get("APP_SECRET", "altazy_secret_change_me_in_render")
+APP_SECRET = os.environ.get("APP_SECRET", "altazy_secret_change_me_in_render_" + secrets.token_hex(8))
 ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
-ADMIN_PASS = os.environ.get("ADMIN_PASS", "admin123")  # غيّرها فوراً
+ADMIN_PASS = os.environ.get("ADMIN_PASS", "admin123")
 
-# بوتات تيليجرام — كل بوت يراقب قناة مختلفة
 TELEGRAM_BOTS = [
     {
         "token": os.environ.get("BOT1_TOKEN", "8814038881:AAGyuACUYA4YPKlJQhAyUMkpRNiV0u1gNuU"),
@@ -60,7 +56,6 @@ TELEGRAM_BOTS = [
     },
 ]
 
-# إعدادات قابلة للتعديل من لوحة الأدمن (تُحفظ في DB)
 DEFAULT_SETTINGS = {
     "site_name": "Almatry OTP",
     "main_color": "#00ff88",
@@ -76,12 +71,11 @@ DEFAULT_SETTINGS = {
 }
 
 # =========================================================================
-# 2) قاعدة البيانات SQLite + دوال مساعدة
+# 2) قاعدة البيانات
 # =========================================================================
-DB_PATH = os.path.join(os.path.dirname(__file__), "altazy.db")
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "altazy.db")
 
 def db():
-    """فتح اتصال جديد بقاعدة البيانات مع إعدادات أمان."""
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
@@ -89,76 +83,62 @@ def db():
     return conn
 
 def init_db():
-    """إنشاء الجداول في أول تشغيل."""
     conn = db()
     c = conn.cursor()
-    # جدول الإعدادات (key-value)
     c.execute("""CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY, value TEXT
     )""")
-    # جدول المنصات
     c.execute("""CREATE TABLE IF NOT EXISTS platforms (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT UNIQUE, icon TEXT, color TEXT, sort_order INTEGER DEFAULT 0
     )""")
-    # جدول الدول
     c.execute("""CREATE TABLE IF NOT EXISTS countries (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         platform_id INTEGER, name TEXT, code TEXT, flag TEXT,
         FOREIGN KEY(platform_id) REFERENCES platforms(id) ON DELETE CASCADE
     )""")
-    # جدول الأرقام
     c.execute("""CREATE TABLE IF NOT EXISTS numbers (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         country_id INTEGER, number TEXT, status TEXT DEFAULT 'available',
         used_by_ip TEXT, used_at TIMESTAMP,
         FOREIGN KEY(country_id) REFERENCES countries(id) ON DELETE CASCADE
     )""")
-    # جدول الأكواد المستلمة
     c.execute("""CREATE TABLE IF NOT EXISTS codes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         number_id INTEGER, code TEXT, message TEXT, source TEXT,
         received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(number_id) REFERENCES numbers(id) ON DELETE CASCADE
     )""")
-    # جدول المستخدمين (المحظورين/الزائرين)
     c.execute("""CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         ip TEXT, first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         last_seen TIMESTAMP, requests_count INTEGER DEFAULT 0, banned INTEGER DEFAULT 0
     )""")
-    # جدول الأدمن (متعدد الصلاحيات)
     c.execute("""CREATE TABLE IF NOT EXISTS admins (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE, password_hash TEXT, role TEXT DEFAULT 'moderator',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )""")
-    # جدول الروابط (إعلان/تواصل)
     c.execute("""CREATE TABLE IF NOT EXISTS links (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         label TEXT, url TEXT, icon TEXT, sort_order INTEGER DEFAULT 0
     )""")
-    # جدول حظر IP
     c.execute("""CREATE TABLE IF NOT EXISTS ip_blacklist (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         ip TEXT UNIQUE, reason TEXT, banned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )""")
-    # جدول سجل حركات الأدمن
     c.execute("""CREATE TABLE IF NOT EXISTS audit_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         admin_user TEXT, action TEXT, details TEXT, ip TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )""")
-    # إدراج الإعدادات الافتراضية
     for k, v in DEFAULT_SETTINGS.items():
         c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (k, v))
-    # إنشاء حساب الأدمن الافتراضي
     c.execute("SELECT id FROM admins WHERE username=?", (ADMIN_USER,))
     if not c.fetchone():
         ph = bcrypt.hashpw(ADMIN_PASS.encode(), bcrypt.gensalt())
         c.execute("INSERT INTO admins (username, password_hash, role) VALUES (?, ?, 'admin')",
                   (ADMIN_USER, ph))
-    # منصات افتراضية
     defaults = [
         ("Telegram", "📨", "#0088cc", 1),
         ("WhatsApp", "💬", "#25d366", 2),
@@ -170,7 +150,6 @@ def init_db():
     for n, i, col, so in defaults:
         c.execute("INSERT OR IGNORE INTO platforms (name, icon, color, sort_order) VALUES (?, ?, ?, ?)",
                   (n, i, col, so))
-    # روابط افتراضية
     default_links = [
         ("المطور واتساب", "https://wa.me/967733723953", "📞", 1),
         ("قناة السحب", "https://t.me/jsjsgsjsvh", "📢", 2),
@@ -204,9 +183,9 @@ def audit(admin_user, action, details=""):
     conn.close()
 
 # =========================================================================
-# 3) نظام الأمان: Rate Limiting + IP Blacklist + Ban
+# 3) الأمان
 # =========================================================================
-rate_limit_store = defaultdict(list)  # ip -> [timestamps]
+rate_limit_store = defaultdict(list)
 blacklist_cache = set()
 
 def load_blacklist():
@@ -222,21 +201,17 @@ def is_ip_blacklisted(ip):
     return ip in blacklist_cache
 
 def client_ip():
-    """جلب IP الحقيقي (مع مراعاة Proxy Headers على Render)."""
     return request.headers.get("X-Forwarded-For", request.remote_addr or "0.0.0.0").split(",")[0].strip()
 
 def security_check():
-    """فحص Rate Limit + Blacklist. يرجع (allowed, message)."""
     ip = client_ip()
     if is_ip_blacklisted(ip):
         return False, "🚫 تم حظرك من الموقع."
-    # فحص إذا المستخدم محظور
     conn = db()
     u = conn.execute("SELECT banned FROM users WHERE ip=?", (ip,)).fetchone()
     conn.close()
     if u and u["banned"]:
         return False, "🚫 حسابك محظور."
-    # Rate Limit
     settings = get_settings()
     limit = int(settings.get("rate_limit_per_minute", 3))
     now = time.time()
@@ -247,7 +222,6 @@ def security_check():
     return True, ""
 
 def track_visit():
-    """تتبع الزيارات (للإحصائيات)."""
     ip = client_ip()
     conn = db()
     u = conn.execute("SELECT id, requests_count FROM users WHERE ip=?", (ip,)).fetchone()
@@ -260,71 +234,213 @@ def track_visit():
     conn.close()
 
 # =========================================================================
-# 4) ذكاء استخراج الأكواد (Regex) + كشف التكرار
+# 4) AI Engine
 # =========================================================================
 CODE_REGEX = re.compile(r"\b(\d{4,8})\b")
+PHONE_REGEX = re.compile(r"(\+?\d[\d\s\-\(\)]{6,18}\d)")
+
+PLATFORM_KEYWORDS = {
+    "telegram": ["telegram", "تيليجرام", "تلجرام", "تلي", "tg"],
+    "whatsapp": ["whatsapp", "واتس", "واتساب", "whats", "wa"],
+    "instagram": ["instagram", "انستقرام", "انستا", "إنستا", "ig", "insta"],
+    "facebook": ["facebook", "فيسبوك", "فيس", "fb"],
+    "google": ["google", "جوجل", "gmail"],
+    "twitter": ["twitter", "تويتر"],
+    "tiktok": ["tiktok", "تيك توك"],
+    "snapchat": ["snapchat", "سناب", "سناب شات"],
+    "discord": ["discord", "ديسكورد"],
+    "signal": ["signal", "سيجنال"],
+    "viber": ["viber", "فايبر"],
+    "imo": ["imo", "إيمو"],
+}
+
+def detect_platform(text):
+    if not text: return None
+    t = text.lower()
+    sorted_platforms = sorted(PLATFORM_KEYWORDS.items(), key=lambda x: -max(len(k) for k in x[1]))
+    for platform, keywords in sorted_platforms:
+        for kw in keywords:
+            if kw in t:
+                return platform
+    return None
+
+def extract_phone(text):
+    if not text: return [], None
+    found = []
+    for m in PHONE_REGEX.finditer(text):
+        num = re.sub(r"[\s\-\(\)]", "", m.group(1))
+        digits = re.sub(r"[^\d]", "", num)
+        if 7 <= len(digits) <= 15:
+            found.append(digits)
+    last4 = re.findall(r"(?:x{2,}|X{2,}|\*{2,}|…{2,})(\d{3,4})", text)
+    return found, last4[0] if last4 else None
 
 def extract_codes(text):
-    """استخراج جميع الأكواد المحتملة من نص، مع تجاهل المكرر."""
-    if not text:
-        return []
-    found = set()
-    # أولوية: أكود بطول 5-6 أرقام (أغلب OTP)
-    for m in re.finditer(r"\b(\d{5,6})\b", text):
-        found.add(m.group(1))
-    for m in CODE_REGEX.finditer(text):
-        found.add(m.group(1))
-    return list(found)
+    if not text: return []
+    found = []
+    specific = re.findall(
+        r"(?:code|kode|otp|كود|رمز|كود\s*التأكيد|verification|pin)\s*[:\-\s]*(\d{4,8})",
+        text, re.IGNORECASE
+    )
+    found.extend(specific)
+    found.extend(re.findall(r"\b(\d{5,6})\b", text))
+    found.extend(re.findall(r"\b(\d{4}|\d{7,8})\b", text))
+    seen = set()
+    unique = []
+    for c in found:
+        if c not in seen:
+            seen.add(c)
+            unique.append(c)
+    return unique
 
-def save_code(number_id, code, message, source):
-    """حفظ كود مع كشف التكرار."""
+def find_best_number_match(phone_digits, platform=None, last4=None):
     conn = db()
-    # كشف التكرار
+    candidates = []
+    if platform:
+        platform_row = conn.execute(
+            "SELECT id FROM platforms WHERE LOWER(name) LIKE ?",
+            (f"%{platform}%",)
+        ).fetchone()
+    else:
+        platform_row = None
+
+    if phone_digits:
+        query = """
+            SELECT n.id, n.number, p.name as platform, c.name as country, c.flag
+            FROM numbers n
+            JOIN countries c ON n.country_id = c.id
+            JOIN platforms p ON c.platform_id = p.id
+            WHERE REPLACE(REPLACE(REPLACE(REPLACE(n.number, '+', ''), ' ', ''), '-', ''), '()', '') = ?
+              AND n.status = 'available'
+        """
+        params = [phone_digits]
+        if platform_row:
+            query += " AND p.id = ?"
+            params.append(platform_row["id"])
+        query += " ORDER BY n.used_at ASC NULLS FIRST LIMIT 5"
+        candidates.extend(conn.execute(query, params).fetchall())
+
+        if not candidates and len(phone_digits) >= 6:
+            last6 = phone_digits[-6:]
+            candidates.extend(conn.execute("""
+                SELECT n.id, n.number, p.name as platform, c.name as country, c.flag
+                FROM numbers n
+                JOIN countries c ON n.country_id = c.id
+                JOIN platforms p ON c.platform_id = p.id
+                WHERE REPLACE(REPLACE(REPLACE(REPLACE(n.number, '+', ''), ' ', ''), '-', ''), '()', '')
+                      LIKE ? AND n.status = 'available'
+                ORDER BY LENGTH(n.number) ASC LIMIT 5
+            """, (f"%{last6}",)).fetchall())
+
+    if not candidates and last4:
+        candidates.extend(conn.execute("""
+            SELECT n.id, n.number, p.name as platform, c.name as country, c.flag
+            FROM numbers n
+            JOIN countries c ON n.country_id = c.id
+            JOIN platforms p ON c.platform_id = p.id
+            WHERE REPLACE(REPLACE(REPLACE(REPLACE(n.number, '+', ''), ' ', ''), '-', ''), '()', '')
+                  LIKE ? AND n.status = 'available'
+            ORDER BY n.used_at ASC NULLS FIRST LIMIT 5
+        """, (f"%{last4}",)).fetchall())
+
+    if not candidates and platform_row:
+        candidates.extend(conn.execute("""
+            SELECT n.id, n.number, p.name as platform, c.name as country, c.flag
+            FROM numbers n
+            JOIN countries c ON n.country_id = c.id
+            JOIN platforms p ON c.platform_id = p.id
+            WHERE p.id = ? AND n.status IN ('available', 'in_use', 'assigned')
+            ORDER BY n.status = 'available' DESC, RANDOM() LIMIT 3
+        """, (platform_row["id"],)).fetchall())
+
+    if not candidates:
+        candidates.extend(conn.execute("""
+            SELECT n.id, n.number, p.name as platform, c.name as country, c.flag
+            FROM numbers n
+            JOIN countries c ON n.country_id = c.id
+            JOIN platforms p ON c.platform_id = p.id
+            ORDER BY n.status = 'available' DESC, RANDOM() LIMIT 3
+        """).fetchall())
+
+    conn.close()
+    return [dict(c) for c in candidates]
+
+def save_code(number_id, code, message, source, auto_assign=True):
+    conn = db()
     existing = conn.execute("SELECT id FROM codes WHERE number_id=? AND code=?", (number_id, code)).fetchone()
     if existing:
         conn.close()
-        return False
+        return False, "duplicate"
     conn.execute("INSERT INTO codes (number_id, code, message, source) VALUES (?, ?, ?, ?)",
                  (number_id, code, message, source))
+    if auto_assign:
+        conn.execute(
+            "UPDATE numbers SET status='assigned', used_at=CURRENT_TIMESTAMP WHERE id=? AND status='available'",
+            (number_id,)
+        )
+    conn.commit()
     conn.close()
-    return True
+    return True, "saved"
+
+def process_smart_message(text, source_label):
+    if not text: return None
+    platform = detect_platform(text)
+    phones, last4 = extract_phone(text)
+    codes = extract_codes(text)
+    if not codes:
+        return {"status": "no_code", "text": text[:100]}
+    real_phones = [p for p in phones if not p.startswith("LAST4_")]
+    results = []
+    for code in codes:
+        phone_to_match = real_phones[0] if real_phones else None
+        candidates = find_best_number_match(phone_to_match, platform, last4)
+        if candidates:
+            best = candidates[0]
+            ok, status = save_code(best["id"], code, text, source_label, auto_assign=True)
+            results.append({
+                "code": code, "matched_number": best["number"],
+                "country": best["country"], "platform": best["platform"],
+                "match_type": "exact" if phone_to_match and phone_to_match in best["number"].replace("+","").replace(" ","") else "fuzzy",
+                "status": status
+            })
+            if ok: break
+        else:
+            results.append({"code": code, "matched": None, "status": "no_match"})
+    return {
+        "status": "ok", "platform_detected": platform,
+        "phones_found": real_phones, "last4_found": last4,
+        "codes_found": codes, "results": results
+    }
 
 # =========================================================================
-# 5) تيليجرام Poller — Multi-Bot + Channel Mapping
+# 5) Telegram Pollers
 # =========================================================================
 poller_threads = []
 poller_running = threading.Event()
 
 def start_poller(bot_config):
-    """بدء سكريبت سحب أكواد من بوت واحد (يعمل في Thread مستقل)."""
     token = bot_config["token"]
     channel = bot_config["channel"]
-    platform = bot_config["platform"]
     bot = telebot.TeleBot(token)
+    source_label = f"{channel}:{token[:10]}"
 
-    @bot.message_handler(func=lambda m: True)
+    @bot.message_handler(func=lambda m: True, content_types=["text"])
     def on_message(message):
         try:
-            text = message.text or ""
-            codes = extract_codes(text)
-            for code in codes:
-                conn = db()
-                # محاولة ربط الكود برقم متاح في هذه المنصة
-                number = conn.execute("""
-                    SELECT n.id, n.number FROM numbers n
-                    JOIN countries c ON n.country_id = c.id
-                    JOIN platforms p ON c.platform_id = p.id
-                    WHERE p.name=? AND n.status='available'
-                    ORDER BY RANDOM() LIMIT 1
-                """, (platform,)).fetchone()
-                if number:
-                    save_code(number["id"], code, text, f"{channel}:{token[:10]}")
-                conn.close()
+            text = message.text or message.caption or ""
+            if not text.strip(): return
+            result = process_smart_message(text, source_label)
+            if result and result.get("status") == "ok":
+                for r in result.get("results", []):
+                    if r.get("status") == "saved":
+                        print(f"✅ [{channel}] {r['code']} ← {r['matched_number']} ({r['country']}/{r['platform']})")
+                    elif r.get("status") == "no_match":
+                        print(f"⚠️  [{channel}] {r['code']} بدون رقم مطابق")
         except Exception as e:
             print(f"[Poller Error] {e}")
 
     def run():
-        print(f"[Poller] Started for {channel} ({platform})")
+        print(f"[Poller] 🧠 Smart poller started for {channel}")
         while poller_running.is_set():
             try:
                 bot.infinity_polling(timeout=30, long_polling_timeout=20, non_stop=False)
@@ -337,13 +453,12 @@ def start_poller(bot_config):
     poller_threads.append(t)
 
 def start_all_pollers():
-    """تشغيل كل البوتات."""
     poller_running.set()
     for bc in TELEGRAM_BOTS:
         start_poller(bc)
 
 # =========================================================================
-# 6) التطبيق Flask + Middlewares
+# 6) Flask App
 # =========================================================================
 app = Flask(__name__)
 app.secret_key = APP_SECRET
@@ -351,15 +466,12 @@ app.permanent_session_lifetime = timedelta(days=7)
 
 @app.before_request
 def before_request():
-    # تجاهل فحص للأدمن والستاتيك
     if request.path.startswith("/admin") or request.path.startswith("/static"):
         return
     settings = get_settings()
-    # Maintenance Mode (يدوي)
     if settings.get("maintenance_mode") == "on":
         if request.path != "/maintenance":
-            return render_template("maintenance.html", settings=settings), 503
-    # Auto Maintenance (مجدول)
+            return MAINTENANCE_HTML, 503
     auto_from = settings.get("auto_maintenance_from", "")
     auto_to = settings.get("auto_maintenance_to", "")
     if auto_from and auto_to:
@@ -367,13 +479,1247 @@ def before_request():
             now_t = datetime.now().strftime("%H:%M")
             if auto_from <= now_t <= auto_to:
                 if request.path != "/maintenance":
-                    return render_template("maintenance.html", settings=settings), 503
-        except:
-            pass
+                    return MAINTENANCE_HTML, 503
+        except: pass
     track_visit()
 
 # =========================================================================
-# 7) Routes العامة (الواجهة)
+# 7) HTML Templates (مدمجة في الملف)
+# =========================================================================
+INDEX_HTML = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ settings.site_name }}</title>
+<style>
+:root {
+  --main-color: {{ settings.main_color }};
+  --secondary-color: {{ settings.secondary_color }};
+  --bg-color: {{ settings.bg_color }};
+  --text-color: {{ settings.text_color }};
+  --base-font-size: 16px;
+  --card-bg: rgba(255,255,255,0.05);
+  --border-color: rgba(0,255,136,0.3);
+}
+.theme-light {
+  --bg-color: #f5f7fa; --text-color: #1a1a2e;
+  --card-bg: rgba(255,255,255,0.9);
+  --border-color: rgba(0,150,100,0.3);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: var(--base-font-size); }
+body {
+  font-family: 'Tahoma', 'Segoe UI', Arial, sans-serif;
+  background: var(--bg-color); color: var(--text-color);
+  min-height: 100vh; position: relative; overflow-x: hidden;
+  transition: background 0.3s, color 0.3s;
+}
+.matrix-bg { position: fixed; inset: 0; z-index: -2; opacity: 0.15; pointer-events: none; }
+.digit-bg { position: fixed; inset: 0; z-index: -1; opacity: 0.25; pointer-events: none; }
+.marquee {
+  background: linear-gradient(90deg, var(--main-color), var(--secondary-color));
+  color: #000; padding: 8px 0; overflow: hidden; font-weight: bold;
+}
+.marquee-inner { display: inline-block; white-space: nowrap; animation: marquee-scroll 30s linear infinite; }
+.marquee-inner span { margin: 0 20px; }
+@keyframes marquee-scroll { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
+.header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 15px 20px; background: var(--card-bg);
+  border-bottom: 2px solid var(--main-color); position: sticky; top: 0; z-index: 100;
+  backdrop-filter: blur(10px);
+}
+.logo { display: flex; align-items: center; gap: 10px; }
+.logo-icon { font-size: 2em; }
+.logo-text { color: var(--main-color); font-size: 1.4em; font-weight: bold; }
+.header-actions { display: flex; gap: 8px; }
+.icon-btn {
+  background: var(--card-bg); border: 1px solid var(--border-color);
+  color: var(--text-color); padding: 8px 12px; border-radius: 8px;
+  cursor: pointer; font-size: 16px; transition: all 0.2s;
+}
+.icon-btn:hover { background: var(--main-color); color: #000; transform: scale(1.05); }
+.side-menu {
+  position: fixed; top: 0; right: -320px; width: 300px; height: 100vh;
+  background: var(--bg-color); border-left: 2px solid var(--main-color);
+  z-index: 200; transition: right 0.3s; padding: 20px;
+  display: flex; flex-direction: column;
+}
+.side-menu.open { right: 0; }
+.menu-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 150; display: none; }
+.menu-overlay.open { display: block; }
+.side-menu-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.side-menu-header h3 { color: var(--main-color); }
+.side-menu-links { display: flex; flex-direction: column; gap: 10px; flex: 1; }
+.side-menu-links a {
+  display: block; padding: 12px; background: var(--card-bg);
+  border: 1px solid var(--border-color); border-radius: 8px;
+  color: var(--text-color); text-decoration: none; transition: all 0.2s;
+}
+.side-menu-links a:hover { background: var(--main-color); color: #000; }
+.admin-link { display: block; padding: 12px; text-align: center; background: var(--secondary-color); color: #000; text-decoration: none; border-radius: 8px; font-weight: bold; }
+.stats-bar {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px; padding: 15px 20px; max-width: 1200px; margin: 20px auto;
+}
+.stat { background: var(--card-bg); padding: 15px; border-radius: 10px; text-align: center; border: 1px solid var(--border-color); border-right: 3px solid var(--main-color); }
+.stat-num { display: block; font-size: 1.8em; color: var(--main-color); font-weight: bold; }
+.stat-label { color: var(--text-color); opacity: 0.7; font-size: 0.85em; }
+.container { max-width: 1200px; margin: 0 auto; padding: 0 20px 40px; }
+.smart-cta { max-width: 1200px; margin: 0 auto; padding: 0 20px; }
+.smart-btn {
+  width: 100%; padding: 20px; display: flex; align-items: center;
+  gap: 15px; background: linear-gradient(135deg, var(--main-color), var(--secondary-color));
+  color: #000; border: none; border-radius: 12px; cursor: pointer;
+  font-family: inherit; transition: all 0.3s;
+  box-shadow: 0 5px 20px rgba(0,255,136,0.3);
+}
+.smart-btn:hover { transform: translateY(-3px); box-shadow: 0 10px 30px rgba(0,255,136,0.5); }
+.smart-btn-icon { font-size: 2.5em; }
+.smart-btn-text { display: flex; flex-direction: column; text-align: right; }
+.smart-btn-text strong { font-size: 1.2em; }
+.smart-btn-text small { opacity: 0.8; font-size: 0.8em; }
+.feed-card { max-width: 1200px; margin: 20px auto 0; }
+.live-feed { max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.feed-item {
+  display: grid; grid-template-columns: 50px 1fr 1fr 1fr; gap: 10px;
+  padding: 10px 15px; background: rgba(0,0,0,0.3); border-radius: 8px;
+  align-items: center; font-size: 0.9em;
+  border-right: 3px solid var(--secondary-color);
+  animation: slide-in 0.3s;
+}
+.feed-item.new { border-right-color: var(--main-color); background: rgba(0,255,136,0.05); }
+.feed-icon { font-size: 1.5em; }
+.feed-number { font-family: 'Courier New', monospace; color: var(--secondary-color); }
+.feed-code { color: var(--main-color); font-weight: bold; text-align: left; }
+.feed-time { font-size: 0.75em; opacity: 0.6; text-align: left; }
+.search-box { position: relative; margin-bottom: 25px; }
+.search-box input {
+  width: 100%; padding: 12px 20px; font-size: 1em;
+  background: var(--card-bg); border: 1px solid var(--border-color);
+  border-radius: 10px; color: var(--text-color);
+}
+.search-box input:focus { outline: none; border-color: var(--main-color); }
+.search-results {
+  position: absolute; top: 100%; left: 0; right: 0;
+  background: var(--bg-color); border: 1px solid var(--border-color);
+  border-radius: 0 0 10px 10px; max-height: 300px; overflow-y: auto;
+  z-index: 50; display: none;
+}
+.search-results.open { display: block; }
+.search-result-item { padding: 10px 20px; border-bottom: 1px solid var(--border-color); cursor: pointer; }
+.search-result-item:hover { background: var(--card-bg); }
+.section-title { color: var(--main-color); margin: 25px 0 15px; font-size: 1.3em; }
+.platforms-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 15px; margin-bottom: 25px;
+}
+.platform-card {
+  background: var(--card-bg); border: 2px solid var(--border-color);
+  border-radius: 12px; padding: 20px 10px; text-align: center;
+  cursor: pointer; transition: all 0.3s; position: relative; overflow: hidden;
+}
+.platform-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: var(--card-color, var(--main-color));
+  transform: scaleX(0); transition: transform 0.3s;
+}
+.platform-card:hover::before { transform: scaleX(1); }
+.platform-card:hover { transform: translateY(-5px); box-shadow: 0 10px 30px rgba(0,255,136,0.2); }
+.platform-card.active { border-color: var(--card-color, var(--main-color)); background: rgba(0,255,136,0.1); }
+.platform-icon { font-size: 2.5em; margin-bottom: 8px; }
+.platform-name { font-weight: bold; }
+.platform-arrow { font-size: 0.8em; opacity: 0.6; margin-top: 5px; }
+.countries-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px; margin-bottom: 25px;
+}
+.country-card {
+  background: var(--card-bg); border: 1px solid var(--border-color);
+  border-radius: 8px; padding: 12px; cursor: pointer;
+  display: flex; justify-content: space-between; align-items: center; transition: all 0.2s;
+}
+.country-card:hover { background: var(--main-color); color: #000; transform: translateX(-5px); }
+.country-name { display: flex; align-items: center; gap: 8px; }
+.country-flag { font-size: 1.5em; }
+.country-available { background: var(--main-color); color: #000; padding: 2px 8px; border-radius: 10px; font-size: 0.8em; }
+.country-card:hover .country-available { background: #000; color: var(--main-color); }
+.number-display {
+  background: var(--card-bg); border: 2px solid var(--main-color);
+  border-radius: 15px; padding: 25px; margin-bottom: 25px;
+  text-align: center; box-shadow: 0 0 30px rgba(0,255,136,0.2);
+}
+.number-box, .code-box { margin-bottom: 20px; }
+.number-label, .code-label { color: var(--secondary-color); margin-bottom: 10px; font-weight: bold; }
+.number-value {
+  font-size: 2.2em; color: var(--main-color); font-weight: bold;
+  letter-spacing: 3px; font-family: 'Courier New', monospace;
+  padding: 15px; background: rgba(0,0,0,0.3); border-radius: 10px;
+  margin-bottom: 10px; display: inline-block; min-width: 280px;
+}
+.digit { display: inline-block; opacity: 0; transform: translateY(-50px); animation: digit-drop 0.5s forwards; }
+@keyframes digit-drop { to { opacity: 1; transform: translateY(0); } }
+.copy-btn {
+  background: var(--secondary-color); color: #000; border: none;
+  padding: 8px 20px; border-radius: 6px; cursor: pointer; font-weight: bold;
+  margin: 5px; transition: all 0.2s;
+}
+.copy-btn:hover { background: var(--main-color); transform: scale(1.05); }
+.number-timer { color: var(--secondary-color); font-size: 1.1em; margin-top: 10px; }
+.code-value {
+  font-size: 2.5em; color: var(--main-color); font-weight: bold;
+  letter-spacing: 5px; padding: 20px; background: rgba(0,0,0,0.3);
+  border-radius: 10px; display: inline-block; min-width: 280px;
+  border: 2px dashed var(--main-color);
+}
+.waiting-spinner {
+  display: inline-block; width: 20px; height: 20px;
+  border: 3px solid var(--border-color); border-top-color: var(--main-color);
+  border-radius: 50%; animation: spin 1s linear infinite;
+  vertical-align: middle; margin-left: 10px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.actions-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.action-btn {
+  background: var(--card-bg); border: 1px solid var(--secondary-color);
+  color: var(--secondary-color); padding: 10px 20px; border-radius: 8px;
+  cursor: pointer; transition: all 0.2s;
+}
+.action-btn:hover { background: var(--secondary-color); color: #000; }
+.dual-section { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px; }
+.card {
+  background: var(--card-bg); border: 1px solid var(--border-color);
+  border-radius: 12px; padding: 20px; margin-bottom: 20px;
+}
+.card h3 { color: var(--main-color); margin-bottom: 15px; }
+.heatmap-list { display: flex; flex-direction: column; gap: 8px; }
+.heatmap-row { display: grid; grid-template-columns: 80px 1fr 40px; gap: 10px; align-items: center; }
+.heatmap-bar-bg { background: rgba(0,0,0,0.3); border-radius: 5px; height: 16px; overflow: hidden; }
+.heatmap-bar { height: 100%; transition: width 0.5s; }
+.heatmap-uses { text-align: left; color: var(--main-color); font-weight: bold; }
+.recent-list { display: flex; flex-direction: column; gap: 8px; }
+.recent-item {
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;
+  padding: 8px; background: rgba(0,0,0,0.3); border-radius: 6px; font-size: 0.85em;
+  animation: slide-in 0.3s;
+}
+@keyframes slide-in { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+.recent-platform { color: var(--secondary-color); }
+.recent-code { color: var(--main-color); font-weight: bold; text-align: left; }
+.audience-list { display: flex; flex-direction: column; gap: 5px; }
+.audience-row { display: flex; justify-content: space-between; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 5px; font-size: 0.9em; }
+.audience-uses { color: var(--main-color); font-weight: bold; }
+.empty { text-align: center; color: #888; padding: 15px; }
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 300; display: flex; align-items: center; justify-content: center; }
+.modal-content { background: var(--bg-color); border: 2px solid var(--main-color); border-radius: 12px; padding: 25px; width: 90%; max-width: 500px; }
+.modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+.modal-header h3 { color: var(--main-color); }
+.modal-close { background: none; border: none; color: var(--text-color); font-size: 1.5em; cursor: pointer; }
+.modal-content textarea { width: 100%; padding: 10px; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: var(--text-color); border-radius: 6px; font-family: inherit; resize: vertical; }
+.primary-btn { width: 100%; padding: 12px; background: var(--main-color); color: #000; border: none; border-radius: 8px; font-weight: bold; margin-top: 10px; cursor: pointer; }
+#toast-container { position: fixed; top: 20px; left: 20px; z-index: 999; display: flex; flex-direction: column; gap: 10px; }
+.toast { background: var(--bg-color); border-left: 4px solid var(--main-color); padding: 12px 20px; border-radius: 6px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); animation: toast-in 0.3s; }
+.toast.error { border-left-color: #ff4444; }
+@keyframes toast-in { from { transform: translateX(-100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@media (max-width: 768px) {
+  .stats-bar { grid-template-columns: repeat(2, 1fr); }
+  .platforms-grid { grid-template-columns: repeat(3, 1fr); }
+  .countries-grid { grid-template-columns: repeat(2, 1fr); }
+  .dual-section { grid-template-columns: 1fr; }
+  .number-value, .code-value { font-size: 1.5em; min-width: 200px; }
+  .header { flex-wrap: wrap; gap: 10px; }
+  .feed-item { grid-template-columns: 40px 1fr 1fr; }
+  .feed-time { display: none; }
+}
+</style>
+</head>
+<body class="theme-dark">
+<canvas id="matrix-rain" class="matrix-bg"></canvas>
+<canvas id="digit-rain" class="digit-bg"></canvas>
+<div class="marquee">
+  <div class="marquee-inner">
+    <span>📢 {{ settings.announcement }}</span>
+    <span>•</span>
+    <span>{{ settings.marquee_text }}</span>
+    <span>•</span>
+    <span>📞 للدعم: 967733723953</span>
+  </div>
+</div>
+<header class="header">
+  <button id="menu-toggle" class="icon-btn">☰</button>
+  <h1 class="logo">
+    <span class="logo-icon">🔐</span>
+    <span class="logo-text">{{ settings.site_name }}</span>
+  </h1>
+  <div class="header-actions">
+    <button id="theme-toggle" class="icon-btn">🌙</button>
+    <button id="font-decrease" class="icon-btn">A-</button>
+    <button id="font-increase" class="icon-btn">A+</button>
+    <button id="sound-toggle" class="icon-btn">🔔</button>
+  </div>
+</header>
+<aside id="side-menu" class="side-menu">
+  <div class="side-menu-header">
+    <h3>القائمة</h3>
+    <button id="menu-close" class="icon-btn">✕</button>
+  </div>
+  <nav class="side-menu-links" id="side-menu-links"></nav>
+  <div class="side-menu-footer">
+    <a href="/admin/login" class="admin-link">🔧 دخول الأدمن</a>
+  </div>
+</aside>
+<div id="menu-overlay" class="menu-overlay"></div>
+<section class="stats-bar">
+  <div class="stat"><span class="stat-num">{{ stats.today_numbers }}</span><span class="stat-label">أرقام اليوم</span></div>
+  <div class="stat"><span class="stat-num">{{ stats.today_codes }}</span><span class="stat-label">أكواد اليوم</span></div>
+  <div class="stat"><span class="stat-num">{{ stats.active_users }}</span><span class="stat-label">نشطين الآن</span></div>
+  <div class="stat"><span class="stat-num">{{ stats.total_visits }}</span><span class="stat-label">إجمالي الزيارات</span></div>
+</section>
+<section class="smart-cta">
+  <button id="btn-smart-pick" class="smart-btn">
+    <span class="smart-btn-icon">⚡</span>
+    <span class="smart-btn-text">
+      <strong>استلام ذكي فوري</strong>
+      <small>يختار لك أفضل رقم متاح مع كوده تلقائياً</small>
+    </span>
+  </button>
+</section>
+<section class="card feed-card">
+  <h3>⚡ آخر الأكواد من القنوات (لايف)</h3>
+  <div id="live-feed" class="live-feed"><div class="empty">جاري التحميل...</div></div>
+</section>
+<main class="container">
+  <div class="search-box">
+    <input type="text" id="instant-search" placeholder="🔍 بحث فوري..." autocomplete="off">
+    <div id="search-results" class="search-results"></div>
+  </div>
+  <section class="platforms-section">
+    <h2 class="section-title">📱 اختر المنصة</h2>
+    <div class="platforms-grid" id="platforms-grid">
+      {% for p in platforms %}
+      <div class="platform-card" data-platform-id="{{ p.id }}" style="--card-color: {{ p.color }}">
+        <div class="platform-icon">{{ p.icon }}</div>
+        <div class="platform-name">{{ p.name }}</div>
+        <div class="platform-arrow">▼</div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  <section class="countries-section" id="countries-section" style="display:none">
+    <h2 class="section-title">🌍 اختر الدولة</h2>
+    <div class="countries-grid" id="countries-grid"></div>
+  </section>
+  <section class="number-display" id="number-display" style="display:none">
+    <div class="number-box">
+      <div class="number-label">📞 رقمك</div>
+      <div class="number-value" id="number-value">---</div>
+      <button class="copy-btn" id="copy-number">📋 نسخ الرقم</button>
+      <div class="number-timer" id="number-timer">⏱ 02:00</div>
+    </div>
+    <div class="code-box">
+      <div class="code-label">🔑 الكود</div>
+      <div class="code-value" id="code-value">
+        <div class="waiting-spinner"></div>
+        <span>في انتظار الكود...</span>
+      </div>
+      <button class="copy-btn" id="copy-code" style="display:none">📋 نسخ الكود</button>
+    </div>
+    <div class="actions-row">
+      <button class="action-btn" id="btn-next">🔄 الرقم التالي</button>
+      <button class="action-btn" id="btn-help">🆘 مساعدة</button>
+    </div>
+  </section>
+  <section class="dual-section">
+    <div class="card heatmap-card">
+      <h3>🔥 المنصات الأكثر استخداماً</h3>
+      <div class="heatmap-list">
+        {% for h in heatmap %}
+        <div class="heatmap-row">
+          <span class="heatmap-name">{{ h.name }}</span>
+          <div class="heatmap-bar-bg">
+            <div class="heatmap-bar" style="width: {{ (h.uses / (heatmap[0].uses or 1) * 100) | round(1) }}%; background: {{ h.color }}"></div>
+          </div>
+          <span class="heatmap-uses">{{ h.uses }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="card recent-card">
+      <h3>⚡ آخر 5 أكواد</h3>
+      <div class="recent-list">
+        {% for r in recent_codes %}
+        <div class="recent-item">
+          <span class="recent-platform">{{ r.platform }}</span>
+          <span class="recent-number">{{ r.number }}</span>
+          <span class="recent-code">{{ r.code }}</span>
+        </div>
+        {% else %}
+        <div class="empty">لا توجد أكواد بعد</div>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+  <section class="card audience-card">
+    <h3>🌍 تحليل الجمهور</h3>
+    <div class="audience-list">
+      {% for a in audience %}
+      <div class="audience-row">
+        <span class="audience-country">{{ a.country }}</span>
+        <span class="audience-uses">{{ a.uses }} استخدام</span>
+      </div>
+      {% else %}
+      <div class="empty">لا توجد بيانات بعد</div>
+      {% endfor %}
+    </div>
+  </section>
+</main>
+<div id="help-modal" class="modal" style="display:none">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>🆘 طلب مساعدة</h3>
+      <button class="modal-close" id="help-close">✕</button>
+    </div>
+    <textarea id="help-message" rows="5" placeholder="اكتب مشكلتك هنا..."></textarea>
+    <button class="primary-btn" id="help-send">إرسال</button>
+  </div>
+</div>
+<div id="toast-container"></div>
+<script>
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+
+function loadSettings() {
+  const theme = localStorage.getItem('theme') || 'dark';
+  document.body.className = `theme-${theme}`;
+  $('#theme-toggle').textContent = theme === 'dark' ? '☀️' : '🌙';
+  const fontSize = parseInt(localStorage.getItem('fontSize') || '16');
+  document.documentElement.style.setProperty('--base-font-size', fontSize + 'px');
+}
+$('#theme-toggle').addEventListener('click', () => {
+  const isDark = document.body.classList.contains('theme-dark');
+  const newTheme = isDark ? 'light' : 'dark';
+  document.body.className = `theme-${newTheme}`;
+  localStorage.setItem('theme', newTheme);
+  $('#theme-toggle').textContent = newTheme === 'dark' ? '☀️' : '🌙';
+});
+$('#font-increase').addEventListener('click', () => {
+  let f = parseInt(localStorage.getItem('fontSize') || '16');
+  f = Math.min(f + 2, 24);
+  localStorage.setItem('fontSize', f);
+  document.documentElement.style.setProperty('--base-font-size', f + 'px');
+});
+$('#font-decrease').addEventListener('click', () => {
+  let f = parseInt(localStorage.getItem('fontSize') || '16');
+  f = Math.max(f - 2, 12);
+  localStorage.setItem('fontSize', f);
+  document.documentElement.style.setProperty('--base-font-size', f + 'px');
+});
+
+let soundEnabled = localStorage.getItem('soundEnabled') !== 'false';
+$('#sound-toggle').textContent = soundEnabled ? '🔔' : '🔕';
+$('#sound-toggle').addEventListener('click', () => {
+  soundEnabled = !soundEnabled;
+  localStorage.setItem('soundEnabled', soundEnabled);
+  $('#sound-toggle').textContent = soundEnabled ? '🔔' : '🔕';
+});
+function playAlert() {
+  if (!soundEnabled) return;
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [800, 1000, 1200].forEach((f, i) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.frequency.value = f; o.type = 'sine';
+      g.gain.setValueAtTime(0.2, ctx.currentTime + i * 0.15);
+      g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + i * 0.15 + 0.3);
+      o.start(ctx.currentTime + i * 0.15);
+      o.stop(ctx.currentTime + i * 0.15 + 0.3);
+    });
+  } catch (e) {}
+}
+function requestPushPermission() {
+  if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
+}
+function pushNotification(title, body) {
+  if ('Notification' in window && Notification.permission === 'granted') new Notification(title, { body });
+}
+
+$('#menu-toggle').addEventListener('click', () => {
+  $('#side-menu').classList.add('open');
+  $('#menu-overlay').classList.add('open');
+});
+$('#menu-close').addEventListener('click', () => { $('#side-menu').classList.remove('open'); $('#menu-overlay').classList.remove('open'); });
+$('#menu-overlay').addEventListener('click', () => { $('#side-menu').classList.remove('open'); $('#menu-overlay').classList.remove('open'); });
+fetch('/api/links').then(r => r.json()).then(d => {
+  $('#side-menu-links').innerHTML = d.links.map(l => `<a href="${l.url}" target="_blank">${l.icon || '🔗'} ${l.label}</a>`).join('');
+});
+
+function toast(msg, type = '') {
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.textContent = msg;
+  $('#toast-container').appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+function copyText(text) {
+  if (navigator.clipboard) navigator.clipboard.writeText(text).then(() => toast('✅ تم النسخ: ' + text));
+  else { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast('✅ تم النسخ: ' + text); }
+}
+$('#copy-number').addEventListener('click', () => { if (currentNumber) copyText(currentNumber); });
+$('#copy-code').addEventListener('click', () => { if (currentCode) copyText(currentCode); });
+
+function renderNumberWithDrop(text, elementId) {
+  const el = document.getElementById(elementId);
+  el.innerHTML = '';
+  text.split('').forEach((ch, i) => {
+    const span = document.createElement('span');
+    span.className = 'digit';
+    span.textContent = ch;
+    span.style.animationDelay = (i * 0.05) + 's';
+    el.appendChild(span);
+  });
+}
+
+let selectedPlatform = null;
+let currentNumber = null, currentCode = null, currentNumberId = null, currentCountryId = null, timerInterval = null;
+$$('.platform-card').forEach(card => {
+  card.addEventListener('click', () => {
+    $$('.platform-card').forEach(c => c.classList.remove('active'));
+    card.classList.add('active');
+    selectedPlatform = card.dataset.platformId;
+    loadCountries(selectedPlatform);
+  });
+});
+function loadCountries(platformId) {
+  fetch(`/api/countries/${platformId}`).then(r => r.json()).then(d => {
+    if (!d.countries.length) { toast('لا توجد دول لهذه المنصة', 'error'); return; }
+    $('#countries-grid').innerHTML = d.countries.map(c => `
+      <div class="country-card" data-country-id="${c.id}">
+        <div class="country-name"><span class="country-flag">${c.flag || '🌍'}</span><span>${c.name}</span></div>
+        <span class="country-available">${c.available}</span>
+      </div>
+    `).join('');
+    $('#countries-section').style.display = 'block';
+    $$('#countries-grid .country-card').forEach(c => {
+      c.addEventListener('click', () => { currentCountryId = c.dataset.countryId; requestNumber(currentCountryId); });
+    });
+  });
+}
+function requestNumber(countryId, numberId = null) {
+  const url = numberId ? '/api/next_number' : '/api/get_number';
+  fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ country_id: countryId, current_number_id: numberId }) })
+    .then(r => r.json()).then(d => {
+      if (!d.ok) { toast(d.error, 'error'); return; }
+      currentNumber = d.number; currentNumberId = d.number_id; currentCode = d.code;
+      renderNumberWithDrop(d.number, 'number-value');
+      if (d.code) { $('#code-value').textContent = d.code; $('#copy-code').style.display = 'inline-block'; }
+      else { $('#code-value').innerHTML = '<div class="waiting-spinner"></div><span>في انتظار الكود...</span>'; $('#copy-code').style.display = 'none'; startCodePolling(d.number_id); }
+      $('#number-display').style.display = 'block';
+      $('#number-display').scrollIntoView({ behavior: 'smooth' });
+      startTimer(d.expires_in || 120);
+      requestPushPermission();
+    });
+}
+$('#btn-next').addEventListener('click', () => { if (currentCountryId) { stopCodePolling(); requestNumber(currentCountryId, currentNumberId); } });
+
+$('#btn-smart-pick').addEventListener('click', () => {
+  fetch('/api/smart_pick', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
+    .then(r => r.json()).then(d => {
+      if (!d.ok) { toast(d.error, 'error'); return; }
+      currentNumber = d.number; currentNumberId = d.number_id; currentCode = d.code; currentCountryId = null;
+      renderNumberWithDrop(d.number, 'number-value');
+      if (d.code) { $('#code-value').textContent = d.code; $('#copy-code').style.display = 'inline-block'; playAlert(); toast(`✅ ${d.platform} - ${d.country}`); }
+      else { $('#code-value').innerHTML = '<div class="waiting-spinner"></div><span>في انتظار الكود من القناة...</span>'; $('#copy-code').style.display = 'none'; startCodePolling(d.number_id); toast('⏳ في انتظار الكود...'); }
+      $('#number-display').style.display = 'block';
+      $('#number-display').scrollIntoView({ behavior: 'smooth' });
+      startTimer(d.expires_in || 120);
+      requestPushPermission();
+    });
+});
+
+function startTimer(seconds) {
+  if (timerInterval) clearInterval(timerInterval);
+  let remaining = seconds;
+  const update = () => {
+    const m = Math.floor(remaining / 60); const s = remaining % 60;
+    $('#number-timer').textContent = `⏱ ${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    if (remaining <= 0) { clearInterval(timerInterval); toast('⏰ انتهت صلاحية الرقم'); }
+    else remaining--;
+  };
+  update();
+  timerInterval = setInterval(update, 1000);
+}
+
+let codePollInterval = null;
+function startCodePolling(numberId) {
+  if (codePollInterval) clearInterval(codePollInterval);
+  codePollInterval = setInterval(() => {
+    fetch(`/api/check_code/${numberId}`).then(r => r.json()).then(d => {
+      if (d.code && d.code !== currentCode) {
+        currentCode = d.code;
+        $('#code-value').textContent = d.code;
+        $('#copy-code').style.display = 'inline-block';
+        playAlert();
+        pushNotification('🔑 كود جديد!', `الكود: ${d.code}`);
+        toast(`🔑 الكود وصل: ${d.code}`);
+      }
+    });
+  }, 3000);
+}
+function stopCodePolling() { if (codePollInterval) clearInterval(codePollInterval); }
+
+$('#btn-help').addEventListener('click', () => $('#help-modal').style.display = 'flex');
+$('#help-close').addEventListener('click', () => $('#help-modal').style.display = 'none');
+$('#help-send').addEventListener('click', () => {
+  const msg = $('#help-message').value.trim();
+  if (!msg) { toast('اكتب رسالتك أولاً', 'error'); return; }
+  fetch('/api/help', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: msg }) })
+    .then(r => r.json()).then(d => { if (d.ok) { toast(d.message); $('#help-modal').style.display = 'none'; $('#help-message').value = ''; } });
+});
+
+$('#instant-search').addEventListener('input', e => {
+  const q = e.target.value.trim();
+  if (q.length < 2) { $('#search-results').classList.remove('open'); return; }
+  fetch(`/api/search?q=${encodeURIComponent(q)}`).then(r => r.json()).then(d => {
+    if (!d.results.length) { $('#search-results').classList.remove('open'); return; }
+    $('#search-results').innerHTML = d.results.map(r => `<div class="search-result-item">${r.icon} <b>${r.platform}</b> / ${r.country} — <code>${r.number}</code></div>`).join('');
+    $('#search-results').classList.add('open');
+  });
+});
+document.addEventListener('click', e => { if (!e.target.closest('.search-box')) $('#search-results').classList.remove('open'); });
+
+function loadFeed() {
+  fetch('/api/feed').then(r => r.json()).then(d => {
+    const box = $('#live-feed');
+    if (!d.feed || !d.feed.length) { box.innerHTML = '<div class="empty">لا توجد أكواد بعد</div>'; return; }
+    box.innerHTML = d.feed.map(f => `
+      <div class="feed-item">
+        <div class="feed-icon">${f.icon || '📱'}</div>
+        <div><b style="color:${f.color || '#00ff88'}">${f.platform}</b> / ${f.flag || ''} ${f.country}</div>
+        <div class="feed-number">${f.number}</div>
+        <div class="feed-code">${f.code} <span class="feed-time">${(f.received_at || '').slice(11, 19)}</span></div>
+      </div>
+    `).join('');
+  });
+}
+loadFeed();
+setInterval(loadFeed, 5000);
+
+function startMatrixRain() {
+  const canvas = $('#matrix-rain');
+  const ctx = canvas.getContext('2d');
+  canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ابتثجحخدذرزسشصضطظعغفقكلمنهوي';
+  const fontSize = 14;
+  const cols = Math.floor(canvas.width / fontSize);
+  const drops = Array(cols).fill(1);
+  function draw() {
+    ctx.fillStyle = 'rgba(0,0,0,0.05)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#0f0';
+    ctx.font = fontSize + 'px monospace';
+    for (let i = 0; i < drops.length; i++) {
+      ctx.fillText(chars[Math.floor(Math.random() * chars.length)], i * fontSize, drops[i] * fontSize);
+      if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) drops[i] = 0;
+      drops[i]++;
+    }
+  }
+  setInterval(draw, 50);
+  window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
+}
+function startDigitRain() {
+  const canvas = $('#digit-rain');
+  const ctx = canvas.getContext('2d');
+  canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+  const drops = [];
+  for (let i = 0; i < 30; i++) drops.push({ x: Math.random() * canvas.width, y: Math.random() * canvas.height, s: Math.random() * 3 + 1 });
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#00d4ff';
+    ctx.font = '20px monospace';
+    drops.forEach(d => {
+      ctx.fillText('0123456789'[Math.floor(Math.random() * 10)], d.x, d.y);
+      d.y += d.s;
+      if (d.y > canvas.height) { d.y = 0; d.x = Math.random() * canvas.width; }
+    });
+  }
+  setInterval(draw, 100);
+}
+loadSettings();
+startMatrixRain();
+startDigitRain();
+</script>
+</body>
+</html>
+"""
+
+MAINTENANCE_HTML = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head><meta charset="UTF-8"><title>صيانة</title>
+<style>
+body{margin:0;background:#0a0e1a;color:#e6f1ff;font-family:Tahoma,Arial,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh}
+.box{text-align:center;padding:40px;border:2px solid #00ff88;border-radius:15px;max-width:500px;background:rgba(0,255,136,0.05)}
+h1{color:#00ff88;font-size:3em;margin:0}
+.btn{display:inline-block;margin-top:20px;padding:10px 25px;background:#00ff88;color:#000;text-decoration:none;border-radius:8px;font-weight:bold}
+</style></head>
+<body>
+<div class="box">
+  <h1>🔧</h1>
+  <h1 style="font-size:1.5em">الموقع تحت الصيانة</h1>
+  <p>سنعود قريباً — للدعم: 967733723953</p>
+  <a href="https://wa.me/967733723953" class="btn">📞 تواصل واتساب</a>
+</div>
+</body></html>
+"""
+
+# صفحة "تعرف على المزيد" اللي طلبتها
+LEARN_MORE_HTML = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head><meta charset="UTF-8"><title>تعرف على المزيد</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:Tahoma,Arial,sans-serif}
+body{background:linear-gradient(135deg,#0a0e1a 0%,#1a1f3a 100%);color:#e6f1ff;min-height:100vh;padding:20px}
+.wrap{max-width:900px;margin:0 auto}
+h1{color:#00ff88;text-align:center;margin-bottom:30px;font-size:2em}
+h2{color:#00d4ff;margin:25px 0 15px;border-bottom:2px solid #00d4ff;padding-bottom:5px}
+h3{color:#00ff88;margin:15px 0 8px}
+p,li{line-height:1.8;color:#cfd8e3;margin-bottom:10px}
+ul{padding-right:25px;margin-bottom:15px}
+li::marker{color:#00ff88}
+.card{background:rgba(255,255,255,0.05);padding:20px;border-radius:10px;margin-bottom:15px;border-right:3px solid #00ff88}
+.btn{display:inline-block;margin:10px 5px;padding:10px 20px;background:#00ff88;color:#000;text-decoration:none;border-radius:8px;font-weight:bold}
+.btn.alt{background:#00d4ff}
+.back{color:#aaa;text-decoration:none;display:inline-block;margin-bottom:20px}
+</style></head>
+<body>
+<div class="wrap">
+  <a href="/" class="back">← العودة للرئيسية</a>
+  <h1>🔐 تعرف على المطري OTP</h1>
+
+  <div class="card">
+    <h2>ما هو هذا الموقع؟</h2>
+    <p>موقع <b>المطري OTP</b> هو نظام متكامل لاستقبال أكواد التحقق (OTP) من منصات مختلفة مثل تيليجرام وواتساب وانستقرام وغيرها.</p>
+    <p>يستخدم الموقع <b>بوتات تيليجرام</b> لمراقبة قنوات السحب و<b>محرك ذكاء اصطناعي</b> لاستخراج الأكواد والأرقام تلقائياً من أي صيغة رسالة.</p>
+  </div>
+
+  <div class="card">
+    <h2>🎯 المميزات الرئيسية (50 ميزة)</h2>
+    <h3>📦 المرحلة 1: الأساسيات</h3>
+    <ul>
+      <li>قاعدة بيانات SQLite خفيفة وسريعة</li>
+      <li>نظام كومبوهات ديناميكي (منصات + دول)</li>
+      <li>سحب تلقائي للأكواد من بوتات تيليجرام</li>
+      <li>نسخ رقم/كود بنقرة واحدة (Clipboard API)</li>
+      <li>مؤقت انتهاء صلاحية الرقم</li>
+      <li>تبديل الرقم التالي بدون إعادة اختيار الدولة</li>
+      <li>عرض المنصات بأيقونات وألوان مميزة</li>
+      <li>جلب أرقام عشوائي لمنع التكرار</li>
+      <li>إحصائيات حية للزوار والأكواد</li>
+      <li>وضعية الصيانة (يدوي + تلقائي)</li>
+    </ul>
+
+    <h3>🎨 المرحلة 2: واجهة المستخدم</h3>
+    <ul>
+      <li>وضع الليل والنهار (Dark/Light Mode)</li>
+      <li>تكبير وتصغير الخط (A+/A-)</li>
+      <li>تأثير سقوط الأرقام (Digit Drop Animation)</li>
+      <li>تصميم متجاوب 100% (Mobile First)</li>
+      <li>شريط أخبار متحرك (Marquee)</li>
+      <li>إشعار صوتي (Web Audio API)</li>
+      <li>إشعارات سطح المكتب (Push Notifications)</li>
+      <li>قائمة منسدلة جانبية</li>
+      <li>نموذج طلب مساعدة</li>
+      <li>تأثير مطر المصفوفة (Matrix Rain)</li>
+      <li>مطر الأرقام خلف المنصات</li>
+      <li>ضوابط الألوان الحية من لوحة الأدمن</li>
+    </ul>
+
+    <h3>⚙️ المرحلة 3: لوحة الأدمن</h3>
+    <ul>
+      <li>لوحة تحكم بالإحصائيات الحية</li>
+      <li>إدارة الروابط (إعلان/تواصل)</li>
+      <li>رفع ملفات الكومبو (.txt)</li>
+      <li>إدارة المستخدمين (عرض/حظر/فك حظر)</li>
+      <li>مسح الأكواد (كل/حسب الفلتر)</li>
+      <li>نسخ احتياطي واستعادة</li>
+      <li>نظام صلاحيات متعدد (Admin/Moderator)</li>
+      <li>سجل حركات الأدمن (Audit Logs)</li>
+    </ul>
+
+    <h3>🔒 المرحلة 4: الأمان</h3>
+    <ul>
+      <li>Rate Limiting (3 طلبات/دقيقة)</li>
+      <li>تشفير كلمات السر (bcrypt)</li>
+      <li>حماية من SQL Injection (Parameterized Queries)</li>
+      <li>IP Blacklisting</li>
+      <li>Ban System للمستخدمين</li>
+    </ul>
+
+    <h3>🤖 المرحلة 5: الذكاء الاصطناعي</h3>
+    <ul>
+      <li>بوتات تيليجرام متعددة (Multi-Bot)</li>
+      <li>Channel Mapping (ربط قناة بمنصة)</li>
+      <li>Regex Intelligence (استخراج من أي صيغة)</li>
+      <li>Duplicate Detection (كشف التكرار)</li>
+      <li>تصدير CSV للأكواد</li>
+    </ul>
+
+    <h3>💎 المرحلة 6: الذهبية</h3>
+    <ul>
+      <li>API عام للمطورين</li>
+      <li>Heatmap للمنصات الأكثر استخداماً</li>
+      <li>Drag & Drop لترتيب المنصات</li>
+      <li>Auto Maintenance (صيانة مجدولة)</li>
+      <li>Instant Search (بحث فوري)</li>
+      <li>Audience Analytics (تحليل الجمهور)</li>
+      <li>Smart Pick (اختيار ذكي بدون دولة)</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>🧠 كيف يعمل المحرك الذكي؟</h2>
+    <p>المحرك يحلل أي رسالة ويستخرج منها 3 حاجات:</p>
+    <ol style="padding-right:25px">
+      <li><b>اسم المنصة</b> (Telegram, WhatsApp, Instagram...) بالعربي والإنجليزي</li>
+      <li><b>الرقم</b> (كامل / ناقص / آخر 4 أرقام)</li>
+      <li><b>الكود OTP</b> (بأي صيغة)</li>
+    </ol>
+    <p>ثم يبحث عن الرقم في قاعدة البيانات بـ 5 مستويات مطابقة:</p>
+    <ol style="padding-right:25px">
+      <li><b>تطابق كامل</b> — الرقم مطابق 100%</li>
+      <li><b>آخر 6 أرقام</b> — لو الرقم ناقص من البداية</li>
+      <li><b>آخر 4 أرقام</b> — لو الرقم مكتوب XXXX1234</li>
+      <li><b>مطابقة بالمنصة</b> — لو فيه اسم منصة بس</li>
+      <li><b>Fallback</b> — أول رقم متاح</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h2>🚀 طريقة التشغيل</h2>
+    <p>الملف يعمل مباشرة بعد تثبيت المكتبات:</p>
+    <pre style="background:#000;padding:15px;border-radius:8px;color:#0f0;overflow-x:auto">pip install flask bcrypt pyTelegramBotAPI requests gunicorn
+python app.py</pre>
+    <p>ثم افتح: <code>http://localhost:5000</code></p>
+  </div>
+
+  <div class="card">
+    <h2>📞 تواصل معنا</h2>
+    <p>المطوّر: <b>@altazyabody</b></p>
+    <p>واتساب: <b>967733723953</b></p>
+    <p>قناة السحب: <b>@jsjsgsjsvh</b></p>
+    <a href="https://wa.me/967733723953" class="btn">📞 واتساب</a>
+    <a href="https://t.me/altazyabody" class="btn alt">💬 تيليجرام</a>
+    <a href="/admin/login" class="btn alt">🔧 دخول الأدمن</a>
+  </div>
+
+  <p style="text-align:center;color:#888;margin-top:30px">© 2026 Almatry OTP — جميع الحقوق محفوظة</p>
+</div>
+</body></html>
+"""
+
+# =========================================================================
+# 8) لوحة الأدمن (HTML مدمج)
+# =========================================================================
+ADMIN_BASE_CSS = """
+*{box-sizing:border-box;margin:0;padding:0;font-family:Tahoma,Arial,sans-serif}
+body{background:#0a0e1a;color:#e6f1ff;padding:20px}
+.header{display:flex;justify-content:space-between;align-items:center;background:rgba(0,255,136,0.1);padding:15px 20px;border-radius:10px;margin-bottom:20px}
+h1,h3{color:#00ff88}
+.nav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}
+.nav a{padding:8px 12px;background:rgba(0,212,255,0.1);color:#00d4ff;text-decoration:none;border-radius:5px;font-size:12px}
+.nav a:hover{background:rgba(0,212,255,0.3)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:15px;margin-bottom:20px}
+.stat{background:rgba(255,255,255,0.05);padding:20px;border-radius:10px;text-align:center;border-right:3px solid #00ff88}
+.stat-num{font-size:2em;color:#00ff88;font-weight:bold;display:block}
+.stat-label{color:#aaa;font-size:13px}
+.card{background:rgba(255,255,255,0.05);padding:20px;border-radius:10px;margin-bottom:20px}
+table{width:100%;border-collapse:collapse}
+th,td{padding:8px;text-align:right;border-bottom:1px solid #333;font-size:13px}
+th{background:rgba(0,255,136,0.1);color:#00ff88}
+.logout{background:#ff4444;color:#fff;padding:8px 15px;border-radius:5px;text-decoration:none}
+.form-row{margin-bottom:12px}
+label{display:block;color:#00ff88;margin-bottom:5px;font-size:13px}
+input,select,textarea{width:100%;padding:10px;background:rgba(0,0,0,0.3);border:1px solid #333;color:#fff;border-radius:5px;font-family:inherit}
+input[type=color]{height:40px;padding:2px}
+button{padding:10px 20px;background:#00ff88;color:#000;border:none;border-radius:5px;font-weight:bold;cursor:pointer;margin-top:5px}
+.del-btn{background:#ff4444;color:#fff;padding:5px 10px;border-radius:3px;border:none;cursor:pointer;font-size:11px}
+.flash{background:#00ff88;color:#000;padding:10px;border-radius:5px;margin-bottom:15px;text-align:center}
+.flash.error{background:#ff4444;color:#fff}
+pre{background:#000;padding:15px;border-radius:5px;color:#0f0;overflow-x:auto;font-size:12px}
+.banned{color:#ff4444;font-weight:bold}
+.unban-btn{background:#00ff88;color:#000;padding:5px 10px;border-radius:3px;border:none;cursor:pointer;font-size:11px}
+.ban-btn{background:#ff4444;color:#fff;padding:5px 10px;border-radius:3px;border:none;cursor:pointer;font-size:11px}
+.row{display:flex;gap:10px;margin-bottom:15px;flex-wrap:wrap;align-items:flex-end}
+.row form{margin:0}
+"""
+
+ADMIN_NAV = """
+<div class="nav">
+  <a href="/admin">🏠 الرئيسية</a>
+  <a href="/admin/settings">⚙️ الإعدادات</a>
+  <a href="/admin/platforms">📱 المنصات</a>
+  <a href="/admin/combos">📂 الكومبوهات</a>
+  <a href="/admin/users">👥 المستخدمون</a>
+  <a href="/admin/links">🔗 الروابط</a>
+  <a href="/admin/codes">🔑 الأكواد</a>
+  <a href="/admin/audits">📋 السجلات</a>
+  <a href="/admin/backup">💾 نسخة احتياطية</a>
+  <a href="/admin/export_csv">📊 تصدير CSV</a>
+</div>
+"""
+
+ADMIN_LOGIN_HTML = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head><meta charset="UTF-8"><title>دخول الأدمن</title>
+<style>""" + ADMIN_BASE_CSS + """
+.login-box{background:rgba(255,255,255,0.05);padding:40px;border-radius:15px;border:1px solid rgba(0,255,136,0.3);width:350px;margin:100px auto;backdrop-filter:blur(10px)}
+h1{text-align:center;margin-bottom:30px}
+</style></head>
+<body>
+<form class="login-box" method="POST">
+  <h1>🔐 لوحة الأدمن</h1>
+  {% with messages = get_flashed_messages(with_categories=true) %}{% for cat,msg in messages %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}{% endwith %}
+  <div class="form-row"><input type="text" name="username" placeholder="اسم المستخدم" required autofocus></div>
+  <div class="form-row"><input type="password" name="password" placeholder="كلمة المرور" required></div>
+  <button type="submit" style="width:100%">دخول</button>
+</form>
+</body></html>
+"""
+
+ADMIN_DASHBOARD_HTML = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head><meta charset="UTF-8"><title>لوحة الأدمن</title>
+<style>""" + ADMIN_BASE_CSS + """</style></head>
+<body>
+<div class="header">
+  <h1>🔐 {{ admin_user }} ({{ role }})</h1>
+  <a class="logout" href="/admin/logout">خروج</a>
+</div>
+""" + ADMIN_NAV + """
+<div class="stats">
+  <div class="stat"><span class="stat-num">{{ stats.total_numbers }}</span>إجمالي الأرقام</div>
+  <div class="stat"><span class="stat-num">{{ stats.available }}</span>متاحة</div>
+  <div class="stat"><span class="stat-num">{{ stats.total_codes }}</span>إجمالي الأكواد</div>
+  <div class="stat"><span class="stat-num">{{ stats.total_users }}</span>مستخدمين</div>
+  <div class="stat"><span class="stat-num">{{ stats.banned_users }}</span>محظورين</div>
+  <div class="stat"><span class="stat-num">{{ stats.platforms }}</span>منصات</div>
+  <div class="stat"><span class="stat-num">{{ stats.countries }}</span>دول</div>
+</div>
+<div class="card">
+  <h3>📋 آخر 10 حركات</h3>
+  <table>
+    <tr><th>الوقت</th><th>المستخدم</th><th>الحركة</th><th>التفاصيل</th><th>IP</th></tr>
+    {% for a in audits %}
+    <tr><td>{{ a.created_at }}</td><td>{{ a.admin_user }}</td><td>{{ a.action }}</td><td>{{ a.details }}</td><td>{{ a.ip }}</td></tr>
+    {% else %}<tr><td colspan="5" style="text-align:center;color:#888">لا يوجد</td></tr>{% endfor %}
+  </table>
+</div>
+</body></html>
+"""
+
+ADMIN_SETTINGS_HTML = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head><meta charset="UTF-8"><title>الإعدادات</title>
+<style>""" + ADMIN_BASE_CSS + """.form{max-width:700px}</style></head>
+<body>
+""" + ADMIN_NAV + """
+<h1>⚙️ إعدادات الموقع</h1>
+{% with messages = get_flashed_messages(with_categories=true) %}{% for cat,msg in messages %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}{% endwith %}
+<form method="POST" class="form">
+  <div class="form-row"><label>اسم الموقع</label><input name="site_name" value="{{ settings.site_name }}"></div>
+  <div class="form-row"><label>نص الإعلانات (Marquee)</label><input name="marquee_text" value="{{ settings.marquee_text }}"></div>
+  <div class="form-row"><label>الإعلان الرئيسي</label><input name="announcement" value="{{ settings.announcement }}"></div>
+  <div class="form-row"><label>اللون الرئيسي</label><input type="color" name="main_color" value="{{ settings.main_color }}"></div>
+  <div class="form-row"><label>اللون الثانوي</label><input type="color" name="secondary_color" value="{{ settings.secondary_color }}"></div>
+  <div class="form-row"><label>لون الخلفية</label><input type="color" name="bg_color" value="{{ settings.bg_color }}"></div>
+  <div class="form-row"><label>لون النص</label><input type="color" name="text_color" value="{{ settings.text_color }}"></div>
+  <div class="form-row"><label>وضع الصيانة</label>
+    <select name="maintenance_mode">
+      <option value="off" {% if settings.maintenance_mode=='off' %}selected{% endif %}>off</option>
+      <option value="on" {% if settings.maintenance_mode=='on' %}selected{% endif %}>on</option>
+    </select>
+  </div>
+  <div class="form-row"><label>صيانة تلقائية من</label><input type="time" name="auto_maintenance_from" value="{{ settings.auto_maintenance_from }}"></div>
+  <div class="form-row"><label>صيانة تلقائية إلى</label><input type="time" name="auto_maintenance_to" value="{{ settings.auto_maintenance_to }}"></div>
+  <div class="form-row"><label>حد الطلبات/دقيقة</label><input type="number" name="rate_limit_per_minute" value="{{ settings.rate_limit_per_minute }}"></div>
+  <button type="submit">💾 حفظ</button>
+</form>
+</body></html>
+"""
+
+ADMIN_PLATFORMS_HTML = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head><meta charset="UTF-8"><title>المنصات</title>
+<style>""" + ADMIN_BASE_CSS + """.drag-row{cursor:move}</style></head>
+<body>
+""" + ADMIN_NAV + """
+<h1>📱 إدارة المنصات</h1>
+<h3>➕ إضافة منصة</h3>
+<form method="POST" class="row">
+  <input type="hidden" name="action" value="add">
+  <input name="name" placeholder="اسم المنصة" required>
+  <input name="icon" placeholder="📱" maxlength="4">
+  <input type="color" name="color" value="#00ff88">
+  <input type="number" name="sort_order" value="0" placeholder="ترتيب">
+  <button type="submit">إضافة</button>
+</form>
+<h3>📋 الحالية</h3>
+<table>
+  <tr><th>الأيقونة</th><th>الاسم</th><th>اللون</th><th>الترتيب</th><th>حذف</th></tr>
+  {% for p in platforms %}
+  <tr>
+    <td style="font-size:24px">{{ p.icon }}</td>
+    <td>{{ p.name }}</td>
+    <td><span style="display:inline-block;width:30px;height:20px;background:{{ p.color }};border-radius:3px"></span> {{ p.color }}</td>
+    <td>{{ p.sort_order }}</td>
+    <td>
+      <form method="POST" style="display:inline">
+        <input type="hidden" name="action" value="delete">
+        <input type="hidden" name="id" value="{{ p.id }}">
+        <button class="del-btn" onclick="return confirm('تأكيد؟')">🗑</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+</body></html>
+"""
+
+ADMIN_COMBOS_HTML = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head><meta charset="UTF-8"><title>الكومبوهات</title>
+<style>""" + ADMIN_BASE_CSS + """</style></head>
+<body>
+""" + ADMIN_NAV + """
+<h1>📂 إدارة الكومبوهات</h1>
+{% with messages = get_flashed_messages(with_categories=true) %}{% for cat,msg in messages %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}{% endwith %}
+<div class="card">
+  <h3>📤 رفع ملف كومبو (.txt)</h3>
+  <p style="color:#aaa">الصيغة: <code>platform_name|country_name|number</code></p>
+  <form method="POST" enctype="multipart/form-data">
+    <input type="hidden" name="action" value="upload_combo">
+    <input type="file" name="file" accept=".txt" required>
+    <button type="submit">رفع</button>
+  </form>
+  <pre>Telegram|Yemen|+967700000001
+WhatsApp|Egypt|+201000000002
+Instagram|Saudi|+966500000003</pre>
+</div>
+<div class="card">
+  <h3>➕ إضافة دولة</h3>
+  <form method="POST" class="row">
+    <input type="hidden" name="action" value="add_country">
+    <select name="platform_id" required>
+      <option value="">-- اختر المنصة --</option>
+      {% for p in platforms %}<option value="{{ p.id }}">{{ p.icon }} {{ p.name }}</option>{% endfor %}
+    </select>
+    <input name="name" placeholder="اسم الدولة" required>
+    <input name="code" placeholder="YE" maxlength="3">
+    <input name="flag" placeholder="🇾🇪" maxlength="4">
+    <button type="submit">إضافة</button>
+  </form>
+</div>
+<div class="card">
+  <h3>🌍 الدول الحالية ({{ countries|length }})</h3>
+  <table>
+    <tr><th>المنصة</th><th>الدولة</th><th>الكود</th><th>العلم</th><th>حذف</th></tr>
+    {% for c in countries %}
+    <tr>
+      <td>{{ c.platform_name }}</td>
+      <td>{{ c.name }}</td>
+      <td>{{ c.code }}</td>
+      <td style="font-size:20px">{{ c.flag or '🌍' }}</td>
+      <td>
+        <form method="POST" style="display:inline">
+          <input type="hidden" name="action" value="delete_country">
+          <input type="hidden" name="id" value="{{ c.id }}">
+          <button class="del-btn" onclick="return confirm('سيتم حذف كل الأرقام. متابعة؟')">🗑</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+</body></html>
+"""
+
+ADMIN_USERS_HTML = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head><meta charset="UTF-8"><title>المستخدمون</title>
+<style>""" + ADMIN_BASE_CSS + """</style></head>
+<body>
+""" + ADMIN_NAV + """
+<h1>👥 المستخدمون وحظر IP</h1>
+<div class="card">
+  <h3>🚫 إضافة IP للقائمة السوداء</h3>
+  <form method="POST" class="row">
+    <input type="hidden" name="action" value="blacklist_ip">
+    <input name="ip" placeholder="1.2.3.4" required>
+    <input name="reason" placeholder="السبب" style="flex:1">
+    <button type="submit">حظر</button>
+  </form>
+</div>
+<div class="card">
+  <h3>📋 القائمة السوداء</h3>
+  <table>
+    <tr><th>IP</th><th>السبب</th><th>التاريخ</th><th>إجراء</th></tr>
+    {% for b in blacklisted %}
+    <tr>
+      <td><code>{{ b.ip }}</code></td>
+      <td>{{ b.reason }}</td>
+      <td>{{ b.banned_at }}</td>
+      <td>
+        <form method="POST" style="display:inline">
+          <input type="hidden" name="action" value="unblacklist_ip">
+          <input type="hidden" name="ip" value="{{ b.ip }}">
+          <button class="unban-btn">🔓 فك</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}<tr><td colspan="4" style="text-align:center;color:#888">لا يوجد</td></tr>{% endfor %}
+  </table>
+</div>
+<div class="card">
+  <h3>👥 الزائرون</h3>
+  <table>
+    <tr><th>IP</th><th>آخر زيارة</th><th>الطلبات</th><th>الحالة</th><th>إجراء</th></tr>
+    {% for u in users %}
+    <tr>
+      <td><code>{{ u.ip }}</code></td>
+      <td>{{ u.last_seen }}</td>
+      <td>{{ u.requests_count }}</td>
+      <td>{% if u.banned %}<span class="banned">محظور</span>{% else %}نشط{% endif %}</td>
+      <td>
+        <form method="POST" style="display:inline">
+          <input type="hidden" name="id" value="{{ u.id }}">
+          {% if u.banned %}<input type="hidden" name="action" value="unban"><button class="unban-btn">🔓 فك</button>
+          {% else %}<input type="hidden" name="action" value="ban"><button class="ban-btn" onclick="return confirm('حظر؟')">🚫 حظر</button>{% endif %}
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+</body></html>
+"""
+
+ADMIN_LINKS_HTML = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head><meta charset="UTF-8"><title>الروابط</title>
+<style>""" + ADMIN_BASE_CSS + """</style></head>
+<body>
+""" + ADMIN_NAV + """
+<h1>🔗 إدارة الروابط</h1>
+<form method="POST" class="row">
+  <input type="hidden" name="action" value="add">
+  <input name="label" placeholder="اسم الرابط" required>
+  <input name="url" placeholder="https://..." required style="flex:1">
+  <input name="icon" placeholder="🔗" maxlength="4">
+  <input type="number" name="sort_order" value="0">
+  <button type="submit">إضافة</button>
+</form>
+<table>
+  <tr><th>الأيقونة</th><th>الاسم</th><th>الرابط</th><th>حذف</th></tr>
+  {% for l in links %}
+  <tr>
+    <td style="font-size:20px">{{ l.icon }}</td>
+    <td>{{ l.label }}</td>
+    <td><a href="{{ l.url }}" style="color:#00d4ff" target="_blank">{{ l.url }}</a></td>
+    <td>
+      <form method="POST" style="display:inline">
+        <input type="hidden" name="action" value="delete">
+        <input type="hidden" name="id" value="{{ l.id }}">
+        <button class="del-btn" onclick="return confirm('حذف؟')">🗑</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+</body></html>
+"""
+
+ADMIN_CODES_HTML = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head><meta charset="UTF-8"><title>الأكواد</title>
+<style>""" + ADMIN_BASE_CSS + """</style></head>
+<body>
+""" + ADMIN_NAV + """
+<h1>🔑 إدارة الأكواد</h1>
+<div class="card">
+  <h3>🗑 مسح الأكواد</h3>
+  <form method="POST" class="row">
+    <select name="action">
+      <option value="delete_filter">حذف أقدم من...</option>
+      <option value="delete_all">حذف الكل</option>
+    </select>
+    <input type="number" name="days" value="7" min="1" style="width:80px"> يوم
+    <button type="submit" onclick="return confirm('تأكيد؟')">تنفيذ</button>
+  </form>
+</div>
+<div class="card">
+  <h3>📜 آخر 200 كود</h3>
+  <table>
+    <tr><th>الوقت</th><th>المنصة</th><th>الدولة</th><th>الرقم</th><th>الكود</th><th>المصدر</th><th>حذف</th></tr>
+    {% for c in codes %}
+    <tr>
+      <td>{{ c.received_at }}</td>
+      <td>{{ c.platform }}</td>
+      <td>{{ c.country }}</td>
+      <td><code>{{ c.number }}</code></td>
+      <td style="color:#00ff88;font-weight:bold;font-size:16px">{{ c.code }}</td>
+      <td style="font-size:10px">{{ c.source[:30] }}</td>
+      <td>
+        <form method="POST" style="display:inline">
+          <input type="hidden" name="action" value="delete_id">
+          <input type="hidden" name="id" value="{{ c.id }}">
+          <button class="del-btn">🗑</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+</body></html>
+"""
+
+ADMIN_AUDITS_HTML = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head><meta charset="UTF-8"><title>السجلات</title>
+<style>""" + ADMIN_BASE_CSS + """</style></head>
+<body>
+""" + ADMIN_NAV + """
+<h1>📋 سجل حركات الأدمن (آخر 200)</h1>
+<table>
+  <tr><th>الوقت</th><th>المستخدم</th><th>الحركة</th><th>التفاصيل</th><th>IP</th></tr>
+  {% for a in audits %}
+  <tr>
+    <td>{{ a.created_at }}</td>
+    <td><b style="color:#00ff88">{{ a.admin_user }}</b></td>
+    <td>{{ a.action }}</td>
+    <td>{{ a.details }}</td>
+    <td><code style="font-size:11px">{{ a.ip }}</code></td>
+  </tr>
+  {% else %}<tr><td colspan="5" style="text-align:center;color:#888;padding:30px">لا توجد حركات</td></tr>{% endfor %}
+</table>
+</body></html>
+"""
+
+# =========================================================================
+# 9) Routes
 # =========================================================================
 @app.route("/")
 def index():
@@ -384,18 +1730,13 @@ def index():
         SELECT c.*, p.name as platform_name, p.icon as platform_icon, p.color as platform_color
         FROM countries c JOIN platforms p ON c.platform_id = p.id
     """).fetchall()
-    # إحصائيات حية
     today = datetime.now().strftime("%Y-%m-%d")
     stats = {
-        "today_numbers": conn.execute(
-            "SELECT COUNT(*) as c FROM numbers WHERE date(used_at)=?", (today,)).fetchone()["c"],
-        "today_codes": conn.execute(
-            "SELECT COUNT(*) as c FROM codes WHERE date(received_at)=?", (today,)).fetchone()["c"],
+        "today_numbers": conn.execute("SELECT COUNT(*) as c FROM numbers WHERE date(used_at)=?", (today,)).fetchone()["c"],
+        "today_codes": conn.execute("SELECT COUNT(*) as c FROM codes WHERE date(received_at)=?", (today,)).fetchone()["c"],
         "total_visits": conn.execute("SELECT COALESCE(SUM(requests_count),0) as c FROM users").fetchone()["c"],
-        "active_users": conn.execute(
-            "SELECT COUNT(*) as c FROM users WHERE last_seen > datetime('now','-1 hour')").fetchone()["c"],
+        "active_users": conn.execute("SELECT COUNT(*) as c FROM users WHERE last_seen > datetime('now','-1 hour')").fetchone()["c"],
     }
-    # آخر 5 أكواد (للشريط الجانبي المتحرك)
     recent_codes = conn.execute("""
         SELECT c.code, n.number, p.name as platform, c.received_at
         FROM codes c
@@ -404,7 +1745,6 @@ def index():
         JOIN platforms p ON co.platform_id = p.id
         ORDER BY c.received_at DESC LIMIT 5
     """).fetchall()
-    # Heatmap: أكثر المنصات استخداماً
     heatmap = conn.execute("""
         SELECT p.name, p.color, COUNT(c.id) as uses
         FROM platforms p
@@ -413,7 +1753,6 @@ def index():
         LEFT JOIN codes c ON c.number_id = n.id
         GROUP BY p.id ORDER BY uses DESC
     """).fetchall()
-    # Audience Analytics: الدول الأكثر استخداماً
     audience = conn.execute("""
         SELECT co.name as country, COUNT(c.id) as uses
         FROM countries co
@@ -422,19 +1761,21 @@ def index():
         GROUP BY co.id ORDER BY uses DESC LIMIT 10
     """).fetchall()
     conn.close()
-    return render_template("index.html",
-                           settings=settings, platforms=platforms, countries=countries,
-                           stats=stats, recent_codes=recent_codes, heatmap=heatmap,
-                           audience=audience)
+    return render_template_string(INDEX_HTML, settings=settings, platforms=platforms,
+                                  countries=countries, stats=stats,
+                                  recent_codes=recent_codes, heatmap=heatmap, audience=audience)
 
 @app.route("/maintenance")
 def maintenance():
-    settings = get_settings()
-    return render_template("maintenance.html", settings=settings), 503
+    return render_template_string(MAINTENANCE_HTML), 503
+
+@app.route("/learn-more")
+def learn_more_page():
+    """صفحة 'تعرف على المزيد' كما طلبت"""
+    return render_template_string(LEARN_MORE_HTML)
 
 @app.route("/api/get_number", methods=["POST"])
 def api_get_number():
-    """جلب رقم عشوائي لدولة معيّنة."""
     allowed, msg = security_check()
     if not allowed:
         return jsonify({"ok": False, "error": msg}), 429
@@ -443,32 +1784,23 @@ def api_get_number():
     if not country_id:
         return jsonify({"ok": False, "error": "country_id مطلوب"}), 400
     conn = db()
-    # Random Pick
     num = conn.execute("""
         SELECT * FROM numbers WHERE country_id=? AND status='available' ORDER BY RANDOM() LIMIT 1
     """, (country_id,)).fetchone()
     if not num:
         conn.close()
-        return jsonify({"ok": False, "error": "لا توجد أرقام متاحة لهذه الدولة"}), 404
-    # تحديث الحالة
+        return jsonify({"ok": False, "error": "لا توجد أرقام متاحة"}), 404
     conn.execute("UPDATE numbers SET status='in_use', used_by_ip=?, used_at=CURRENT_TIMESTAMP WHERE id=?",
                  (client_ip(), num["id"]))
     conn.commit()
-    # جلب أي كود سابق لهذا الرقم
     code = conn.execute("SELECT code FROM codes WHERE number_id=? ORDER BY received_at DESC LIMIT 1",
                         (num["id"],)).fetchone()
     conn.close()
-    return jsonify({
-        "ok": True,
-        "number": num["number"],
-        "number_id": num["id"],
-        "code": code["code"] if code else None,
-        "expires_in": 120  # مؤقت 2 دقيقة
-    })
+    return jsonify({"ok": True, "number": num["number"], "number_id": num["id"],
+                    "code": code["code"] if code else None, "expires_in": 120})
 
 @app.route("/api/next_number", methods=["POST"])
 def api_next_number():
-    """جلب رقم آخر في نفس الدولة (تبديل بدون إعادة اختيار)."""
     allowed, msg = security_check()
     if not allowed:
         return jsonify({"ok": False, "error": msg}), 429
@@ -477,15 +1809,13 @@ def api_next_number():
     current_number_id = data.get("current_number_id")
     conn = db()
     if current_number_id:
-        # تحرير الرقم الحالي
         conn.execute("UPDATE numbers SET status='used' WHERE id=?", (current_number_id,))
     num = conn.execute("""
-        SELECT * FROM numbers WHERE country_id=? AND status='available'
-        ORDER BY RANDOM() LIMIT 1
+        SELECT * FROM numbers WHERE country_id=? AND status='available' ORDER BY RANDOM() LIMIT 1
     """, (country_id,)).fetchone()
     if not num:
         conn.close()
-        return jsonify({"ok": False, "error": "لا توجد أرقام أخرى"}), 404
+        return jsonify({"ok": False, "error": "لا توجد أرقام"}), 404
     conn.execute("UPDATE numbers SET status='in_use', used_by_ip=?, used_at=CURRENT_TIMESTAMP WHERE id=?",
                  (client_ip(), num["id"]))
     conn.commit()
@@ -497,7 +1827,6 @@ def api_next_number():
 
 @app.route("/api/check_code/<int:number_id>")
 def api_check_code(number_id):
-    """استعلام عن آخر كود وصل لرقم معيّن (Polling من الفرونت)."""
     conn = db()
     code = conn.execute("SELECT code, received_at FROM codes WHERE number_id=? ORDER BY received_at DESC LIMIT 1",
                         (number_id,)).fetchone()
@@ -506,9 +1835,79 @@ def api_check_code(number_id):
         return jsonify({"ok": True, "code": code["code"], "received_at": code["received_at"]})
     return jsonify({"ok": True, "code": None})
 
+@app.route("/api/feed")
+def api_feed():
+    conn = db()
+    rows = conn.execute("""
+        SELECT c.code, c.received_at, c.source, n.number, co.name as country, co.flag,
+               p.name as platform, p.icon, p.color
+        FROM codes c
+        JOIN numbers n ON c.number_id = n.id
+        JOIN countries co ON n.country_id = co.id
+        JOIN platforms p ON co.platform_id = p.id
+        ORDER BY c.received_at DESC LIMIT 50
+    """).fetchall()
+    conn.close()
+    return jsonify({"ok": True, "feed": [dict(r) for r in rows]})
+
+@app.route("/api/smart_pick", methods=["POST"])
+def api_smart_pick():
+    allowed, msg = security_check()
+    if not allowed:
+        return jsonify({"ok": False, "error": msg}), 429
+    data = request.get_json() or {}
+    platform_pref = data.get("platform")
+    conn = db()
+    q = """
+        SELECT n.id as number_id, n.number, c.code, c.received_at,
+               co.name as country, co.flag, p.name as platform, p.icon, p.color
+        FROM numbers n
+        JOIN countries co ON n.country_id = co.id
+        JOIN platforms p ON co.platform_id = p.id
+        LEFT JOIN codes c ON c.number_id = n.id
+        WHERE c.id IS NOT NULL
+    """
+    params = []
+    if platform_pref:
+        q += " AND LOWER(p.name) LIKE ?"
+        params.append(f"%{platform_pref.lower()}%")
+    q += " ORDER BY c.received_at DESC LIMIT 1"
+    row = conn.execute(q, params).fetchone()
+    if row:
+        conn.execute("UPDATE numbers SET status='in_use', used_by_ip=?, used_at=CURRENT_TIMESTAMP WHERE id=?",
+                     (client_ip(), row["number_id"]))
+        conn.commit()
+        conn.close()
+        return jsonify({"ok": True, "mode": "instant", "number": row["number"],
+                        "number_id": row["number_id"], "code": row["code"],
+                        "country": row["country"], "platform": row["platform"], "expires_in": 120})
+    q2 = """
+        SELECT n.id as number_id, n.number, co.name as country, co.flag,
+               p.name as platform, p.icon, p.color
+        FROM numbers n
+        JOIN countries co ON n.country_id = co.id
+        JOIN platforms p ON co.platform_id = p.id
+        WHERE n.status = 'available'
+    """
+    params2 = []
+    if platform_pref:
+        q2 += " AND LOWER(p.name) LIKE ?"
+        params2.append(f"%{platform_pref.lower()}%")
+    q2 += " ORDER BY RANDOM() LIMIT 1"
+    row = conn.execute(q2, params2).fetchone()
+    if not row:
+        conn.close()
+        return jsonify({"ok": False, "error": "لا توجد أرقام متاحة"}), 404
+    conn.execute("UPDATE numbers SET status='in_use', used_by_ip=?, used_at=CURRENT_TIMESTAMP WHERE id=?",
+                 (client_ip(), row["number_id"]))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "mode": "waiting", "number": row["number"],
+                    "number_id": row["number_id"], "code": None,
+                    "country": row["country"], "platform": row["platform"], "expires_in": 120})
+
 @app.route("/api/search")
 def api_search():
-    """بحث فوري في الأرقام المتاحة (Instant Search)."""
     q = request.args.get("q", "").strip()
     if not q:
         return jsonify({"ok": True, "results": []})
@@ -524,9 +1923,43 @@ def api_search():
     conn.close()
     return jsonify({"ok": True, "results": [dict(r) for r in rows]})
 
-# =========================================================================
-# 8) API عام للمطورين (Feature 45) — يحتاج API Key
-# =========================================================================
+@app.route("/api/links")
+def api_links():
+    conn = db()
+    rows = conn.execute("SELECT * FROM links ORDER BY sort_order").fetchall()
+    conn.close()
+    return jsonify({"ok": True, "links": [dict(r) for r in rows]})
+
+@app.route("/api/countries/<int:platform_id>")
+def api_countries(platform_id):
+    conn = db()
+    rows = conn.execute("""
+        SELECT c.id, c.name, c.code, c.flag,
+               (SELECT COUNT(*) FROM numbers WHERE country_id=c.id AND status='available') as available
+        FROM countries c WHERE c.platform_id=?
+    """, (platform_id,)).fetchall()
+    conn.close()
+    return jsonify({"ok": True, "countries": [dict(r) for r in rows]})
+
+@app.route("/api/ai_test", methods=["POST"])
+def api_ai_test():
+    data = request.get_json() or {}
+    text = data.get("text", "")
+    if not text:
+        return jsonify({"ok": False, "error": "أرسل نص في 'text'"})
+    result = process_smart_message(text, "manual_test")
+    return jsonify({"ok": True, "analysis": result})
+
+@app.route("/api/help", methods=["POST"])
+def api_help():
+    data = request.get_json() or {}
+    msg = data.get("message", "").strip()
+    if not msg:
+        return jsonify({"ok": False, "error": "رسالة فارغة"}), 400
+    audit("GUEST", "help_request", f"{client_ip()} - {msg[:200]}")
+    return jsonify({"ok": True, "message": "✅ تم الإرسال"})
+
+# API عام
 API_KEYS = {"demo_key_change_me": "demo"}
 
 def require_api_key(f):
@@ -566,7 +1999,7 @@ def api_v1_numbers():
     return jsonify({"ok": True, "numbers": [dict(r) for r in rows]})
 
 # =========================================================================
-# 9) نظام تسجيل الدخول للأدمن
+# 10) Admin Panel
 # =========================================================================
 def admin_required(f):
     @wraps(f)
@@ -592,7 +2025,7 @@ def admin_login():
             audit(row["username"], "login", "دخول للوحة التحكم")
             return redirect(url_for("admin_dashboard"))
         flash("بيانات خاطئة", "error")
-    return render_template("admin_login.html")
+    return render_template_string(ADMIN_LOGIN_HTML)
 
 @app.route("/admin/logout")
 def admin_logout():
@@ -600,9 +2033,6 @@ def admin_logout():
     session.clear()
     return redirect(url_for("admin_login"))
 
-# =========================================================================
-# 10) لوحة الأدمن الكاملة
-# =========================================================================
 @app.route("/admin")
 @admin_required
 def admin_dashboard():
@@ -618,8 +2048,8 @@ def admin_dashboard():
     }
     recent_audits = conn.execute("SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 10").fetchall()
     conn.close()
-    return render_template("admin_dashboard.html", stats=stats, audits=recent_audits,
-                           admin_user=session.get("admin_user"), role=session.get("admin_role"))
+    return render_template_string(ADMIN_DASHBOARD_HTML, stats=stats, audits=recent_audits,
+                                  admin_user=session.get("admin_user"), role=session.get("admin_role"))
 
 @app.route("/admin/settings", methods=["GET", "POST"])
 @admin_required
@@ -631,7 +2061,7 @@ def admin_settings():
         audit(session["admin_user"], "settings_update", "تحديث الإعدادات")
         flash("تم الحفظ ✅", "success")
         return redirect(url_for("admin_settings"))
-    return render_template("admin_settings.html", settings=get_settings())
+    return render_template_string(ADMIN_SETTINGS_HTML, settings=get_settings())
 
 @app.route("/admin/platforms", methods=["GET", "POST"])
 @admin_required
@@ -645,26 +2075,18 @@ def admin_platforms():
                           int(request.form.get("sort_order", 0))))
             audit(session["admin_user"], "platform_add", request.form["name"])
         elif action == "delete":
-            pid = request.form["id"]
-            conn.execute("DELETE FROM platforms WHERE id=?", (pid,))
-            audit(session["admin_user"], "platform_delete", pid)
-        elif action == "reorder":
-            # Drag & Drop حفظ
-            order = json.loads(request.form["order"])
-            for idx, pid in enumerate(order):
-                conn.execute("UPDATE platforms SET sort_order=? WHERE id=?", (idx, pid))
-            audit(session["admin_user"], "platform_reorder", str(len(order)) + " منصات")
+            conn.execute("DELETE FROM platforms WHERE id=?", (request.form["id"],))
+            audit(session["admin_user"], "platform_delete", request.form["id"])
         conn.commit()
         conn.close()
         return redirect(url_for("admin_platforms"))
     platforms = conn.execute("SELECT * FROM platforms ORDER BY sort_order").fetchall()
     conn.close()
-    return render_template("admin_platforms.html", platforms=platforms)
+    return render_template_string(ADMIN_PLATFORMS_HTML, platforms=platforms)
 
 @app.route("/admin/combos", methods=["GET", "POST"])
 @admin_required
 def admin_combos():
-    """رفع ملفات TXT — كل سطر: رقم أو platform|country|number"""
     conn = db()
     if request.method == "POST":
         action = request.form.get("action")
@@ -674,26 +2096,23 @@ def admin_combos():
                           request.form["code"], request.form.get("flag", "🌍")))
             audit(session["admin_user"], "country_add", request.form["name"])
         elif action == "delete_country":
-            cid = request.form["id"]
-            conn.execute("DELETE FROM countries WHERE id=?", (cid,))
-            audit(session["admin_user"], "country_delete", cid)
+            conn.execute("DELETE FROM countries WHERE id=?", (request.form["id"],))
+            audit(session["admin_user"], "country_delete", request.form["id"])
         elif action == "upload_combo":
-            # رفع ملف: platform_name|country_name|number per line
             f = request.files.get("file")
             if f:
                 content = f.read().decode("utf-8", errors="ignore")
                 count = 0
                 for line in content.splitlines():
                     line = line.strip()
-                    if not line or line.startswith("#"):
-                        continue
+                    if not line or line.startswith("#"): continue
                     parts = line.split("|")
                     if len(parts) >= 3:
                         p_name, c_name, number = parts[0].strip(), parts[1].strip(), parts[2].strip()
                         p = conn.execute("SELECT id FROM platforms WHERE name=?", (p_name,)).fetchone()
                         if not p:
-                            c = conn.execute("INSERT INTO platforms (name) VALUES (?)", (p_name,))
-                            p_id = c.lastrowid
+                            cr = conn.execute("INSERT INTO platforms (name) VALUES (?)", (p_name,))
+                            p_id = cr.lastrowid
                         else:
                             p_id = p["id"]
                         c = conn.execute("SELECT id FROM countries WHERE platform_id=? AND name=?",
@@ -717,7 +2136,7 @@ def admin_combos():
     """).fetchall()
     platforms = conn.execute("SELECT * FROM platforms ORDER BY name").fetchall()
     conn.close()
-    return render_template("admin_combos.html", countries=countries, platforms=platforms)
+    return render_template_string(ADMIN_COMBOS_HTML, countries=countries, platforms=platforms)
 
 @app.route("/admin/users", methods=["GET", "POST"])
 @admin_required
@@ -729,16 +2148,16 @@ def admin_users():
         ip = request.form.get("ip")
         if action == "ban":
             conn.execute("UPDATE users SET banned=1 WHERE id=?", (uid,))
-            audit(session["admin_user"], "user_ban", f"user_id={uid}")
+            audit(session["admin_user"], "user_ban", f"id={uid}")
         elif action == "unban":
             conn.execute("UPDATE users SET banned=0 WHERE id=?", (uid,))
-            audit(session["admin_user"], "user_unban", f"user_id={uid}")
+            audit(session["admin_user"], "user_unban", f"id={uid}")
         elif action == "blacklist_ip":
-            reason = request.form.get("reason", "حظر من الأدمن")
             try:
-                conn.execute("INSERT OR IGNORE INTO ip_blacklist (ip, reason) VALUES (?, ?)", (ip, reason))
+                conn.execute("INSERT OR IGNORE INTO ip_blacklist (ip, reason) VALUES (?, ?)",
+                             (ip, request.form.get("reason", "")))
                 load_blacklist()
-                audit(session["admin_user"], "ip_blacklist", f"{ip} - {reason}")
+                audit(session["admin_user"], "ip_blacklist", ip)
             except Exception as e:
                 flash(f"خطأ: {e}", "error")
         elif action == "unblacklist_ip":
@@ -749,7 +2168,7 @@ def admin_users():
     users = conn.execute("SELECT * FROM users ORDER BY last_seen DESC LIMIT 100").fetchall()
     blacklisted = conn.execute("SELECT * FROM ip_blacklist ORDER BY banned_at DESC").fetchall()
     conn.close()
-    return render_template("admin_users.html", users=users, blacklisted=blacklisted)
+    return render_template_string(ADMIN_USERS_HTML, users=users, blacklisted=blacklisted)
 
 @app.route("/admin/links", methods=["GET", "POST"])
 @admin_required
@@ -769,7 +2188,7 @@ def admin_links():
         return redirect(url_for("admin_links"))
     links = conn.execute("SELECT * FROM links ORDER BY sort_order").fetchall()
     conn.close()
-    return render_template("admin_links.html", links=links)
+    return render_template_string(ADMIN_LINKS_HTML, links=links)
 
 @app.route("/admin/codes", methods=["GET", "POST"])
 @admin_required
@@ -782,8 +2201,7 @@ def admin_codes():
             audit(session["admin_user"], "codes_delete_all", "")
         elif action == "delete_filter":
             days = int(request.form.get("days", 7))
-            conn.execute("DELETE FROM codes WHERE received_at < datetime('now', ?)",
-                         (f"-{days} days",))
+            conn.execute("DELETE FROM codes WHERE received_at < datetime('now', ?)", (f"-{days} days",))
             audit(session["admin_user"], "codes_delete_filter", f"{days} يوم")
         elif action == "delete_id":
             conn.execute("DELETE FROM codes WHERE id=?", (request.form["id"],))
@@ -797,12 +2215,11 @@ def admin_codes():
         ORDER BY c.received_at DESC LIMIT 200
     """).fetchall()
     conn.close()
-    return render_template("admin_codes.html", codes=codes)
+    return render_template_string(ADMIN_CODES_HTML, codes=codes)
 
 @app.route("/admin/backup")
 @admin_required
 def admin_backup():
-    """تحميل نسخة احتياطية من قاعدة البيانات."""
     audit(session["admin_user"], "backup_download", "")
     return send_file(DB_PATH, as_attachment=True, download_name=f"altazy_backup_{int(time.time())}.db")
 
@@ -819,7 +2236,6 @@ def admin_restore():
 @app.route("/admin/export_csv")
 @admin_required
 def export_csv():
-    """تصدير الأكواد إلى CSV (Feature 40)."""
     conn = db()
     rows = conn.execute("""
         SELECT c.code, n.number, co.name as country, p.name as platform, c.source, c.received_at
@@ -835,9 +2251,8 @@ def export_csv():
     cw.writerow(["Code", "Number", "Country", "Platform", "Source", "Received At"])
     for r in rows:
         cw.writerow([r["code"], r["number"], r["country"], r["platform"], r["source"], r["received_at"]])
-    output = si.getvalue()
     audit(session["admin_user"], "export_csv", f"{len(rows)} أكواد")
-    return Response(output, mimetype="text/csv",
+    return Response(si.getvalue(), mimetype="text/csv",
                     headers={"Content-Disposition": "attachment;filename=codes.csv"})
 
 @app.route("/admin/audits")
@@ -846,58 +2261,25 @@ def admin_audits():
     conn = db()
     rows = conn.execute("SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 200").fetchall()
     conn.close()
-    return render_template("admin_audits.html", audits=rows)
+    return render_template_string(ADMIN_AUDITS_HTML, audits=rows)
 
 # =========================================================================
-# 11) API مساعدة للفرونت (يدعمها الـ JS)
+# 11) التشغيل
 # =========================================================================
-@app.route("/api/links")
-def api_links():
-    conn = db()
-    rows = conn.execute("SELECT * FROM links ORDER BY sort_order").fetchall()
-    conn.close()
-    return jsonify({"ok": True, "links": [dict(r) for r in rows]})
-
-@app.route("/api/countries/<int:platform_id>")
-def api_countries(platform_id):
-    conn = db()
-    rows = conn.execute("""
-        SELECT c.id, c.name, c.code, c.flag,
-               (SELECT COUNT(*) FROM numbers WHERE country_id=c.id AND status='available') as available
-        FROM countries c WHERE c.platform_id=?
-    """, (platform_id,)).fetchall()
-    conn.close()
-    return jsonify({"ok": True, "countries": [dict(r) for r in rows]})
-
-@app.route("/api/help", methods=["POST"])
-def api_help():
-    """إرسال طلب مساعدة للأدمن (Feature 19)."""
-    data = request.get_json() or {}
-    msg = data.get("message", "").strip()
-    if not msg:
-        return jsonify({"ok": False, "error": "رسالة فارغة"}), 400
-    # حفظ في audit كطلب مساعدة
-    audit("GUEST", "help_request", f"{client_ip()} - {msg[:200]}")
-    return jsonify({"ok": True, "message": "✅ تم الإرسال"})
-
-# =========================================================================
-# 12) التشغيل — نقطة البداية
-# =========================================================================
-if __name__ == "__main__":
+if __name__ == '__main__':
     init_db()
     load_blacklist()
-    # تشغيل البوتات في الخلفية
     try:
         start_all_pollers()
     except Exception as e:
-        print(f"[Warning] Pollers failed: {e}")
-    port = int(os.environ.get("PORT", 5000))
+        print(f"[Warning] Pollers: {e}")
+    port = int(os.environ.get('PORT', 5000))
     print(f"""
-========================================================================
-   🚀 Almatry OTP Running on http://localhost:{port}
-   👤 Admin Panel: http://localhost:{port}/admin/login
-   🔑 Default: {ADMIN_USER} / {ADMIN_PASS}
-   📞 Developer: 967733723953
-========================================================================
+╔══════════════════════════════════════════════════════╗
+║   🚀 Almatry OTP — شغال على البورت {port}              ║
+║   🌐 http://localhost:{port}                            ║
+║   🔧 /admin/login — admin / admin123                ║
+║   📞 الدعم: 967733723953                             ║
+╚══════════════════════════════════════════════════════╝
     """)
-    app.run(host="0.0.0.0", port=port, debug=False)
+    app.run(host='0.0.0.0', port=port, debug=False)
