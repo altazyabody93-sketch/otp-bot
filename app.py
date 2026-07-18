@@ -1203,6 +1203,10 @@ main_html = """
                         addOtpToHistory(currentNumber, data.otp, now, currentPlatform);
                         lastSeenOtpTime = data.otp;
                         if (status) status.innerHTML = `<span class="dot"></span> ✅ تم استلام كود!`;
+                        // ✅ [جديد] إشعار بانر أعلى الشاشة + صوت + إشعار متصفح
+                        showTopBanner('🔑 كود جديد!', `الكود: ${data.otp} • الرقم: ${currentNumber}`, '#238636');
+                        if (soundEnabled) playNotificationSound();
+                        showBrowserNotif('🔑 كود جديد', `الكود: ${data.otp}`);
                     }
                 }).catch(()=>{});
             }, 4000);
@@ -1253,7 +1257,7 @@ main_html = """
                         </div>
                         <div style="display:flex; gap:4px;">
                             <button class="copy-btn" onclick="copyText('${o.otp}', this)">نسخ</button>
-                            <button class="delete-btn" onclick="deleteOtp('${o.id}')">🗑️</button>
+                            <!-- ✅ [تعديل] حذف زر الحذف من الواجهة - الحذف من الأدمن فقط -->
                         </div>
                     </div>
                     `).join('')}
@@ -1299,8 +1303,25 @@ main_html = """
         document.addEventListener('DOMContentLoaded', () => {
             initPlatformSelector();
             loadCachedOtps();
+            applyUiSettings();
         });
-    </script>
+
+        // ✅ [جديد] تطبيق إعدادات الواجهة (تكبير/تصغير خط، ألوان، matrix)
+        async function applyUiSettings() {
+            try {
+                const res = await fetch('/admin/api/ui_settings');
+                const s = await res.json();
+                // تكبير/تصغير الخط
+                const scale = parseInt(s.font_scale) || 100;
+                document.documentElement.style.fontSize = (16 * scale / 100) + 'px';
+                // ألوان
+                if (s.primary_color) document.documentElement.style.setProperty('--primary-color', s.primary_color);
+                if (s.accent_color) document.documentElement.style.setProperty('--accent-color', s.accent_color);
+                // matrix
+                const canvas = document.getElementById('matrix-bg');
+                if (canvas) canvas.style.display = s.matrix_enabled === '1' ? 'block' : 'none';
+            } catch(e) {}
+        }
 
     <script>
     // ============ [صوت إشعارات] Web Audio API - نغمة مميزة ============
@@ -1309,6 +1330,35 @@ main_html = """
         try { return new (window.AudioContext || window.webkitAudioContext)(); }
         catch(e) { return null; }
     })();
+
+    // ✅ [جديد] نظام إشعارات المتصفح (Notification API)
+    let browserNotifEnabled = localStorage.getItem('browserNotif') === '1';
+    function requestBrowserNotif() {
+        if (!('Notification' in window)) { alert('❌ المتصفح لا يدعم الإشعارات'); return; }
+        if (Notification.permission === 'granted') { browserNotifEnabled = true; localStorage.setItem('browserNotif','1'); alert('✅ الإشعارات مفعّلة'); }
+        else if (Notification.permission !== 'denied') {
+            Notification.requestPermission().then(perm => {
+                if (perm === 'granted') { browserNotifEnabled = true; localStorage.setItem('browserNotif','1'); new Notification('🚀 المطري OTP', {body: 'تم تفعيل الإشعارات بنجاح!'}); }
+            });
+        }
+    }
+    function showBrowserNotif(title, body) {
+        if (!browserNotifEnabled || !('Notification' in window) || Notification.permission !== 'granted') return;
+        try { new Notification(title, {body: body, icon: '🚀', tag: 'otp-'+Date.now()}); } catch(e) {}
+    }
+
+    // ✅ [جديد] إشعار بانر أعلى الشاشة (دائماً يظهر حتى لو المتصفح ما يدعم Notification)
+    function showTopBanner(title, body, color='#1f6feb') {
+        const banner = document.createElement('div');
+        banner.style.cssText = `position:fixed; top:-80px; left:50%; transform:translateX(-50%); background:linear-gradient(135deg,${color},#388bfd); color:#fff; padding:14px 20px; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,0.4); z-index:99999; max-width:90%; min-width:280px; text-align:center; font-family:'Cairo',sans-serif; transition:top 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);`;
+        banner.innerHTML = `<div style="font-weight:900; font-size:15px; margin-bottom:2px;">${title}</div><div style="font-size:12px; opacity:0.95;">${body}</div>`;
+        document.body.appendChild(banner);
+        requestAnimationFrame(() => { banner.style.top = '12px'; });
+        // تشغيل اهتزاز على الجوال
+        if (navigator.vibrate) try { navigator.vibrate([100, 50, 100]); } catch(e) {}
+        setTimeout(() => { banner.style.top = '-80px'; setTimeout(() => banner.remove(), 400); }, 4000);
+        banner.onclick = () => { banner.style.top = '-80px'; setTimeout(() => banner.remove(), 400); };
+    }
 
     function playNotificationSound() {
         if (!soundEnabled || !audioCtx) return;
@@ -2132,6 +2182,24 @@ def admin_api_change_password():
         ADMIN_PASSWORD = new_pwd
         return jsonify({'ok': True})
     return jsonify({'ok': False})
+
+# ========== ✅ [جديد] APIs إعدادات الواجهة (تكبير خط، إشعار متصفح، ألوان) ==========
+@app.route('/admin/api/ui_settings', methods=['GET', 'POST'])
+def admin_api_ui_settings():
+    if request.method == 'GET':
+        return jsonify({
+            'font_scale': get_setting('font_scale') or '100',
+            'browser_notif': get_setting('browser_notif') or '0',
+            'matrix_enabled': get_setting('matrix_enabled') or '1',
+            'primary_color': get_setting('primary_color') or '#1f6feb',
+            'accent_color': get_setting('accent_color') or '#238636',
+            'sound_default': get_setting('sound_default') or '1'
+        })
+    data = request.json or {}
+    for key in ['font_scale', 'browser_notif', 'matrix_enabled', 'primary_color', 'accent_color', 'sound_default']:
+        if key in data:
+            set_setting(key, str(data[key]))
+    return jsonify({'ok': True})
 
 @app.route('/admin/upload_combo', methods=['POST'])
 def admin_upload_combo():
