@@ -1,18 +1,3 @@
-"""
-========================================================================
-   🔐 Almatry OTP — ملف واحد متكامل (All-in-One)
-   المطوّر: @altazyabody | 📞 967733723953
-   
-   ▶️ التشغيل:  python app.py
-   📦 المتطلبات: pip install flask bcrypt pyTelegramBotAPI requests gunicorn
-   
-   🌐 الرابط: http://localhost:5000
-   🔧 الأدمن: http://localhost:5000/admin/login
-       Username: admin
-       Password: admin123
-========================================================================
-"""
-
 import os
 import re
 import csv
@@ -722,7 +707,7 @@ body {
 #toast-container { position: fixed; top: 20px; left: 20px; z-index: 999; display: flex; flex-direction: column; gap: 10px; }
 .toast { background: var(--bg-color); border-left: 4px solid var(--main-color); padding: 12px 20px; border-radius: 6px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); animation: toast-in 0.3s; }
 .toast.error { border-left-color: #ff4444; }
-@keyframes toast-in { from { transform: translateX(-100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@keyframes toast-in { from { transform: translateX(-100%); opacity: 0; } to { transform: translateX(0%); opacity: 1; } }
 @media (max-width: 768px) {
   .stats-bar { grid-template-columns: repeat(2, 1fr); }
   .platforms-grid { grid-template-columns: repeat(3, 1fr); }
@@ -1176,7 +1161,7 @@ h1{color:#00ff88;font-size:3em;margin:0}
 </body></html>
 """
 
-# صفحة "تعرف على المزيد" اللي طلبتها
+# صفحة "تعرف على المزيد"
 LEARN_MORE_HTML = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -1208,8 +1193,7 @@ li::marker{color:#00ff88}
   </div>
 
   <div class="card">
-    <h2>🎯 المميزات الرئيسية (50 ميزة)</h2>
-    <h3>📦 المرحلة 1: الأساسيات</h3>
+    <h2>🎯 المميزات الرئيسية</h2>
     <ul>
       <li>قاعدة بيانات SQLite خفيفة وسريعة</li>
       <li>نظام كومبوهات ديناميكي (منصات + دول)</li>
@@ -1219,12 +1203,6 @@ li::marker{color:#00ff88}
       <li>تبديل الرقم التالي بدون إعادة اختيار الدولة</li>
       <li>عرض المنصات بأيقونات وألوان مميزة</li>
       <li>جلب أرقام عشوائي لمنع التكرار</li>
-      <li>إحصائيات حية للزوار والأكواد</li>
-      <li>وضعية الصيانة (يدوي + تلقائي)</li>
-    </ul>
-
-    <h3>🎨 المرحلة 2: واجهة المستخدم</h3>
-    <ul>
       <li>وضع الليل والنهار (Dark/Light Mode)</li>
       <li>تكبير وتصغير الخط (A+/A-)</li>
       <li>تأثير سقوط الأرقام (Digit Drop Animation)</li>
@@ -1232,52 +1210,9 @@ li::marker{color:#00ff88}
       <li>شريط أخبار متحرك (Marquee)</li>
       <li>إشعار صوتي (Web Audio API)</li>
       <li>إشعارات سطح المكتب (Push Notifications)</li>
-      <li>قائمة منسدلة جانبية</li>
-      <li>نموذج طلب مساعدة</li>
-      <li>تأثير مطر المصفوفة (Matrix Rain)</li>
-      <li>مطر الأرقام خلف المنصات</li>
-      <li>ضوابط الألوان الحية من لوحة الأدمن</li>
-    </ul>
-
-    <h3>⚙️ المرحلة 3: لوحة الأدمن</h3>
-    <ul>
-      <li>لوحة تحكم بالإحصائيات الحية</li>
-      <li>إدارة الروابط (إعلان/تواصل)</li>
-      <li>رفع ملفات الكومبو (.txt)</li>
-      <li>إدارة المستخدمين (عرض/حظر/فك حظر)</li>
-      <li>مسح الأكواد (كل/حسب الفلتر)</li>
-      <li>نسخ احتياطي واستعادة</li>
-      <li>نظام صلاحيات متعدد (Admin/Moderator)</li>
-      <li>سجل حركات الأدمن (Audit Logs)</li>
-    </ul>
-
-    <h3>🔒 المرحلة 4: الأمان</h3>
-    <ul>
-      <li>Rate Limiting (3 طلبات/دقيقة)</li>
+      <li>لوحة تحكم الأدمن كاملة</li>
       <li>تشفير كلمات السر (bcrypt)</li>
-      <li>حماية من SQL Injection (Parameterized Queries)</li>
-      <li>IP Blacklisting</li>
-      <li>Ban System للمستخدمين</li>
-    </ul>
-
-    <h3>🤖 المرحلة 5: الذكاء الاصطناعي</h3>
-    <ul>
-      <li>بوتات تيليجرام متعددة (Multi-Bot)</li>
-      <li>Channel Mapping (ربط قناة بمنصة)</li>
-      <li>Regex Intelligence (استخراج من أي صيغة)</li>
-      <li>Duplicate Detection (كشف التكرار)</li>
-      <li>تصدير CSV للأكواد</li>
-    </ul>
-
-    <h3>💎 المرحلة 6: الذهبية</h3>
-    <ul>
-      <li>API عام للمطورين</li>
-      <li>Heatmap للمنصات الأكثر استخداماً</li>
-      <li>Drag & Drop لترتيب المنصات</li>
-      <li>Auto Maintenance (صيانة مجدولة)</li>
-      <li>Instant Search (بحث فوري)</li>
-      <li>Audience Analytics (تحليل الجمهور)</li>
-      <li>Smart Pick (اختيار ذكي بدون دولة)</li>
+      <li>IP Blacklisting و Rate Limiting</li>
     </ul>
   </div>
 
@@ -1289,22 +1224,6 @@ li::marker{color:#00ff88}
       <li><b>الرقم</b> (كامل / ناقص / آخر 4 أرقام)</li>
       <li><b>الكود OTP</b> (بأي صيغة)</li>
     </ol>
-    <p>ثم يبحث عن الرقم في قاعدة البيانات بـ 5 مستويات مطابقة:</p>
-    <ol style="padding-right:25px">
-      <li><b>تطابق كامل</b> — الرقم مطابق 100%</li>
-      <li><b>آخر 6 أرقام</b> — لو الرقم ناقص من البداية</li>
-      <li><b>آخر 4 أرقام</b> — لو الرقم مكتوب XXXX1234</li>
-      <li><b>مطابقة بالمنصة</b> — لو فيه اسم منصة بس</li>
-      <li><b>Fallback</b> — أول رقم متاح</li>
-    </ol>
-  </div>
-
-  <div class="card">
-    <h2>🚀 طريقة التشغيل</h2>
-    <p>الملف يعمل مباشرة بعد تثبيت المكتبات:</p>
-    <pre style="background:#000;padding:15px;border-radius:8px;color:#0f0;overflow-x:auto">pip install flask bcrypt pyTelegramBotAPI requests gunicorn
-python app.py</pre>
-    <p>ثم افتح: <code>http://localhost:5000</code></p>
   </div>
 
   <div class="card">
@@ -1771,7 +1690,6 @@ def maintenance():
 
 @app.route("/learn-more")
 def learn_more_page():
-    """صفحة 'تعرف على المزيد' كما طلبت"""
     return render_template_string(LEARN_MORE_HTML)
 
 @app.route("/api/get_number", methods=["POST"])
