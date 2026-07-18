@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔐 تسجيل الدخول - لوحة التحكم</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        
+        body {
+            font-family: 'Cairo', sans-serif;
+            background: linear-gradient(135deg, #0a0e1a, #1a1f2e);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .login-container {
+            background: rgba(17, 24, 39, 0.95);
+            backdrop-filter: blur(20px);
+            padding: 40px;
+            border-radius: 25px;
+            width: 100%;
+            max-width: 400px;
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            box-shadow: 0 0 50px rgba(139, 92, 246, 0.3);
+        }
+        
+        .login-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .login-header h1 {
+            font-size: 28px;
+            font-weight: 900;
+            background: linear-gradient(90deg, #00ffc8, #8b5cf6);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+        
+        .login-header p {
+            color: #9ca3af;
+            font-size: 14px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #cbd5e1;
+            font-weight: 700;
+        }
+        
+        .form-control {
+            width: 100%;
+            padding: 14px 16px;
+            border-radius: 12px;
+            border: 2px solid rgba(255,255,255,0.1);
+            background: rgba(15, 23, 42, 0.8);
+            color: #fff;
+            font-family: 'Cairo', sans-serif;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+        
+        .form-control:focus {
+            border-color: #00ffc8;
+            box-shadow: 0 0 20px rgba(0,255,200,0.3);
+            outline: none;
+        }
+        
+        .btn-login {
+            width: 100%;
+            padding: 16px;
+            border: none;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #00ff88, #00d2ff);
+            color: #0a0e1a;
+            font-size: 18px;
+            font-weight: 900;
+            font-family: 'Cairo', sans-serif;
+            cursor: pointer;
+            box-shadow: 0 0 25px rgba(0,255,136,0.5);
+            transition: all 0.3s;
+            margin-top: 10px;
+        }
+        
+        .btn-login:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 35px rgba(0,255,136,0.7);
+        }
+        
+        .error-msg {
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid #ef4444;
+            color: #ef4444;
+            padding: 12px;
+            border-radius: 10px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .back-link {
+            display: block;
+            text-align: center;
+            margin-top: 20px;
+            color: #9ca3af;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        
+        .back-link:hover {
+            color: #00ffc8;
+        }
+        
+        .lock-icon {
+            font-size: 50px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="error-msg">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        <div class="login-header">
+            <div class="lock-icon">🔐</div>
+            <h1>لوحة التحكم</h1>
+            <p>موقع المطري OTP - إدارة الموقع</p>
+        </div>
+        
+        <form method="POST">
+            <div class="form-group">
+                <label>كلمة السر</label>
+                <input type="password" name="password" class="form-control" placeholder="أدخل كلمة السر..." required autofocus>
+            </div>
+            
+            <button type="submit" class="btn-login">
+                <i class="fas fa-sign-in-alt"></i> دخول
+            </button>
+        </form>
+        
+        <a href="/" class="back-link">
+            <i class="fas fa-arrow-right"></i> العودة للموقع
+        </a>
+    </div>
+</body>
+</html>
