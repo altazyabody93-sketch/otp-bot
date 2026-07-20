@@ -254,6 +254,20 @@ def init_db():
         admin_user TEXT, action TEXT, details TEXT, ip TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS code_pulls (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        number_id INTEGER, ip TEXT,
+        pulled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(number_id) REFERENCES numbers(id) ON DELETE CASCADE
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS custom_colors (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        element TEXT UNIQUE, color TEXT
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS custom_texts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        element TEXT UNIQUE, text TEXT
+    )''')
     # 4. إدراج الأدمن الافتراضي
     c.execute("SELECT id FROM admins WHERE username=?", (ADMIN_USER,))
     if not c.fetchone():
@@ -1811,6 +1825,62 @@ ADMIN_AUDITS_HTML = """
   </tr>
   {% else %}<tr><td colspan="5" style="text-align:center;color:#888;padding:30px">لا توجد حركات</td></tr>{% endfor %}
 </table>
+</body></html>
+"""
+
+MAINTENANCE_HTML = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head><meta charset="UTF-8"><title>صيانة</title>
+<style>
+body{margin:0;padding:0;height:100vh;display:flex;align-items:center;justify-content:center;
+background:linear-gradient(135deg,#0a0e1a,#1a1a2e);color:#e6f1ff;font-family:Tahoma,Arial,sans-serif;text-align:center}
+.box{padding:40px;border:2px solid #00ff88;border-radius:15px;background:rgba(0,255,136,0.05);max-width:500px}
+h1{color:#00ff88;font-size:2.5em;margin-bottom:20px}
+p{font-size:1.2em;line-height:1.6}
+.icon{font-size:5em;margin-bottom:20px}
+</style></head>
+<body>
+<div class="box">
+  <div class="icon">🔧</div>
+  <h1>الموقع تحت الصيانة</h1>
+  <p>نعمل على تحسين الخدمة حالياً. سنعود قريباً إن شاء الله.</p>
+  <p style="margin-top:20px;color:#00d4ff">📞 للدعم: 967733723953</p>
+</div>
+</body></html>
+"""
+
+LEARN_MORE_HTML = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head><meta charset="UTF-8"><title>تعرف على المزيد</title>
+<style>
+body{margin:0;padding:20px;min-height:100vh;background:#0a0e1a;color:#e6f1ff;font-family:Tahoma,Arial,sans-serif;line-height:1.8}
+.wrap{max-width:800px;margin:0 auto}
+h1{color:#00ff88;text-align:center;margin-bottom:30px}
+h2{color:#00d4ff;margin-top:30px}
+.card{background:rgba(255,255,255,0.05);padding:20px;border-radius:10px;margin-bottom:20px;border-right:3px solid #00ff88}
+a.btn{display:inline-block;padding:12px 24px;background:#00ff88;color:#000;text-decoration:none;border-radius:8px;font-weight:bold;margin-top:20px}
+</style></head>
+<body>
+<div class="wrap">
+  <h1>📖 تعرف على المزيد</h1>
+  <div class="card">
+    <h2>⚡ ما هو الاستلام الذكي؟</h2>
+    <p>نظام ذكي يختار لك أفضل رقم متاح من المنصة المختارة مع الكود تلقائياً من القنوات.</p>
+  </div>
+  <div class="card">
+    <h2>🔐 كيف نضمن الخصوصية؟</h2>
+    <p>أرقامنا مؤقتة وتُستخدم مرة واحدة فقط. لا نحفظ أي بيانات شخصية.</p>
+  </div>
+  <div class="card">
+    <h2>🌍 الدول المدعومة</h2>
+    <p>ندعم أكثر من 90 دولة حول العالم مع كافة المنصات الشهيرة.</p>
+  </div>
+  <div style="text-align:center">
+    <a href="/" class="btn">🏠 العودة للرئيسية</a>
+  </div>
+</div>
 </body></html>
 """
 
