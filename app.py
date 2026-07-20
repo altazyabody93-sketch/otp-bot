@@ -12,7 +12,105 @@
        Password: admin123
 ========================================================================
 """
+# ==========================================
+# 🌍 قائمة كل دول العالم (محدثة وكاملة)
+# ==========================================
+COUNTRY_DATA = {
+    "966": {"n": "السعودية", "f": "🇸🇦"},
+    "971": {"n": "الإمارات", "f": "🇦🇪"},
+    "20": {"n": "مصر", "f": "🇪🇬"},
+    "1": {"n": "الولايات المتحدة", "f": "🇺🇸"},
+    "44": {"n": "بريطانيا", "f": "🇬🇧"},
+    "90": {"n": "تركيا", "f": "🇹🇷"},
+    "91": {"n": "الهند", "f": "🇮🇳"},
+    "49": {"n": "ألمانيا", "f": "🇩🇪"},
+    "7": {"n": "روسيا", "f": "🇷🇺"},
+    "33": {"n": "فرنسا", "f": "🇫🇷"},
+    "34": {"n": "إسبانيا", "f": "🇪🇸"},
+    "39": {"n": "إيطاليا", "f": "🇮🇹"},
+    "212": {"n": "المغرب", "f": "🇲🇦"},
+    "213": {"n": "الجزائر", "f": "🇩🇿"},
+    "216": {"n": "تونس", "f": "🇹🇳"},
+    "218": {"n": "ليبيا", "f": "🇱🇾"},
+    "92": {"n": "باكستان", "f": "🇵🇰"},
+    "93": {"n": "أفغانستان", "f": "🇦🇫"},
+    "27": {"n": "جنوب أفريقيا", "f": "🇿🇦"},
+    "972": {"n": "إسرائيل", "f": "🇮🇱"},
+    "973": {"n": "البحرين", "f": "🇧🇭"},
+    "974": {"n": "قطر", "f": "🇶🇦"},
+    "968": {"n": "عمان", "f": "🇴🇲"},
+    "970": {"n": "فلسطين", "f": "🇵🇸"},
+    "52": {"n": "المكسيك", "f": "🇲🇽"},
+    "55": {"n": "البرازيل", "f": "🇧🇷"},
+    "54": {"n": "الأرجنتين", "f": "🇦🇷"},
+    "56": {"n": "تشيلي", "f": "🇨🇱"},
+    "57": {"n": "كولومبيا", "f": "🇨🇴"},
+    "51": {"n": "بيرو", "f": "🇵🇪"},
+    "58": {"n": "فنزويلا", "f": "🇻🇪"},
+    "81": {"n": "اليابان", "f": "🇯🇵"},
+    "82": {"n": "كوريا الجنوبية", "f": "🇰🇷"},
+    "86": {"n": "الصين", "f": "🇨🇳"},
+    "63": {"n": "الفلبين", "f": "🇵🇭"},
+    "62": {"n": "إندونيسيا", "f": "🇮🇩"},
+    "60": {"n": "ماليزيا", "f": "🇲🇾"},
+    "65": {"n": "سنغافورة", "f": "🇸🇬"},
+    "66": {"n": "تايلاند", "f": "🇹🇭"},
+    "84": {"n": "فيتنام", "f": "🇻🇳"},
+    "31": {"n": "هولندا", "f": "🇳🇱"},
+    "32": {"n": "بلجيكا", "f": "🇧🇪"},
+    "41": {"n": "سويسرا", "f": "🇨🇭"},
+    "43": {"n": "النمسا", "f": "🇦🇹"},
+    "45": {"n": "الدنمارك", "f": "🇩🇰"},
+    "46": {"n": "السويد", "f": "🇸🇪"},
+    "47": {"n": "النرويج", "f": "🇳🇴"},
+    "48": {"n": "بولندا", "f": "🇵🇱"},
+    "30": {"n": "اليونان", "f": "🇬🇷"},
+    "351": {"n": "البرتغال", "f": "🇵🇹"},
+    "353": {"n": "أيرلندا", "f": "🇮🇪"},
+    "354": {"n": "آيسلندا", "f": "🇮🇸"},
+    "64": {"n": "نيوزيلندا", "f": "🇳🇿"},
+    "61": {"n": "أستراليا", "f": "🇦🇺"},
+    "40": {"n": "رومانيا", "f": "🇷🇴"},
+    "36": {"n": "المجر", "f": "🇭🇺"},
+    "420": {"n": "التشيك", "f": "🇨🇿"},
+    "421": {"n": "سلوفاكيا", "f": "🇸🇰"},
+    "380": {"n": "أوكرانيا", "f": "🇺🇦"},
+    "381": {"n": "صربيا", "f": "🇷🇸"},
+    "385": {"n": "كرواتيا", "f": "🇭🇷"},
+    "386": {"n": "سلوفينيا", "f": "🇸🇮"},
+    "387": {"n": "البوسنة", "f": "🇧🇦"},
+    "389": {"n": "مقدونيا", "f": "🇲🇰"},
+    "375": {"n": "بيلاروس", "f": "🇧🇾"},
+    "370": {"n": "ليتوانيا", "f": "🇱🇹"},
+    "371": {"n": "لاتفيا", "f": "🇱🇻"},
+    "372": {"n": "إستونيا", "f": "🇪🇪"},
+    "373": {"n": "مولدوفا", "f": "🇲🇩"},
+    "374": {"n": "أرمينيا", "f": "🇦🇲"},
+    "995": {"n": "جورجيا", "f": "🇬🇪"},
+    "994": {"n": "أذربيجان", "f": "🇦🇿"},
+    "992": {"n": "طاجيكستان", "f": "🇹🇯"},
+    "993": {"n": "تركمانستان", "f": "🇹🇲"},
+    "998": {"n": "أوزبكستان", "f": "🇺🇿"},
+    "996": {"n": "قرغيزستان", "f": "🇰🇬"},
+    "975": {"n": "بوتان", "f": "🇧🇹"},
+    "976": {"n": "منغوليا", "f": "🇲🇳"},
+    "977": {"n": "نيبال", "f": "🇳🇵"},
+    "94": {"n": "سريلانكا", "f": "🇱🇰"},
+    "95": {"n": "ميانمار", "f": "🇲🇲"},
+    "856": {"n": "لاوس", "f": "🇱🇦"},
+    "855": {"n": "كمبوديا", "f": "🇰🇭"},
+    "960": {"n": "جزر المالديف", "f": "🇲🇻"},
+    "961": {"n": "لبنان", "f": "🇱🇧"},
+    "962": {"n": "الأردن", "f": "🇯🇴"},
+    "963": {"n": "سوريا", "f": "🇸🇾"},
+    "964": {"n": "العراق", "f": "🇮🇶"},
+    "965": {"n": "الكويت", "f": "🇰🇼"},
+    "967": {"n": "اليمن", "f": "🇾🇪"},
+}
 
+def get_country_info(code):
+    info = COUNTRY_DATA.get(code)
+    return (info["n"], info["f"]) if info else ("أخرى", "🌍")
 import os
 import re
 import csv
@@ -90,7 +188,7 @@ DEFAULT_SETTINGS = {
 }
 
 # =========================================================================
-# 2) قاعدة البيانات
+# 2) قاعدة البيانات (الجزء المصلح)
 # =========================================================================
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "altazy.db")
 
@@ -104,10 +202,14 @@ def db():
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    # إنشاء الجداول الأساسية
+    # 1. إنشاء جدول الإعدادات أولاً (مهم جداً عشان ما يطلع خطأ)
     c.execute('''CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY, value TEXT
     )''')
+    # 2. إدراج الإعدادات الافتراضية فوراً
+    for k, v in DEFAULT_SETTINGS.items():
+        c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (k, v))
+    # 3. إنشاء باقي الجداول
     c.execute('''CREATE TABLE IF NOT EXISTS platforms (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT UNIQUE, icon TEXT, color TEXT, sort_order INTEGER DEFAULT 0
@@ -152,16 +254,13 @@ def init_db():
         admin_user TEXT, action TEXT, details TEXT, ip TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
-    # إدراج الإعدادات الافتراضية
-    for k, v in DEFAULT_SETTINGS.items():
-        c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (k, v))
-    # إدراج الأدمن الافتراضي
+    # 4. إدراج الأدمن الافتراضي
     c.execute("SELECT id FROM admins WHERE username=?", (ADMIN_USER,))
     if not c.fetchone():
         ph = bcrypt.hashpw(ADMIN_PASS.encode(), bcrypt.gensalt())
         c.execute("INSERT INTO admins (username, password_hash, role) VALUES (?, ?, 'admin')",
                   (ADMIN_USER, ph))
-    # المنصات الافتراضية
+    # 5. المنصات الافتراضية
     defaults = [
         ("Telegram", "📨", "#0088cc", 1),
         ("WhatsApp", "💬", "#25d366", 2),
@@ -173,7 +272,7 @@ def init_db():
     for n, i, col, so in defaults:
         c.execute("INSERT OR IGNORE INTO platforms (name, icon, color, sort_order) VALUES (?, ?, ?, ?)",
                   (n, i, col, so))
-    # الروابط الافتراضية
+    # 6. الروابط الافتراضية
     default_links = [
         ("المطور واتساب", "https://wa.me/967733723953", "📞", 1),
         ("قناة السحب", "https://t.me/jsjsgsjsvh", "📢", 2),
@@ -187,15 +286,8 @@ def init_db():
 
 def get_settings():
     conn = db()
-    # 1. أتأكد إن الجدول موجود (السطر اللي أنت ضفته)
-    c = conn.cursor()
-    c.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
-    
-    # 2. أجيب البيانات من الجدول
-    rows = c.execute("SELECT key, value FROM settings").fetchall()
+    rows = conn.execute("SELECT key, value FROM settings").fetchall()
     conn.close()
-    
-    # 3. أرجع الإعدادات
     s = dict(DEFAULT_SETTINGS)
     s.update({r['key']: r['value'] for r in rows})
     return s
@@ -1323,174 +1415,6 @@ startDigitRain();
 </script>
 </body>
 </html>
-"""
-
-
-
-MAINTENANCE_HTML = """
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head><meta charset="UTF-8"><title>صيانة</title>
-<style>
-body{margin:0;background:#0a0e1a;color:#e6f1ff;font-family:Tahoma,Arial,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh}
-.box{text-align:center;padding:40px;border:2px solid #00ff88;border-radius:15px;max-width:500px;background:rgba(0,255,136,0.05)}
-h1{color:#00ff88;font-size:3em;margin:0}
-.btn{display:inline-block;margin-top:20px;padding:10px 25px;background:#00ff88;color:#000;text-decoration:none;border-radius:8px;font-weight:bold}
-</style></head>
-<body>
-<div class="box">
-  <h1>🔧</h1>
-  <h1 style="font-size:1.5em">الموقع تحت الصيانة</h1>
-  <p>سنعود قريباً — للدعم: 967733723953</p>
-  <a href="https://wa.me/967733723953" class="btn">📞 تواصل واتساب</a>
-</div>
-</body></html>
-"""
-
-# صفحة "تعرف على المزيد" اللي طلبتها
-LEARN_MORE_HTML = """
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head><meta charset="UTF-8"><title>تعرف على المزيد</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0;font-family:Tahoma,Arial,sans-serif}
-body{background:linear-gradient(135deg,#0a0e1a 0%,#1a1f3a 100%);color:#e6f1ff;min-height:100vh;padding:20px}
-.wrap{max-width:900px;margin:0 auto}
-h1{color:#00ff88;text-align:center;margin-bottom:30px;font-size:2em}
-h2{color:#00d4ff;margin:25px 0 15px;border-bottom:2px solid #00d4ff;padding-bottom:5px}
-h3{color:#00ff88;margin:15px 0 8px}
-p,li{line-height:1.8;color:#cfd8e3;margin-bottom:10px}
-ul{padding-right:25px;margin-bottom:15px}
-li::marker{color:#00ff88}
-.card{background:rgba(255,255,255,0.05);padding:20px;border-radius:10px;margin-bottom:15px;border-right:3px solid #00ff88}
-.btn{display:inline-block;margin:10px 5px;padding:10px 20px;background:#00ff88;color:#000;text-decoration:none;border-radius:8px;font-weight:bold}
-.btn.alt{background:#00d4ff}
-.back{color:#aaa;text-decoration:none;display:inline-block;margin-bottom:20px}
-</style></head>
-<body>
-<div class="wrap">
-  <a href="/" class="back">← العودة للرئيسية</a>
-  <h1>🔐 تعرف على المطري OTP</h1>
-
-  <div class="card">
-    <h2>ما هو هذا الموقع؟</h2>
-    <p>موقع <b>المطري OTP</b> هو نظام متكامل لاستقبال أكواد التحقق (OTP) من منصات مختلفة مثل تيليجرام وواتساب وانستقرام وغيرها.</p>
-    <p>يستخدم الموقع <b>بوتات تيليجرام</b> لمراقبة قنوات السحب و<b>محرك ذكاء اصطناعي</b> لاستخراج الأكواد والأرقام تلقائياً من أي صيغة رسالة.</p>
-  </div>
-
-  <div class="card">
-    <h2>🎯 المميزات الرئيسية (50 ميزة)</h2>
-    <h3>📦 المرحلة 1: الأساسيات</h3>
-    <ul>
-      <li>قاعدة بيانات SQLite خفيفة وسريعة</li>
-      <li>نظام كومبوهات ديناميكي (منصات + دول)</li>
-      <li>سحب تلقائي للأكواد من بوتات تيليجرام</li>
-      <li>نسخ رقم/كود بنقرة واحدة (Clipboard API)</li>
-      <li>مؤقت انتهاء صلاحية الرقم</li>
-      <li>تبديل الرقم التالي بدون إعادة اختيار الدولة</li>
-      <li>عرض المنصات بأيقونات وألوان مميزة</li>
-      <li>جلب أرقام عشوائي لمنع التكرار</li>
-      <li>إحصائيات حية للزوار والأكواد</li>
-      <li>وضعية الصيانة (يدوي + تلقائي)</li>
-    </ul>
-
-    <h3>🎨 المرحلة 2: واجهة المستخدم</h3>
-    <ul>
-      <li>وضع الليل والنهار (Dark/Light Mode)</li>
-      <li>تكبير وتصغير الخط (A+/A-)</li>
-      <li>تأثير سقوط الأرقام (Digit Drop Animation)</li>
-      <li>تصميم متجاوب 100% (Mobile First)</li>
-      <li>شريط أخبار متحرك (Marquee)</li>
-      <li>إشعار صوتي (Web Audio API)</li>
-      <li>إشعارات سطح المكتب (Push Notifications)</li>
-      <li>قائمة منسدلة جانبية</li>
-      <li>نموذج طلب مساعدة</li>
-      <li>تأثير مطر المصفوفة (Matrix Rain)</li>
-      <li>مطر الأرقام خلف المنصات</li>
-      <li>ضوابط الألوان الحية من لوحة الأدمن</li>
-    </ul>
-
-    <h3>⚙️ المرحلة 3: لوحة الأدمن</h3>
-    <ul>
-      <li>لوحة تحكم بالإحصائيات الحية</li>
-      <li>إدارة الروابط (إعلان/تواصل)</li>
-      <li>رفع ملفات الكومبو (.txt)</li>
-      <li>إدارة المستخدمين (عرض/حظر/فك حظر)</li>
-      <li>مسح الأكواد (كل/حسب الفلتر)</li>
-      <li>نسخ احتياطي واستعادة</li>
-      <li>نظام صلاحيات متعدد (Admin/Moderator)</li>
-      <li>سجل حركات الأدمن (Audit Logs)</li>
-    </ul>
-
-    <h3>🔒 المرحلة 4: الأمان</h3>
-    <ul>
-      <li>Rate Limiting (3 طلبات/دقيقة)</li>
-      <li>تشفير كلمات السر (bcrypt)</li>
-      <li>حماية من SQL Injection (Parameterized Queries)</li>
-      <li>IP Blacklisting</li>
-      <li>Ban System للمستخدمين</li>
-    </ul>
-
-    <h3>🤖 المرحلة 5: الذكاء الاصطناعي</h3>
-    <ul>
-      <li>بوتات تيليجرام متعددة (Multi-Bot)</li>
-      <li>Channel Mapping (ربط قناة بمنصة)</li>
-      <li>Regex Intelligence (استخراج من أي صيغة)</li>
-      <li>Duplicate Detection (كشف التكرار)</li>
-      <li>تصدير CSV للأكواد</li>
-    </ul>
-
-    <h3>💎 المرحلة 6: الذهبية</h3>
-    <ul>
-      <li>API عام للمطورين</li>
-      <li>Heatmap للمنصات الأكثر استخداماً</li>
-      <li>Drag & Drop لترتيب المنصات</li>
-      <li>Auto Maintenance (صيانة مجدولة)</li>
-      <li>Instant Search (بحث فوري)</li>
-      <li>Audience Analytics (تحليل الجمهور)</li>
-      <li>Smart Pick (اختيار ذكي بدون دولة)</li>
-    </ul>
-  </div>
-
-  <div class="card">
-    <h2>🧠 كيف يعمل المحرك الذكي؟</h2>
-    <p>المحرك يحلل أي رسالة ويستخرج منها 3 حاجات:</p>
-    <ol style="padding-right:25px">
-      <li><b>اسم المنصة</b> (Telegram, WhatsApp, Instagram...) بالعربي والإنجليزي</li>
-      <li><b>الرقم</b> (كامل / ناقص / آخر 4 أرقام)</li>
-      <li><b>الكود OTP</b> (بأي صيغة)</li>
-    </ol>
-    <p>ثم يبحث عن الرقم في قاعدة البيانات بـ 5 مستويات مطابقة:</p>
-    <ol style="padding-right:25px">
-      <li><b>تطابق كامل</b> — الرقم مطابق 100%</li>
-      <li><b>آخر 6 أرقام</b> — لو الرقم ناقص من البداية</li>
-      <li><b>آخر 4 أرقام</b> — لو الرقم مكتوب XXXX1234</li>
-      <li><b>مطابقة بالمنصة</b> — لو فيه اسم منصة بس</li>
-      <li><b>Fallback</b> — أول رقم متاح</li>
-    </ol>
-  </div>
-
-  <div class="card">
-    <h2>🚀 طريقة التشغيل</h2>
-    <p>الملف يعمل مباشرة بعد تثبيت المكتبات:</p>
-    <pre style="background:#000;padding:15px;border-radius:8px;color:#0f0;overflow-x:auto">pip install flask bcrypt pyTelegramBotAPI requests gunicorn
-python app.py</pre>
-    <p>ثم افتح: <code>http://localhost:5000</code></p>
-  </div>
-
-  <div class="card">
-    <h2>📞 تواصل معنا</h2>
-    <p>المطوّر: <b>@altazyabody</b></p>
-    <p>واتساب: <b>967733723953</b></p>
-    <p>قناة السحب: <b>@jsjsgsjsvh</b></p>
-    <a href="https://wa.me/967733723953" class="btn">📞 واتساب</a>
-    <a href="https://t.me/altazyabody" class="btn alt">💬 تيليجرام</a>
-    <a href="/admin/login" class="btn alt">🔧 دخول الأدمن</a>
-  </div>
-
-  <p style="text-align:center;color:#888;margin-top:30px">© 2026 Almatry OTP — جميع الحقوق محفوظة</p>
-</div>
-</body></html>
 """
 
 # =========================================================================
