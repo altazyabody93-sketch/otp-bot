@@ -2644,11 +2644,16 @@ def admin_audits():
 init_db()
 load_blacklist()
 
+# تعطيل البوتات في gunicorn لتفادي 409 Conflict (لما يكون فيه أكتر من worker)
+# شغّلها محلياً بـ: python app.py
+DISABLE_POLLERS = os.environ.get("DISABLE_POLLERS", "0")
+
 if __name__ == '__main__':
-    try:
-        start_all_pollers()
-    except Exception as e:
-        print(f"[Warning] Pollers: {e}")
+    if DISABLE_POLLERS != "1":
+        try:
+            start_all_pollers()
+        except Exception as e:
+            print(f"[Warning] Pollers: {e}")
     port = int(os.environ.get('PORT', 5000))
     print(f"""
 ╔══════════════════════════════════════════════════════╗
@@ -2660,8 +2665,12 @@ if __name__ == '__main__':
     """)
     app.run(host='0.0.0.0', port=port, debug=False)
 else:
-    # عند التشغيل عبر gunicorn: شغّل الـ pollers في الخلفية
-    try:
-        start_all_pollers()
-    except Exception as e:
-        print(f"[Warning] Pollers (gunicorn): {e}")
+    # عند التشغيل عبر gunicorn: لا تشغّل البوتات افتراضياً لتفادي 409
+    # (شغّلها عبر متغير ENABLE_POLLERS=1 في Render Environment لو تبيها)
+    if os.environ.get("ENABLE_POLLERS") == "1":
+        try:
+            start_all_pollers()
+        except Exception as e:
+            print(f"[Warning] Pollers (gunicorn): {e}")
+    else:
+        print("[Info] Telegram pollers disabled (set ENABLE_POLLERS=1 to enable)")
