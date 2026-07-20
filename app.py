@@ -580,7 +580,7 @@ def start_poller(bot_config):
         print(f"[Poller] 🧠 Smart poller started for {channel}")
         while poller_running.is_set():
             try:
-                bot.infinity_polling(timeout=30, long_polling_timeout=20, non_stop=False)
+                bot.infinity_polling(timeout=30, long_polling_timeout=20)
             except Exception as e:
                 print(f"[Poller Retry] {e} — restarting in 5s")
                 time.sleep(5)
@@ -2640,9 +2640,11 @@ def admin_audits():
 # =========================================================================
 # 11) التشغيل
 # =========================================================================
+# تشغيل init_db و load_blacklist تلقائياً عند الاستيراد (مهم لـ gunicorn)
+init_db()
+load_blacklist()
+
 if __name__ == '__main__':
-    init_db()
-    load_blacklist()
     try:
         start_all_pollers()
     except Exception as e:
@@ -2657,3 +2659,9 @@ if __name__ == '__main__':
 ╚══════════════════════════════════════════════════════╝
     """)
     app.run(host='0.0.0.0', port=port, debug=False)
+else:
+    # عند التشغيل عبر gunicorn: شغّل الـ pollers في الخلفية
+    try:
+        start_all_pollers()
+    except Exception as e:
+        print(f"[Warning] Pollers (gunicorn): {e}")
