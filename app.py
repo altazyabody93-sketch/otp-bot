@@ -187,10 +187,17 @@ def init_db():
 
 def get_settings():
     conn = db()
-    rows = conn.execute("SELECT key, value FROM settings").fetchall()
+    # 1. أتأكد إن الجدول موجود (السطر اللي أنت ضفته)
+    c = conn.cursor()
+    c.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
+    
+    # 2. أجيب البيانات من الجدول
+    rows = c.execute("SELECT key, value FROM settings").fetchall()
     conn.close()
+    
+    # 3. أرجع الإعدادات
     s = dict(DEFAULT_SETTINGS)
-    s.update({r["key"]: r["value"] for r in rows})
+    s.update({r['key']: r['value'] for r in rows})
     return s
 
 def set_setting(key, value):
