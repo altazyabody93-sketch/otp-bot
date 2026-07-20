@@ -102,75 +102,66 @@ def db():
     return conn
 
 def init_db():
-    conn = db()
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("""CREATE TABLE IF NOT EXISTS settings (
+    # إنشاء الجداول الأساسية
+    c.execute('''CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY, value TEXT
-    )""")
-    c.execute("""CREATE TABLE IF NOT EXISTS platforms (
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS platforms (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT UNIQUE, icon TEXT, color TEXT, sort_order INTEGER DEFAULT 0
-    )""")
-    c.execute("""CREATE TABLE IF NOT EXISTS countries (
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS countries (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         platform_id INTEGER, name TEXT, code TEXT, flag TEXT,
         FOREIGN KEY(platform_id) REFERENCES platforms(id) ON DELETE CASCADE
-    )""")
-    c.execute("""CREATE TABLE IF NOT EXISTS numbers (
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS numbers (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         country_id INTEGER, number TEXT, status TEXT DEFAULT 'available',
         used_by_ip TEXT, used_at TIMESTAMP,
         FOREIGN KEY(country_id) REFERENCES countries(id) ON DELETE CASCADE
-    )""")
-    c.execute("""CREATE TABLE IF NOT EXISTS codes (
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS codes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         number_id INTEGER, code TEXT, message TEXT, source TEXT,
         received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(number_id) REFERENCES numbers(id) ON DELETE CASCADE
-    )""")
-    c.execute("""CREATE TABLE IF NOT EXISTS users (
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         ip TEXT, first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         last_seen TIMESTAMP, requests_count INTEGER DEFAULT 0, banned INTEGER DEFAULT 0
-    )""")
-    c.execute("""CREATE TABLE IF NOT EXISTS admins (
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS admins (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE, password_hash TEXT, role TEXT DEFAULT 'moderator',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )""")
-    c.execute("""CREATE TABLE IF NOT EXISTS links (
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS links (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         label TEXT, url TEXT, icon TEXT, sort_order INTEGER DEFAULT 0
-    )""")
-    c.execute("""CREATE TABLE IF NOT EXISTS ip_blacklist (
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS ip_blacklist (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         ip TEXT UNIQUE, reason TEXT, banned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )""")
-    c.execute("""CREATE TABLE IF NOT EXISTS audit_logs (
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS audit_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         admin_user TEXT, action TEXT, details TEXT, ip TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )""")
-    # جدول ألوان مخصصة لكل عنصر
-    c.execute("""CREATE TABLE IF NOT EXISTS custom_colors (
-        element TEXT PRIMARY KEY, color TEXT
-    )""")
-    # جدول نصوص مخصصة لكل عنصر
-    c.execute("""CREATE TABLE IF NOT EXISTS custom_texts (
-        element TEXT PRIMARY KEY, text TEXT
-    )""")
-    # سجل طلبات السحب (لكل رقم)
-    c.execute("""CREATE TABLE IF NOT EXISTS code_pulls (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        number_id INTEGER, ip TEXT, pulled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )""")
+    )''')
+    # إدراج الإعدادات الافتراضية
     for k, v in DEFAULT_SETTINGS.items():
         c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (k, v))
+    # إدراج الأدمن الافتراضي
     c.execute("SELECT id FROM admins WHERE username=?", (ADMIN_USER,))
     if not c.fetchone():
         ph = bcrypt.hashpw(ADMIN_PASS.encode(), bcrypt.gensalt())
         c.execute("INSERT INTO admins (username, password_hash, role) VALUES (?, ?, 'admin')",
                   (ADMIN_USER, ph))
+    # المنصات الافتراضية
     defaults = [
         ("Telegram", "📨", "#0088cc", 1),
         ("WhatsApp", "💬", "#25d366", 2),
@@ -182,6 +173,7 @@ def init_db():
     for n, i, col, so in defaults:
         c.execute("INSERT OR IGNORE INTO platforms (name, icon, color, sort_order) VALUES (?, ?, ?, ?)",
                   (n, i, col, so))
+    # الروابط الافتراضية
     default_links = [
         ("المطور واتساب", "https://wa.me/967733723953", "📞", 1),
         ("قناة السحب", "https://t.me/jsjsgsjsvh", "📢", 2),
