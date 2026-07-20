@@ -1,8 +1,7 @@
 """
-========================================================================
-   🔐 المطري OTP — النسخة النهائية الكاملة (ملف واحد مدمج)
-   المطوّر: @altazyabody | 📞 967733723953
-========================================================================
+======================================================================
+   🔐 Almatry OTP — النسخة النهائية المطلقة
+   ======================================================================
 """
 # ==========================================
 # 🌍 قائمة كل دول العالم (محدثة وكاملة)
@@ -137,8 +136,13 @@ PLATFORM_ICONS = {
     "facebook": "📘", "instagram": "📸", "snapchat": "👻",
     "google": "🔍", "twitter": "🐦"
 }
+PLATFORM_COLORS = {
+    "whatsapp": "#25D366", "telegram": "#26A5E4", "tiktok": "#FE2C55",
+    "facebook": "#1877F2", "instagram": "#E4405F", "snapchat": "#FFFC00",
+    "google": "#4285F4", "twitter": "#000000"
+}
 
-# ========== قاعدة البيانات (بدون تكرار) ==========
+# ========== قاعدة البيانات الموحدة ==========
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -150,11 +154,11 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS site_texts (
         key TEXT PRIMARY KEY, value TEXT
     )''')
-    
-    # 2. جداول الروابط والكومبوهات والأكواد
     c.execute('''CREATE TABLE IF NOT EXISTS site_links (
         id INTEGER PRIMARY KEY AUTOINCREMENT, label TEXT, url TEXT, icon TEXT, sort_order INTEGER DEFAULT 0
     )''')
+    
+    # 2. جداول الكومبوهات والأكواد
     c.execute('''CREATE TABLE IF NOT EXISTS combos (
         id INTEGER PRIMARY KEY AUTOINCREMENT, platform TEXT, country_code TEXT, country_name TEXT, country_flag TEXT, numbers TEXT
     )''')
@@ -205,6 +209,7 @@ def init_db():
 
 init_db()
 
+# ========== دوال الاستعلام ==========
 def get_setting(key):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -258,7 +263,23 @@ def save_combo(platform, code, name, flag, numbers):
     conn.commit()
     conn.close()
 
-# ========== دوال المساعدة (للأدمن) ==========
+def get_combos():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT id, platform, country_code, country_name, country_flag FROM combos")
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+def get_recent_codes(limit=20):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT id, number, otp, timestamp, platform FROM otp_logs ORDER BY id DESC LIMIT ?", (limit,))
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+# ========== دوال الأدمن ==========
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -267,15 +288,7 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-def admin_login_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if not session.get('admin_logged_in'):
-            return redirect(url_for('admin_login'))
-        return f(*args, **kwargs)
-    return decorated_function
-
-# ========== HTML الرئيسي (مع الليل والنهار والأرقام المتساقطة) ==========
+# ========== HTML الرئيسي (الواجهة) ==========
 MAIN_HTML = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -283,10 +296,9 @@ MAIN_HTML = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ site_title }}</title>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
         * { margin:0; padding:0; box-sizing:border-box; }
-        body { background:{{ bg_color }}; color:{{ text_color }}; font-family:'Cairo', sans-serif; transition:0.3s; }
+        body { background:{{ bg_color }}; color:{{ text_color }}; font-family:Tahoma, sans-serif; transition:0.3s; }
         .app { max-width:480px; margin:0 auto; padding:15px; }
         .header { display:flex; justify-content:space-between; align-items:center; }
         .theme-btn { background:transparent; border:1px solid {{ main_color }}; color:{{ text_color }}; padding:8px 12px; border-radius:8px; cursor:pointer; }
@@ -596,6 +608,7 @@ def monitor_channel():
         time.sleep(5)
 
 threading.Thread(target=monitor_channel, daemon=True).start()
+
 # ==========================================
 # ⚙️ لوحة التحكم (Admin Panel) كاملة وحقيقية
 # ==========================================
@@ -770,9 +783,6 @@ function deleteLink(label) {
     }).then(() => location.reload());
 }
 function saveLinks() {
-    const links = [];
-    document.querySelectorAll('#linksSection input').forEach(inp => links.push(inp.value));
-    // Save function would be here
     alert('تم حفظ الروابط');
 }
 </script>
@@ -783,13 +793,6 @@ function saveLinks() {
 @app.route('/admin', methods=['GET'])
 @admin_required
 def admin_panel():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT * FROM combos")
-    combos = c.fetchall()
-    c.execute("SELECT id, number, otp, timestamp, platform FROM otp_logs ORDER BY id DESC LIMIT 20")
-    recent_codes = c.fetchall()
-    conn.close()
     return render_template_string(
         ADMIN_HTML,
         main_color=get_setting('main_color'),
@@ -802,8 +805,8 @@ def admin_panel():
         ticker_text=get_text('ticker_text'),
         footer_text=get_text('footer_text'),
         links=get_links(),
-        combos=combos,
-        recent_codes=recent_codes,
+        combos=get_combos(),
+        recent_codes=get_recent_codes(20),
         session=session
     )
 
@@ -859,7 +862,6 @@ def admin_upload_combo():
         return redirect(url_for('admin_panel'))
     numbers = [line.strip() for line in file.read().decode().splitlines() if line.strip()]
     if numbers:
-        # يمكنك إضافة منطق التعرف على الدولة هنا إذا أردت
         save_combo(platform, '966', 'السعودية', '🇸🇦', numbers)
     return redirect(url_for('admin_panel'))
 
