@@ -1672,24 +1672,7 @@ def api_help():
         print(f"❌ فشل إرسال طلب المساعدة: {e}")
     return jsonify({'ok': True})
 
-# ========== لوحة التحكم ==========
-@app.route('/admin_login', methods=['GET', 'POST'])
-def admin_login():
-    if request.method == 'POST':
-        if request.form.get('password') == ADMIN_PASSWORD:
-            session['logged_in'] = True
-            return redirect(url_for('admin_dashboard'))
-        return "❌ كلمة المرور خاطئة!"
-    return '''
-    <div style="text-align:center; margin-top:100px; font-family:sans-serif; background:#0d1117; color:#fff; padding:40px; border-radius:20px; max-width:400px; margin-left:auto; margin-right:auto;">
-        <h2>🔐 دخول الأدمن</h2>
-        <form method="POST">
-            <input type="password" name="password" placeholder="كلمة المرور" style="padding:12px; border-radius:8px; border:1px solid #30363d; background:#161b22; color:#fff; width:100%; margin:10px 0;">
-            <button type="submit" style="padding:12px 25px; background:#238636; color:#fff; border:none; border-radius:8px; cursor:pointer; font-weight:bold; width:100%;">دخول</button>
-        </form>
-        <p style="color:#8b949e; font-size:12px; margin-top:10px;">كلمة المرور الافتراضية: admin123</p>
-    </div>
-    '''
+
 
 @app.route('/admin')
 @login_required
