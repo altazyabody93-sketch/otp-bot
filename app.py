@@ -1,313 +1,234 @@
-from flask import Flask, request, render_template_string, jsonify, redirect, url_for, session, Response
-import sqlite3
-import json
-import random
-import os
-import re
-import requests
-import threading
-import time
-from datetime import datetime, timedelta
+"""
+========================================================================
+   🔐 المطري OTP — ملف واحد متكامل
+   المطور: @altazyabody | 📞 967733723953
+   
+   ▶️ التشغيل: python app.py
+   📦 المتطلبات: pip install flask bcrypt pyTelegramBotAPI requests gunicorn
+========================================================================
+"""
+import os, re, json, time, sqlite3, hashlib, secrets, threading, csv, io
+from datetime import datetime, timedelta, timezone
 from functools import wraps
+from collections import defaultdict
 
-app = Flask(__name__)
-app.secret_key = "supersecretkey_change_this"
-DB_PATH = "bot.db"
+from flask import (Flask, request, jsonify, render_template_string, redirect,
+                   url_for, session, send_file, abort, flash, Response)
+import bcrypt
+import telebot
+import requests
 
-# ========== الإعدادات الأساسية ==========
-ADMIN_PASSWORD = "admin123"
+# =========================================================================
+# 1) الإعدادات العامة
+# =========================================================================
+APP_SECRET = os.environ.get("APP_SECRET", "almatry_secret_" + secrets.token_hex(8))
+ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
+ADMIN_PASS = os.environ.get("ADMIN_PASS", "admin123")
 
-WHATSAPP_GROUP_LINK = "https://chat.whatsapp.com/IeK2gNS64fd8YSnenzt4WR"
-OWNER_PHONE = "967733723953"
-OWNER_LINK = f"https://wa.me/{OWNER_PHONE}"
+# رابط واتساب المطور
+OWNER_WHATSAPP = "https://wa.me/967733723953"
 
-TELEGRAM_BOT_TOKEN = "8814038881:AAGyuACUYA4YPKlJQhAyUMkpRNiV0u1gNuU"
-CHANNEL_USERNAME = "@jsjsgsjsvh"
-ASSISTANT_BOT_TOKEN = "8845420882:AAHZ-7qhCL3_ddDT3am4zWNtBRBy3mVDgws"
-OWNER_TELEGRAM_ID = "@ABOD_90N"
+# Telegram Bots
+TELEGRAM_BOTS = [
+    {
+        "token": os.environ.get("BOT1_TOKEN", "8814038881:AAGyuACUYA4YPKlJQhAyUMkpRNiV0u1gNuU"),
+        "channel": os.environ.get("BOT1_CHANNEL", "@jsjsgsjsvh"),
+        "platform": "telegram",
+    },
+    {
+        "token": os.environ.get("BOT2_TOKEN", "8845420882:AAHZ-7qhCL3_ddDT3am4zWNtBRBy3mVDgws"),
+        "channel": os.environ.get("BOT2_CHANNEL", "@jsjsgsjsvh"),
+        "platform": "telegram",
+    },
+]
 
-# ========== قاعدة البيانات ==========
+# =========================================================================
+# 2) قاعدة البيانات
+# =========================================================================
+DB_PATH = "almatry.db"
+
+def db():
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
+    return conn
+
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     
-    c.execute('''CREATE TABLE IF NOT EXISTS combos (id INTEGER PRIMARY KEY AUTOINCREMENT, platform TEXT, country_code TEXT, country_name TEXT, country_flag TEXT, numbers TEXT, UNIQUE(platform, country_code))''')
-    c.execute('''CREATE TABLE IF NOT EXISTS otp_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, number TEXT, otp TEXT, timestamp TEXT, platform TEXT, country_code TEXT, country_flag TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS announcements (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT, content TEXT, media_url TEXT, button_text TEXT, button_url TEXT, source_msg_id INTEGER, created_at TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS help_requests (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, message TEXT, source TEXT, status TEXT DEFAULT 'pending', created_at TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS admin_settings (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, username TEXT, first_name TEXT, last_name TEXT, country_code TEXT, assigned_number TEXT, is_banned INTEGER DEFAULT 0, join_date TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS site_texts (key TEXT PRIMARY KEY, value TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS site_links (key TEXT PRIMARY KEY, value TEXT, icon TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS site_settings (key TEXT PRIMARY KEY, value TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS visitors (id INTEGER PRIMARY KEY AUTOINCREMENT, ip TEXT, user_agent TEXT, visit_time TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS code_pulls (id INTEGER PRIMARY KEY AUTOINCREMENT, number TEXT, platform TEXT, pull_count INTEGER DEFAULT 1, last_pull_time TEXT)''')
+    # جدول الإعدادات
+    c.execute('''CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY, value TEXT
+    )''')
     
-    default_texts = {
-        'site_title': '🚀 المطري OTP',
-        'site_subtitle': '👑 أرقام واتساب سحب أكواد تطوير مطري 👑',
-        'btn_get_number': '🚀 جلب رقم',
-        'footer_text': '💎 صُنع بحب ⚡ بواسطة المطري',
-        'ticker_text': '🚀 المطري OTP - أسرع موقع للحصول على الأكواد 💎',
-    }
-    for key, value in default_texts.items():
-        c.execute("INSERT OR IGNORE INTO site_texts (key, value) VALUES (?, ?)", (key, value))
-    
-    default_links = [
-        ('whatsapp_developer', OWNER_LINK, '💬'),
-        ('whatsapp_group', WHATSAPP_GROUP_LINK, '👥'),
-        ('telegram_channel', 'https://t.me/jsjsgsjsvh', '✈️'),
-        ('instagram', 'https://instagram.com/', '📸'),
-        ('tiktok', 'https://tiktok.com/', '🎵'),
-        ('facebook', 'https://facebook.com/', '📘'),
-    ]
-    for key, value, icon in default_links:
-        c.execute("INSERT OR IGNORE INTO site_links (key, value, icon) VALUES (?, ?, ?)", (key, value, icon))
-    
+    # الإعدادات الافتراضية
     default_settings = {
-        'main_color': '#00ffc8',
-        'secondary_color': '#8b5cf6',
-        'background_color': '#0a0e1a',
-        'text_color': '#ffffff',
-        'falling_numbers_enabled': '1',
-        'matrix_enabled': '1',
-        'ticker_enabled': '1',
-        'sound_enabled': '0',
-        'notification_enabled': '1',
-        'push_enabled': '0',
-        'digit_rain_enabled': '1',
+        "site_name": "🚀 المطري OTP",
+        "main_color": "#00ffc8",
+        "secondary_color": "#8b5cf6",
+        "bg_color": "#0a0e1a",
+        "text_color": "#ffffff",
+        "marquee_text": "🚀 المطري OTP - أسرع موقع للحصول على الأكواد | للدعم: 967733723953",
+        "announcement": "🔥 نظام الكومبوهات الجديد متاح الآن!",
+        "maintenance_mode": "off",
+        "auto_maintenance_from": "",
+        "auto_maintenance_to": "",
+        "rate_limit_per_minute": "10",
+        "smart_btn_text": "⚡ استلام ذكي فوري",
+        "smart_btn_subtext": "يختار لك أفضل رقم متاح مع كوده تلقائياً",
+        "choose_platform": "اختر المنصة",
+        "choose_country": "اختر الدولة",
+        "your_number": "رقمك",
+        "your_code": "الكود",
+        "waiting_code": "في انتظار الكود...",
+        "copy_number": "نسخ الرقم",
+        "copy_code": "نسخ الكود",
+        "next_number": "الرقم التالي",
+        "help": "مساعدة",
+        "live_codes": "⚡ آخر الأكواد من القنوات (لايف)",
+        "search_placeholder": "🔍 بحث فوري في الأرقام والدول والمنصات...",
+        "digit_rain_enabled": "1",
+        "matrix_rain_enabled": "1",
+        "sound_enabled": "1",
+        "push_enabled": "1",
+        "footer_text": "💎 صُنع بحب ⚡ بواسطة المطري",
     }
-    for key, value in default_settings.items():
-        c.execute("INSERT OR IGNORE INTO site_settings (key, value) VALUES (?, ?)", (key, value))
+    for k, v in default_settings.items():
+        c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (k, v))
+    
+    # جداول الأدمن
+    c.execute('''CREATE TABLE IF NOT EXISTS platforms (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE, icon TEXT, color TEXT, sort_order INTEGER DEFAULT 0
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS countries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        platform_id INTEGER, name TEXT, code TEXT, flag TEXT,
+        FOREIGN KEY(platform_id) REFERENCES platforms(id) ON DELETE CASCADE
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS numbers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        country_id INTEGER, number TEXT, status TEXT DEFAULT 'available',
+        used_by_ip TEXT, used_at TIMESTAMP,
+        FOREIGN KEY(country_id) REFERENCES countries(id) ON DELETE CASCADE
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS codes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        number_id INTEGER, code TEXT, message TEXT, source TEXT,
+        received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(number_id) REFERENCES numbers(id) ON DELETE CASCADE
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ip TEXT, first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_seen TIMESTAMP, requests_count INTEGER DEFAULT 0, banned INTEGER DEFAULT 0
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS admins (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE, password_hash TEXT, role TEXT DEFAULT 'moderator',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS links (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        label TEXT, url TEXT, icon TEXT, sort_order INTEGER DEFAULT 0
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS ip_blacklist (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ip TEXT UNIQUE, reason TEXT, banned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS audit_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        admin_user TEXT, action TEXT, details TEXT, ip TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS code_pulls (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        number_id INTEGER, ip TEXT,
+        pulled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(number_id) REFERENCES numbers(id) ON DELETE CASCADE
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS combos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        platform TEXT, country_name TEXT, country_code TEXT,
+        country_flag TEXT, numbers TEXT,
+        UNIQUE(platform, country_code)
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS announcements (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        type TEXT, content TEXT, media_url TEXT, button_text TEXT,
+        button_url TEXT, source_msg_id INTEGER, created_at TEXT
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS help_requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT, message TEXT, source TEXT,
+        status TEXT DEFAULT 'pending', created_at TEXT
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS site_texts (
+        key TEXT PRIMARY KEY, value TEXT
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS site_links (
+        key TEXT PRIMARY KEY, value TEXT, icon TEXT
+    )''')
+    
+    # إدراج الأدمن الافتراضي
+    c.execute("SELECT id FROM admins WHERE username=?", (ADMIN_USER,))
+    if not c.fetchone():
+        ph = bcrypt.hashpw(ADMIN_PASS.encode(), bcrypt.gensalt())
+        c.execute("INSERT INTO admins (username, password_hash, role) VALUES (?, ?, 'admin')",
+                  (ADMIN_USER, ph))
+    
+    # المنصات الافتراضية
+    defaults = [
+        ("Telegram", "📨", "#0088cc", 1),
+        ("WhatsApp", "💬", "#25d366", 2),
+        ("Instagram", "📷", "#e1306c", 3),
+        ("Facebook", "📘", "#1877f2", 4),
+        ("Google", "🔍", "#4285f4", 5),
+        ("Twitter", "🐦", "#1da1f2", 6),
+        ("TikTok", "🎵", "#000000", 7),
+        ("Snapchat", "👻", "#FFFC00", 8),
+    ]
+    for n, i, col, so in defaults:
+        c.execute("INSERT OR IGNORE INTO platforms (name, icon, color, sort_order) VALUES (?, ?, ?, ?)",
+                  (n, i, col, so))
+    
+    # الروابط الافتراضية
+    default_links = [
+        ("المطور واتساب", OWNER_WHATSAPP, "📞", 1),
+        ("قناة السحب", "https://t.me/jsjsgsjsvh", "📢", 2),
+        ("تيليجرام المطور", "https://t.me/altazyabody", "👤", 3),
+    ]
+    for lbl, u, ic, so in default_links:
+        c.execute("INSERT OR IGNORE INTO links (label, url, icon, sort_order) VALUES (?, ?, ?, ?)",
+                  (lbl, u, ic, so))
     
     conn.commit()
     conn.close()
-init_db()
 
-def get_text(key):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT value FROM site_texts WHERE key=?", (key,))
-    row = c.fetchone()
+def get_settings():
+    conn = db()
+    rows = conn.execute("SELECT key, value FROM settings").fetchall()
     conn.close()
-    return row[0] if row else ''
-
-def get_all_links():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT key, value, icon FROM site_links")
-    rows = c.fetchall()
-    conn.close()
-    return rows
-
-def get_setting(key):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT value FROM site_settings WHERE key=?", (key,))
-    row = c.fetchone()
-    conn.close()
-    return row[0] if row else ''
+    return {r['key']: r['value'] for r in rows}
 
 def set_setting(key, value):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("REPLACE INTO site_settings (key, value) VALUES (?, ?)", (key, value))
+    conn = db()
+    conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value))
     conn.commit()
     conn.close()
 
-def update_text(key, value):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("REPLACE INTO site_texts (key, value) VALUES (?, ?)", (key, value))
+def audit(admin_user, action, details=""):
+    conn = db()
+    conn.execute("INSERT INTO audit_logs (admin_user, action, details, ip) VALUES (?, ?, ?, ?)",
+                 (admin_user, action, details, request.remote_addr if request else "-"))
     conn.commit()
     conn.close()
 
-def update_link(key, value, icon=None):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    if icon is not None:
-        c.execute("REPLACE INTO site_links (key, value, icon) VALUES (?, ?, ?)", (key, value, icon))
-    else:
-        c.execute("UPDATE site_links SET value=? WHERE key=?", (value, key))
-    conn.commit()
-    conn.close()
-
-def delete_link(key):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("DELETE FROM site_links WHERE key=?", (key,))
-    conn.commit()
-    conn.close()
-
-def log_visitor(ip, user_agent):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("INSERT INTO visitors (ip, user_agent, visit_time) VALUES (?, ?, ?)",
-              (ip, user_agent, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-    conn.commit()
-    conn.close()
-
-def get_visitor_stats():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT COUNT(*) FROM visitors")
-    total = c.fetchone()[0]
-    today = datetime.now().strftime("%Y-%m-%d")
-    c.execute("SELECT COUNT(*) FROM visitors WHERE visit_time LIKE ?", (today + '%',))
-    today_visitors = c.fetchone()[0]
-    c.execute("SELECT COUNT(DISTINCT ip) FROM visitors")
-    unique = c.fetchone()[0]
-    conn.close()
-    return total, today_visitors, unique
-
-def log_code_pull(number, platform):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT id, pull_count FROM code_pulls WHERE number=? AND platform=?", (number, platform))
-    row = c.fetchone()
-    if row:
-        c.execute("UPDATE code_pulls SET pull_count=pull_count+1, last_pull_time=? WHERE id=?", 
-                  (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), row[0]))
-    else:
-        c.execute("INSERT INTO code_pulls (number, platform, pull_count, last_pull_time) VALUES (?, ?, 1, ?)",
-                  (number, platform, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-    conn.commit()
-    conn.close()
-
-def get_code_pull_count(number, platform):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT pull_count FROM code_pulls WHERE number=? AND platform=?", (number, platform))
-    row = c.fetchone()
-    conn.close()
-    return row[0] if row else 0
-
-def get_platforms():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT DISTINCT platform FROM combos")
-    platforms = [row[0] for row in c.fetchall()]
-    conn.close()
-    return platforms
-
-def get_countries_by_platform(platform):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT country_code, country_name, country_flag FROM combos WHERE platform=?", (platform,))
-    countries = [{'code': row[0], 'name': row[1], 'flag': row[2]} for row in c.fetchall()]
-    conn.close()
-    return countries
-
-def get_numbers(platform, country_code):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT numbers FROM combos WHERE platform=? AND country_code=?", (platform, country_code))
-    row = c.fetchone()
-    conn.close()
-    return json.loads(row[0]) if row else []
-
-def save_combo(platform, country_code, country_name, country_flag, numbers):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("REPLACE INTO combos (platform, country_code, country_name, country_flag, numbers) VALUES (?, ?, ?, ?, ?)",
-              (platform, country_code, country_name, country_flag, json.dumps(numbers)))
-    conn.commit()
-    conn.close()
-
-def delete_combo(platform, country_code):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("DELETE FROM combos WHERE platform=? AND country_code=?", (platform, country_code))
-    conn.commit()
-    conn.close()
-
-def get_all_combos():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT platform, country_code, country_name, country_flag FROM combos")
-    rows = c.fetchall()
-    conn.close()
-    return rows
-
-def get_admin_setting(key, default=""):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT value FROM admin_settings WHERE key=?", (key,))
-    row = c.fetchone()
-    conn.close()
-    return row[0] if row and row[0] else default
-
-def set_admin_setting(key, value):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("REPLACE INTO admin_settings (key, value, updated_at) VALUES (?, ?, ?)",
-              (key, value, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-    conn.commit()
-    conn.close()
-
-def notify_admin(text):
-    admin_id = get_admin_setting('admin_telegram_id')
-    if not admin_id:
-        return False
-    try:
-        requests.post(f"https://api.telegram.org/bot{ASSISTANT_BOT_TOKEN}/sendMessage",
-                     json={'chat_id': admin_id, 'text': text, 'parse_mode': 'HTML'}, timeout=10)
-        return True
-    except:
-        return False
-
-def login_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if not session.get('logged_in'):
-            return redirect(url_for('admin_login'))
-        return f(*args, **kwargs)
-    return decorated_function
-
-@app.before_request
-def track_visitor():
-    if request.path == '/':
-        ip = request.headers.get('X-Forwarded-For', request.remote_addr or 'unknown')
-        ua = request.headers.get('User-Agent', 'unknown')
-        try:
-            log_visitor(ip, ua)
-        except:
-            pass
-
-# ========== شعارات SVG ==========
-PLATFORM_LOGOS = {
-    "whatsapp": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%2325D366'/><path fill='%23fff' d='M50 18c-17.6 0-32 14.4-32 32 0 6 1.7 11.8 4.8 16.8L18 82l15.6-4.7C38.6 80.1 44.2 82 50 82c17.6 0 32-14.4 32-32S67.6 18 50 18zm18.6 45.6c-.8 2.2-4.6 4.2-6.4 4.5-1.6.3-3.7.4-5.9-.4-1.4-.5-3.1-1.1-5.4-2.2-9.5-4.1-15.7-13.7-16.2-14.3-.5-.7-3.9-5.1-3.9-9.7s2.4-6.9 3.3-7.9c.9-.9 1.9-1.2 2.6-1.2.6 0 1.2 0 1.7 0 .6 0 1.3-.2 2 .1 1.6.7 2.6 3 2.9 3.9.3.9.5 1.5 0 2.4-.4.9-1.5 2.4-2.2 3.4 0 0 .7.7 1.4 1.5 2.4 2.7 5.3 5.5 9.6 7.1 1.5.5 2.3.6 3-.4.6-1 2.5-3 3.2-4 .7-1 1.4-.8 2.3-.5.9.3 5.8 2.7 6.8 3.2 1 .5 1.6.7 1.8 1.1.2.5.2 2.5-.6 4.7z'/></svg>",
-    "facebook": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%231877F2'/><path fill='%23fff' d='M58 84V52h10l1-12H58v-7c0-3 1-5 5-5h6V17h-9c-10 0-15 6-15 14v9H36v12h9v32h13z'/></svg>",
-    "snapchat": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%23FFFC00'/><path fill='%23000' d='M50 16c-13 0-23 9-23 21 0 6 1 11 2 16-2 1-4 2-7 2-1 0-2 1-2 2 0 4 8 5 11 7 1 1 1 4 2 6 1 3 4 5 8 5 3 0 5-1 7-1 3 0 6 6 13 6 7 0 10-6 13-6 2 0 4 1 7 1 4 0 7-2 8-5 1-2 1-5 2-6 3-2 11-3 11-7 0-1-1-2-2-2-3 0-5-1-7-2 1-5 2-10 2-16 0-12-10-21-23-21-3 0-6 1-8 2-2-1-5-2-8-2z'/></svg>",
-    "instagram": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><defs><radialGradient id='ig' cx='30%25' cy='30%25' r='80%25'><stop offset='0%25' stop-color='%23FEDA75'/><stop offset='50%25' stop-color='%23FA7E1E'/><stop offset='100%25' stop-color='%23D62976'/></radialGradient></defs><rect width='100' height='100' rx='22' fill='url(%23ig)'/><rect x='22' y='22' width='56' height='56' rx='14' fill='none' stroke='%23fff' stroke-width='5'/><circle cx='50' cy='50' r='13' fill='none' stroke='%23fff' stroke-width='5'/><circle cx='72' cy='28' r='4' fill='%23fff'/></svg>",
-    "telegram": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%2326A5E4'/><path fill='%23fff' d='M22 50l50-22-7 48-18-8-7 12-3-17 31-26-37 24-9-4z'/></svg>",
-    "tiktok": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%23000'/><path fill='%2325F4EE' d='M62 22c2 8 8 14 16 15v9c-6 0-12-2-16-5v22c0 12-9 20-20 20s-20-8-20-20 9-21 20-21v9c-6 0-11 5-11 12s5 12 11 12 12-6 12-12V22h8z'/><path fill='%23FE2C55' d='M70 22c2 8 8 14 16 15v9c-6 0-12-2-16-5v22c0 12-9 20-20 20v-9c6 0 12-6 12-12V22h8z'/></svg>",
-    "google": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%23fff'/><path fill='%234285F4' d='M58 50c0-1-.1-2-.2-3H50v6h5.5c-.5 2-2 4-4.5 5l4 3c3-2 5-6 5-10 0-1 0-1-.5-1z'/><path fill='%2334A853' d='M40 56c1 4 4 7 9 7 3 0 5-1 7-3l-4-3c-1 1-2 1-4 1-3 0-5-2-6-4l-4 2z'/><path fill='%23FBBC04' d='M40 44l-4 2c-1 1-1 3-1 4s0 3 1 4l4-2c-.5-1-.5-2-.5-3s0-4 0-4z'/><path fill='%23EA4335' d='M50 36c3 0 5 1 6 2l-3 3c-1-1-2-1-4-1-5 0-9 4-9 4l-4-2c0-3 4-6 14-6z'/></svg>",
-    "twitter": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%23000'/><path fill='%23fff' d='M70 35c-2 1-4 1-6 1 2-1 4-3 5-5-2 1-4 2-7 2-2-2-5-3-8-3-6 0-11 5-11 11 0 1 0 2 .3 3-9 0-17-5-22-12-1 2-1 4-1 6 0 4 2 7 5 9-2 0-4-1-5-2v.1c0 5 4 10 9 11-1 0-3 .5-4 .5-1 0-2 0-3-.1 2 4 6 7 11 7-4 3-9 5-15 5-1 0-2 0-3-.1 5 3 11 5 18 5 21 0 33-18 33-33v-1c2-2 4-3 6-6z'/></svg>",
-}
-
-platform_names = {
-    'whatsapp': 'واتساب',
-    'telegram': 'تيليجرام',
-    'tiktok': 'تيك توك',
-    'facebook': 'فيسبوك',
-    'instagram': 'انستقرام',
-    'snapchat': 'سناب شات',
-    'google': 'جوجل',
-    'twitter': 'تويتر/X'
-}
-
-platform_colors = {
-    'whatsapp': '#25D366',
-    'telegram': '#0088cc',
-    'tiktok': '#FE2C55',
-    'facebook': '#1877F2',
-    'instagram': '#E4405F',
-    'snapchat': '#FFFC00',
-    'google': '#4285F4',
-    'twitter': '#000000'
-}
-
+# =========================================================================
+# 3) الدول
+# =========================================================================
 COUNTRY_DATA = {
     "966": {"n": "السعودية", "f": "🇸🇦"},
     "971": {"n": "الإمارات", "f": "🇦🇪"},
@@ -317,1422 +238,2055 @@ COUNTRY_DATA = {
     "90": {"n": "تركيا", "f": "🇹🇷"},
     "91": {"n": "الهند", "f": "🇮🇳"},
     "49": {"n": "ألمانيا", "f": "🇩🇪"},
+    "7": {"n": "روسيا", "f": "🇷🇺"},
     "33": {"n": "فرنسا", "f": "🇫🇷"},
     "34": {"n": "إسبانيا", "f": "🇪🇸"},
+    "39": {"n": "إيطاليا", "f": "🇮🇹"},
     "212": {"n": "المغرب", "f": "🇲🇦"},
     "213": {"n": "الجزائر", "f": "🇩🇿"},
     "216": {"n": "تونس", "f": "🇹🇳"},
     "218": {"n": "ليبيا", "f": "🇱🇾"},
     "92": {"n": "باكستان", "f": "🇵🇰"},
-    "973": {"n": "البحرين", "f": "🇧🇭"},
-    "974": {"n": "قطر", "f": "🇶🇦"},
-    "968": {"n": "عمان", "f": "🇴🇲"},
-    "965": {"n": "الكويت", "f": "🇰🇼"},
     "967": {"n": "اليمن", "f": "🇾🇪"},
     "962": {"n": "الأردن", "f": "🇯🇴"},
-    "961": {"n": "لبنان", "f": "🇱🇧"},
     "963": {"n": "سوريا", "f": "🇸🇾"},
     "964": {"n": "العراق", "f": "🇮🇶"},
+    "965": {"n": "الكويت", "f": "🇰🇼"},
+    "968": {"n": "عمان", "f": "🇴🇲"},
+    "973": {"n": "البحرين", "f": "🇧🇭"},
+    "974": {"n": "قطر", "f": "🇶🇦"},
+    "970": {"n": "فلسطين", "f": "🇵🇸"},
+    "81": {"n": "اليابان", "f": "🇯🇵"},
+    "82": {"n": "كوريا", "f": "🇰🇷"},
+    "86": {"n": "الصين", "f": "🇨🇳"},
+    "60": {"n": "ماليزيا", "f": "🇲🇾"},
+    "65": {"n": "سنغافورة", "f": "🇸🇬"},
+    "66": {"n": "تايلاند", "f": "🇹🇭"},
+    "84": {"n": "فيتنام", "f": "🇻🇳"},
+    "62": {"n": "إندونيسيا", "f": "🇮🇩"},
+    "63": {"n": "الفلبين", "f": "🇵🇭"},
     "52": {"n": "المكسيك", "f": "🇲🇽"},
     "55": {"n": "البرازيل", "f": "🇧🇷"},
     "54": {"n": "الأرجنتين", "f": "🇦🇷"},
+    "56": {"n": "تشيلي", "f": "🇨🇱"},
+    "57": {"n": "كولومبيا", "f": "🇨🇴"},
+    "51": {"n": "بيرو", "f": "🇵🇪"},
+    "58": {"n": "فنزويلا", "f": "🇻🇪"},
+    "31": {"n": "هولندا", "f": "🇳🇱"},
+    "32": {"n": "بلجيكا", "f": "🇧🇪"},
+    "41": {"n": "سويسرا", "f": "🇨🇭"},
+    "43": {"n": "النمسا", "f": "🇦🇹"},
+    "45": {"n": "الدنمارك", "f": "🇩🇰"},
+    "46": {"n": "السويد", "f": "🇸🇪"},
+    "47": {"n": "النرويج", "f": "🇳🇴"},
+    "48": {"n": "بولندا", "f": "🇵🇱"},
+    "30": {"n": "اليونان", "f": "🇬🇷"},
+    "351": {"n": "البرتغال", "f": "🇵🇹"},
+    "353": {"n": "أيرلندا", "f": "🇮🇪"},
+    "61": {"n": "أستراليا", "f": "🇦🇺"},
+    "64": {"n": "نيوزيلندا", "f": "🇳🇿"},
+    "27": {"n": "جنوب أفريقيا", "f": "🇿🇦"},
+    "972": {"n": "إسرائيل", "f": "🇮🇱"},
+    "94": {"n": "سريلانكا", "f": "🇱🇰"},
+    "880": {"n": "بنغلاديش", "f": "🇧🇩"},
+    "234": {"n": "نيجيريا", "f": "🇳🇬"},
+    "254": {"n": "كينيا", "f": "🇰🇪"},
+    "255": {"n": "تنزانيا", "f": "🇹🇿"},
+    "20": {"n": "مصر", "f": "🇪🇬"},
+    "993": {"n": "تركمانستان", "f": "🇹🇲"},
+    "992": {"n": "طاجيكستان", "f": "🇹🇯"},
+    "996": {"n": "قرغيزستان", "f": "🇰🇬"},
+    "998": {"n": "أوزبكستان", "f": "🇺🇿"},
+    "375": {"n": "بيلاروس", "f": "🇧🇾"},
+    "380": {"n": "أوكرانيا", "f": "🇺🇦"},
+    "7": {"n": "كازاخستان", "f": "🇰🇿"},
+    "995": {"n": "جورجيا", "f": "🇬🇪"},
+    "994": {"n": "أذربيجان", "f": "🇦🇿"},
+    "373": {"n": "مولدوفا", "f": "🇲🇩"},
+    "374": {"n": "أرمينيا", "f": "🇦🇲"},
+    "961": {"n": "لبنان", "f": "🇱🇧"},
 }
 
 def get_country_info(code):
     info = COUNTRY_DATA.get(code)
     return (info["n"], info["f"]) if info else ("أخرى", "🌍")
 
-# ========== HTML الرئيسي ==========
-main_html = """
+# =========================================================================
+# 4) الأمان
+# =========================================================================
+rate_limit_store = defaultdict(list)
+blacklist_cache = set()
+
+def load_blacklist():
+    global blacklist_cache
+    conn = db()
+    rows = conn.execute("SELECT ip FROM ip_blacklist").fetchall()
+    conn.close()
+    blacklist_cache = {r["ip"] for r in rows}
+
+def is_ip_blacklisted(ip):
+    if not blacklist_cache:
+        load_blacklist()
+    return ip in blacklist_cache
+
+def client_ip():
+    return request.headers.get("X-Forwarded-For", request.remote_addr or "0.0.0.0").split(",")[0].strip()
+
+def security_check():
+    ip = client_ip()
+    if is_ip_blacklisted(ip):
+        return False, "🚫 تم حظرك من الموقع."
+    conn = db()
+    u = conn.execute("SELECT banned FROM users WHERE ip=?", (ip,)).fetchone()
+    conn.close()
+    if u and u["banned"]:
+        return False, "🚫 حسابك محظور."
+    settings = get_settings()
+    limit = int(settings.get("rate_limit_per_minute", 10))
+    now = time.time()
+    rate_limit_store[ip] = [t for t in rate_limit_store[ip] if now - t < 60]
+    if len(rate_limit_store[ip]) >= limit:
+        return False, f"⏳ طلبات كثيرة. حاول بعد {60 - int(now - rate_limit_store[ip][0])} ثانية."
+    rate_limit_store[ip].append(now)
+    return True, ""
+
+def track_visit():
+    ip = client_ip()
+    conn = db()
+    u = conn.execute("SELECT id, requests_count FROM users WHERE ip=?", (ip,)).fetchone()
+    if u:
+        conn.execute("UPDATE users SET last_seen=CURRENT_TIMESTAMP, requests_count=? WHERE id=?",
+                     (u["requests_count"] + 1, u["id"]))
+    else:
+        conn.execute("INSERT INTO users (ip, last_seen) VALUES (?, CURRENT_TIMESTAMP)", (ip,))
+    conn.commit()
+    conn.close()
+
+# =========================================================================
+# 5) AI Engine لاستقبال الأكواد
+# =========================================================================
+CODE_REGEX = re.compile(r"\b(\d{4,8})\b")
+PHONE_REGEX = re.compile(r"(\+?\d[\d\s\-\(\)]{6,18}\d)")
+
+PLATFORM_KEYWORDS = {
+    "telegram": ["telegram", "تيليجرام", "تلجرام", "تلي", "tg"],
+    "whatsapp": ["whatsapp", "واتس", "واتساب", "whats", "wa"],
+    "instagram": ["instagram", "انستقرام", "انستا", "ig", "insta"],
+    "facebook": ["facebook", "فيسبوك", "فيس", "fb"],
+    "google": ["google", "جوجل", "gmail"],
+    "twitter": ["twitter", "تويتر"],
+    "tiktok": ["tiktok", "تيك توك"],
+    "snapchat": ["snapchat", "سناب", "سناب شات"],
+}
+
+def detect_platform(text):
+    if not text: return None
+    t = text.lower()
+    for platform, keywords in PLATFORM_KEYWORDS.items():
+        for kw in keywords:
+            if kw in t:
+                return platform
+    return None
+
+def extract_phone(text):
+    if not text: return [], None
+    found = []
+    for m in PHONE_REGEX.finditer(text):
+        num = re.sub(r"[\s\-\(\)]", "", m.group(1))
+        digits = re.sub(r"[^\d]", "", num)
+        if 7 <= len(digits) <= 15:
+            found.append(digits)
+    last4 = re.findall(r"(?:x{2,}|X{2,}|\*{2,}|…{2,})(\d{3,4})", text)
+    return found, last4[0] if last4 else None
+
+def extract_codes(text):
+    if not text: return []
+    found = []
+    specific = re.findall(
+        r"(?:code|kode|otp|كود|رمز|كود\s*التأكيد|verification|pin)\s*[:\-\s]*(\d{4,8})",
+        text, re.IGNORECASE
+    )
+    found.extend(specific)
+    found.extend(re.findall(r"\b(\d{5,6})\b", text))
+    seen = set()
+    unique = []
+    for c in found:
+        if c not in seen:
+            seen.add(c)
+            unique.append(c)
+    return unique
+
+def find_best_number_match(phone_digits, platform=None, last4=None):
+    conn = db()
+    candidates = []
+    
+    if phone_digits:
+        candidates.extend(conn.execute("""
+            SELECT n.id, n.number, p.name as platform, c.name as country, c.flag
+            FROM numbers n
+            JOIN countries c ON n.country_id = c.id
+            JOIN platforms p ON c.platform_id = p.id
+            WHERE REPLACE(REPLACE(REPLACE(REPLACE(n.number, '+', ''), ' ', ''), '-', ''), '()', '') = ?
+              AND n.status = 'available'
+            ORDER BY n.used_at ASC NULLS FIRST LIMIT 5
+        """, (phone_digits,)).fetchall())
+
+    if not candidates and last4:
+        candidates.extend(conn.execute("""
+            SELECT n.id, n.number, p.name as platform, c.name as country, c.flag
+            FROM numbers n
+            JOIN countries c ON n.country_id = c.id
+            JOIN platforms p ON c.platform_id = p.id
+            WHERE REPLACE(REPLACE(REPLACE(REPLACE(n.number, '+', ''), ' ', ''), '-', ''), '()', '')
+                  LIKE ? AND n.status = 'available'
+            ORDER BY n.used_at ASC NULLS FIRST LIMIT 5
+        """, (f"%{last4}",)).fetchall())
+
+    if not candidates:
+        candidates.extend(conn.execute("""
+            SELECT n.id, n.number, p.name as platform, c.name as country, c.flag
+            FROM numbers n
+            JOIN countries c ON n.country_id = c.id
+            JOIN platforms p ON c.platform_id = p.id
+            ORDER BY n.status = 'available' DESC, RANDOM() LIMIT 5
+        """).fetchall())
+
+    conn.close()
+    return [dict(c) for c in candidates]
+
+def save_code(number_id, code, message, source, auto_assign=True):
+    conn = db()
+    existing = conn.execute("SELECT id FROM codes WHERE number_id=? AND code=?", (number_id, code)).fetchone()
+    if existing:
+        conn.close()
+        return False, "duplicate"
+    conn.execute("INSERT INTO codes (number_id, code, message, source) VALUES (?, ?, ?, ?)",
+                 (number_id, code, message, source))
+    if auto_assign:
+        conn.execute(
+            "UPDATE numbers SET status='assigned', used_at=CURRENT_TIMESTAMP WHERE id=? AND status='available'",
+            (number_id,)
+        )
+    conn.commit()
+    conn.close()
+    return True, "saved"
+
+def process_smart_message(text, source_label):
+    if not text: return None
+    platform = detect_platform(text)
+    phones, last4 = extract_phone(text)
+    codes = extract_codes(text)
+    if not codes:
+        return {"status": "no_code", "text": text[:100]}
+    results = []
+    for code in codes:
+        phone_to_match = phones[0] if phones else None
+        candidates = find_best_number_match(phone_to_match, platform, last4)
+        if candidates:
+            best = candidates[0]
+            ok, status = save_code(best["id"], code, text, source_label, auto_assign=True)
+            results.append({
+                "code": code, "matched_number": best["number"],
+                "country": best["country"], "platform": best["platform"],
+                "status": status
+            })
+            if ok: break
+        else:
+            results.append({"code": code, "matched": None, "status": "no_match"})
+    return {
+        "status": "ok", "platform_detected": platform,
+        "phones_found": phones, "last4_found": last4,
+        "codes_found": codes, "results": results
+    }
+
+# =========================================================================
+# 6) Telegram Pollers
+# =========================================================================
+poller_threads = []
+poller_running = threading.Event()
+
+def start_poller(bot_config):
+    token = bot_config["token"]
+    channel = bot_config["channel"]
+    bot = telebot.TeleBot(token)
+    source_label = f"{channel}:{token[:10]}"
+
+    @bot.message_handler(func=lambda m: True, content_types=["text"])
+    def on_message(message):
+        try:
+            text = message.text or message.caption or ""
+            if not text.strip(): return
+            result = process_smart_message(text, source_label)
+            if result and result.get("status") == "ok":
+                for r in result.get("results", []):
+                    if r.get("status") == "saved":
+                        print(f"✅ [{channel}] {r['code']} ← {r['matched_number']} ({r['country']}/{r['platform']})")
+        except Exception as e:
+            print(f"[Poller Error] {e}")
+
+    def run():
+        print(f"[Poller] 🧠 Smart poller started for {channel}")
+        while poller_running.is_set():
+            try:
+                bot.infinity_polling(timeout=30, long_polling_timeout=20)
+            except Exception as e:
+                print(f"[Poller Retry] {e} — restarting in 5s")
+                time.sleep(5)
+
+    t = threading.Thread(target=run, daemon=True)
+    t.start()
+    poller_threads.append(t)
+
+def start_all_pollers():
+    poller_running.set()
+    for bc in TELEGRAM_BOTS:
+        start_poller(bc)
+
+# =========================================================================
+# 7) Flask App
+# =========================================================================
+app = Flask(__name__)
+app.secret_key = APP_SECRET
+app.permanent_session_lifetime = timedelta(days=7)
+
+@app.before_request
+def before_request():
+    if request.path.startswith("/admin") or request.path.startswith("/static"):
+        return
+    settings = get_settings()
+    if settings.get("maintenance_mode") == "on":
+        if request.path != "/maintenance":
+            return MAINTENANCE_HTML, 503
+
+# =========================================================================
+# 8) HTML الرئيسي - واجهة المستخدم
+# =========================================================================
+INDEX_HTML = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
-    <title>{{ site_title }}</title>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --main-color: {{ main_color }};
-            --secondary-color: {{ secondary_color }};
-            --bg-color: {{ background_color }};
-            --text-color: {{ text_color }};
-        }
-        * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-        html, body { font-family:'Cairo',sans-serif; background:var(--bg-color); color:var(--text-color); overflow-x:hidden; }
-        body { min-height:100vh; }
-        
-        /* Matrix Background */
-        #matrix-bg {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            z-index: -999; opacity: 0.85; pointer-events: none;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ settings.site_name }}</title>
+<style>
+:root {
+  --main-color: {{ settings.main_color }};
+  --secondary-color: {{ settings.secondary_color }};
+  --bg-color: {{ settings.bg_color }};
+  --text-color: {{ settings.text_color }};
+  --base-font-size: 16px;
+  --card-bg: rgba(255,255,255,0.05);
+  --border-color: rgba(0,255,136,0.3);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: var(--base-font-size); }
+body {
+  font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+  background: var(--bg-color); color: var(--text-color);
+  min-height: 100vh; position: relative; overflow-x: hidden;
+}
+.matrix-bg { position: fixed; inset: 0; z-index: -2; opacity: 0.15; pointer-events: none; }
+.digit-bg { position: fixed; inset: 0; z-index: -1; opacity: 0.2; pointer-events: none; }
 
-        /* Falling Numbers Animation */
-        .falling-numbers {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            z-index: -998; pointer-events: none; overflow: hidden;
-        }
-        .falling-digit {
-            position: absolute; font-family: 'Courier New', monospace;
-            font-size: 18px; font-weight: bold; color: var(--main-color);
-            opacity: 0.12; animation: fall linear infinite;
-        }
-        @keyframes fall {
-            0% { transform: translateY(-30px) rotate(0deg); opacity: 0.4; }
-            100% { transform: translateY(100vh) rotate(360deg); opacity: 0; }
-        }
+.marquee {
+  background: linear-gradient(90deg, var(--main-color), var(--secondary-color));
+  color: #000; padding: 10px 0; overflow: hidden; font-weight: bold;
+  text-align: center;
+}
+.marquee-inner { display: inline-block; white-space: nowrap; animation: marquee-scroll 25s linear infinite; }
+@keyframes marquee-scroll { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
 
-        .app { 
-            max-width:500px; margin:0 auto; 
-            background:rgba(13, 17, 23, 0.6); 
-            backdrop-filter:blur(3px); 
-            min-height:100vh; display:flex; flex-direction:column; 
-            position:relative; z-index: 1;
-        }
+.header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 15px 20px; background: var(--card-bg);
+  border-bottom: 2px solid var(--main-color); position: sticky; top: 0; z-index: 100;
+  backdrop-filter: blur(10px);
+}
+.logo { display: flex; align-items: center; gap: 10px; }
+.logo-icon { font-size: 2em; }
+.logo-text { color: var(--main-color); font-size: 1.3em; font-weight: bold; }
+.header-actions { display: flex; gap: 8px; }
 
-        .top-bar { 
-            background:rgba(13, 17, 23, 0.95); 
-            padding:14px 16px; 
-            display:flex; align-items:center; justify-content:space-between; 
-            border-bottom:1px solid rgba(48, 54, 61, 0.8); 
-            position:sticky; top:0; z-index:50;
-        }
-        .brand { display:flex; align-items:center; gap:12px; }
-        .brand-icon { 
-            width:40px; height:40px; border-radius:12px; 
-            background:linear-gradient(135deg, var(--main-color), var(--secondary-color)); 
-            display:flex; align-items:center; justify-content:center; font-size:20px;
-            animation: pulse-icon 2s ease-in-out infinite;
-        }
-        @keyframes pulse-icon {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-        }
-        .brand-text { font-size:18px; font-weight:800; color:#fff; }
-        
-        .menu-btn { 
-            background:transparent; border:2px solid #30363d; color:#8b949e; 
-            padding:8px 14px; border-radius:10px; cursor:pointer; font-size:18px;
-            transition: all 0.3s ease;
-        }
-        .menu-btn:hover { color:var(--main-color); border-color:var(--main-color); }
+.icon-btn {
+  background: var(--card-bg); border: 1px solid var(--border-color);
+  color: var(--text-color); padding: 10px 14px; border-radius: 8px;
+  cursor: pointer; font-size: 16px; transition: all 0.2s;
+}
+.icon-btn:hover { background: var(--main-color); color: #000; }
 
-        .dropdown-menu { 
-            position:fixed; top:0; right:-300px; width:280px; height:100vh;
-            background:linear-gradient(180deg, #0d1117, #161b22);
-            border-left:2px solid rgba(48, 54, 61, 0.8); 
-            padding:20px 15px; z-index:10000; 
-            box-shadow:-10px 0 40px rgba(0,0,0,0.8); 
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            overflow-y:auto; display:flex; flex-direction:column; gap:8px;
-        }
-        .dropdown-menu.show { right:0; }
-        .menu-overlay {
-            display:none; position:fixed; inset:0;
-            background:rgba(0,0,0,0.7); backdrop-filter:blur(6px); z-index:9999;
-        }
-        .menu-overlay.show { display:block; }
-        
-        .dropdown-menu .menu-header-title {
-            text-align:center; padding:10px 0 15px;
-            border-bottom:1px solid rgba(48, 54, 61, 0.5); margin-bottom:10px;
-        }
-        .dropdown-menu .menu-header-title .icon { font-size:28px; animation: bounce 1s ease infinite; }
-        @keyframes bounce {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-5px); }
-        }
-        
-        .dropdown-menu a { 
-            display:flex; align-items:center; gap:12px; color:#c9d1d9; text-decoration:none; 
-            padding:12px 16px; border-radius:10px; font-size:14px; font-weight:600; 
-            transition:all 0.3s ease; border:1px solid transparent;
-        }
-        .dropdown-menu a:hover { 
-            background:rgba(0, 255, 200, 0.1); color:var(--main-color); 
-            border-color:rgba(0, 255, 200, 0.3); transform: translateX(-5px);
-        }
-        .dropdown-menu a .ico { 
-            font-size:18px; width:28px; height:28px; 
-            display:flex; align-items:center; justify-content:center; 
-            background:rgba(48, 54, 61, 0.5); border-radius:8px; flex-shrink:0;
-        }
-        .dropdown-menu .menu-divider { 
-            height:1px; background:linear-gradient(90deg, transparent, #30363d, transparent); 
-            margin:8px 0;
-        }
-        .dropdown-menu .menu-section-title { 
-            font-size:10px; color:#6e7681; font-weight:700; 
-            padding:4px 12px 2px; text-transform:uppercase; letter-spacing:1px;
-        }
+.side-menu {
+  position: fixed; top: 0; right: -320px; width: 300px; height: 100vh;
+  background: var(--bg-color); border-left: 2px solid var(--main-color);
+  z-index: 200; transition: right 0.3s; padding: 20px;
+  display: flex; flex-direction: column;
+}
+.side-menu.open { right: 0; }
+.menu-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 150; display: none; }
+.menu-overlay.open { display: block; }
+.side-menu-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.side-menu-header h3 { color: var(--main-color); }
+.side-menu-links { display: flex; flex-direction: column; gap: 10px; flex: 1; }
+.side-menu-links a {
+  display: block; padding: 14px; background: var(--card-bg);
+  border: 1px solid var(--border-color); border-radius: 8px;
+  color: var(--text-color); text-decoration: none; transition: all 0.2s;
+}
+.side-menu-links a:hover { background: var(--main-color); color: #000; }
+.admin-link { display: block; padding: 14px; text-align: center; background: var(--secondary-color); color: #000; text-decoration: none; border-radius: 8px; font-weight: bold; }
 
-        .main { padding:14px 16px; flex:1; }
-        .hero { text-align:center; padding:6px 0 12px; }
-        .hero h1 { font-size:22px; font-weight:800; color:#fff; }
-        .hero p { font-size:13px; color:#8b949e; margin-top:4px; }
+.container { max-width: 1200px; margin: 0 auto; padding: 20px; }
 
-        .section-title { 
-            font-size:14px; font-weight:700; color:#fff; margin:12px 0 8px; 
-            display:flex; align-items:center; gap:8px;
-        }
-        .section-title .icon { color:var(--main-color); }
+.stats-bar {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px; margin-bottom: 25px;
+}
+.stat { background: var(--card-bg); padding: 18px; border-radius: 12px; text-align: center; border: 1px solid var(--border-color); border-right: 4px solid var(--main-color); }
+.stat-num { display: block; font-size: 1.8em; color: var(--main-color); font-weight: bold; }
+.stat-label { color: var(--text-color); opacity: 0.7; font-size: 0.85em; }
 
-        .platforms { display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; margin-bottom:6px; }
-        
-        .platform-btn {
-            display:flex; align-items:center; gap:10px; padding:16px 14px;
-            background:#1c2128; border:2px solid #30363d; border-radius:14px;
-            color:#e6e6e6; cursor:pointer; transition:all 0.2s ease;
-            font-size:14px; font-weight:700; font-family:'Cairo',sans-serif;
-        }
-        .platform-btn:hover { 
-            background:#21262d; border-color:#484f58; transform: translateY(-2px);
-            box-shadow:0 6px 20px rgba(0,0,0,0.3);
-        }
-        .platform-btn:active { transform:scale(0.97); }
-        .platform-btn.active { 
-            background:var(--platform-color, #1f6feb); border-color:var(--platform-color, #1f6feb); 
-            color:#fff; box-shadow:0 0 0 3px var(--platform-color, #1f6feb), 0 0 25px rgba(31,111,235,0.4);
-        }
-        .platform-btn img { 
-            width:38px; height:38px; object-fit:contain; 
-            border-radius:10px; background:#fff; padding:4px; flex-shrink:0;
-        }
+.smart-btn {
+  width: 100%; padding: 22px; display: flex; align-items: center;
+  gap: 15px; background: linear-gradient(135deg, var(--main-color), var(--secondary-color));
+  color: #000; border: none; border-radius: 14px; cursor: pointer;
+  font-family: inherit; transition: all 0.3s;
+  box-shadow: 0 5px 25px rgba(0,255,136,0.3); margin-bottom: 25px;
+}
+.smart-btn:hover { transform: translateY(-3px); box-shadow: 0 10px 35px rgba(0,255,136,0.5); }
+.smart-btn-icon { font-size: 2.5em; }
+.smart-btn-text { display: flex; flex-direction: column; text-align: right; }
+.smart-btn-text strong { font-size: 1.2em; }
+.smart-btn-text small { opacity: 0.8; font-size: 0.85em; }
 
-        .form-control {
-            width:100%; padding:14px 16px; border-radius:12px;
-            border:2px solid #30363d; background:#0d1117; color:#e6e6e6;
-            outline:none; font-family:'Cairo',sans-serif; font-size:14px; font-weight:600;
-            appearance:none; -webkit-appearance:none;
-            background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 12 12'><path fill='%238b949e' d='M6 9L1 4h10z'/></svg>");
-            background-repeat:no-repeat; background-position:left 16px center; padding-left:44px;
-        }
-        .form-control:focus { border-color:var(--main-color); }
-        .form-control:disabled { opacity:0.5; cursor:not-allowed; }
+.section-title { color: var(--main-color); margin: 25px 0 15px; font-size: 1.2em; display: flex; align-items: center; gap: 8px; }
 
-        .btn-primary {
-            width:100%; padding:16px; border:none; border-radius:14px;
-            background:linear-gradient(135deg, #238636, #2ea043); color:#fff; 
-            font-size:16px; font-weight:800; cursor:pointer; margin-top:10px; 
-            font-family:'Cairo',sans-serif; transition:all 0.2s ease;
-            box-shadow:0 6px 20px rgba(35,134,54,0.4);
-        }
-        .btn-primary:hover:not(:disabled) { 
-            background:linear-gradient(135deg, #2ea043, #3fb950); 
-            transform: translateY(-2px); box-shadow:0 8px 25px rgba(35,134,54,0.5);
-        }
-        .btn-primary:disabled { opacity:0.5; cursor:not-allowed; }
+.platforms-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 15px; margin-bottom: 25px; position: relative;
+}
+.platform-card {
+  background: var(--card-bg); border: 2px solid var(--border-color);
+  border-radius: 14px; padding: 25px 15px; text-align: center;
+  cursor: pointer; transition: all 0.3s; position: relative; overflow: hidden;
+  min-height: 100px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.platform-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: var(--card-color, var(--main-color));
+  transform: scaleX(0); transition: transform 0.3s;
+}
+.platform-card:hover::before { transform: scaleX(1); }
+.platform-card:hover { transform: translateY(-5px); box-shadow: 0 10px 30px rgba(0,255,136,0.2); }
+.platform-card.active { border-color: var(--card-color, var(--main-color)); background: rgba(0,255,136,0.1); }
+.platform-icon { font-size: 2.8em; margin-bottom: 8px; }
+.platform-name { font-weight: bold; font-size: 1em; }
 
-        .number-card {
-            background:linear-gradient(135deg, #0d1117, #161b22);
-            border:2px solid #238636; border-radius:16px;
-            padding:18px; margin:12px 0; text-align:center;
-        }
-        .number-card .number {
-            font-family: 'Courier New', monospace; font-size:28px; font-weight:900;
-            color: #3fb950; letter-spacing:3px;
-            text-shadow: 0 0 15px rgba(63, 185, 80, 0.6);
-            padding:8px 0; direction:ltr; unicode-bidi: bidi-override; display:inline-block;
-        }
-        .number-card .number .digit {
-            display:inline-block; opacity:0; transform:translateY(10px) scale(0.7);
-            animation:digitDrop 0.3s ease forwards;
-        }
-        @keyframes digitDrop { to { opacity:1; transform:translateY(0) scale(1); } }
-        
-        .code-timer {
-            display:inline-flex; align-items:center; gap:6px; padding:6px 14px;
-            background:rgba(139, 92, 246, 0.15); border:1px solid rgba(139, 92, 246, 0.4);
-            border-radius:999px; font-size:11px; font-weight:700; color:#c4b5fd; margin-top:8px;
-        }
-        
-        .copy-btn-mini {
-            background:linear-gradient(135deg, #1f6feb, #388bfd); border:1px solid #388bfd;
-            color:#fff; padding:6px 14px; border-radius:10px; cursor:pointer;
-            font-size:12px; font-weight:700; transition:all 0.2s;
-        }
-        .copy-btn-mini:hover { background:linear-gradient(135deg, #388bfd, #58a6ff); }
-        .copy-btn-mini.copied { background:linear-gradient(135deg, #238636, #2ea043); border-color:#2ea043; }
+.countries-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px; margin-bottom: 25px;
+}
+.country-card {
+  background: var(--card-bg); border: 1px solid var(--border-color);
+  border-radius: 8px; padding: 12px; cursor: pointer;
+  display: flex; justify-content: space-between; align-items: center; transition: all 0.2s;
+}
+.country-card:hover { background: var(--main-color); color: #000; transform: translateX(-5px); }
+.country-name { display: flex; align-items: center; gap: 8px; }
+.country-flag { font-size: 1.4em; }
+.country-available { background: var(--main-color); color: #000; padding: 2px 8px; border-radius: 10px; font-size: 0.8em; }
 
-        .otp-list { display:flex; flex-direction:column; gap:8px; margin-top:10px; }
-        .otp-item {
-            background:#1c2128; border:1px solid #30363d; border-radius:12px;
-            padding:12px 14px; display:flex; justify-content:space-between; align-items:center;
-        }
-        .otp-item .otp-code {
-            font-family:'Courier New', monospace; font-size:16px; font-weight:900;
-            background:linear-gradient(135deg, #ff6b9d 0%, #c084fc 50%, #38bdf8 100%);
-            -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
-            letter-spacing:2px;
-        }
-        .otp-item .otp-info { font-size:11px; color:#8b949e; }
-        .otp-item .otp-time { font-size:10px; color:#8b949e; margin-top:3px; }
-        .otp-item .copy-btn { 
-            background:transparent; border:1px solid #30363d; color:var(--main-color); 
-            padding:5px 12px; border-radius:8px; cursor:pointer; font-size:12px; font-weight:600;
-        }
-        .otp-item .copy-btn:hover { background:var(--main-color); color:#000; }
+.number-display {
+  background: var(--card-bg); border: 2px solid var(--main-color);
+  border-radius: 16px; padding: 25px; margin-bottom: 25px;
+  text-align: center; box-shadow: 0 0 35px rgba(0,255,136,0.2);
+}
+.number-box, .code-box { margin-bottom: 20px; }
+.number-label, .code-label { color: var(--secondary-color); margin-bottom: 10px; font-weight: bold; }
+.number-value {
+  font-size: 2em; color: var(--main-color); font-weight: bold;
+  letter-spacing: 3px; font-family: 'Courier New', monospace;
+  padding: 15px; background: rgba(0,0,0,0.3); border-radius: 10px;
+  margin-bottom: 10px; display: inline-block; min-width: 280px;
+}
+.digit { display: inline-block; opacity: 0; transform: translateY(-50px); animation: digit-drop 0.4s forwards; }
+@keyframes digit-drop { to { opacity: 1; transform: translateY(0); } }
+.copy-btn {
+  background: var(--secondary-color); color: #000; border: none;
+  padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold;
+  margin: 5px; transition: all 0.2s;
+}
+.copy-btn:hover { background: var(--main-color); transform: scale(1.05); }
+.number-timer { color: var(--secondary-color); font-size: 1.1em; margin-top: 10px; }
+.code-value {
+  font-size: 2.2em; color: var(--main-color); font-weight: bold;
+  letter-spacing: 5px; padding: 18px; background: rgba(0,0,0,0.3);
+  border-radius: 10px; display: inline-block; min-width: 250px;
+  border: 2px dashed var(--main-color);
+}
+.waiting-spinner {
+  display: inline-block; width: 20px; height: 20px;
+  border: 3px solid var(--border-color); border-top-color: var(--main-color);
+  border-radius: 50%; animation: spin 1s linear infinite;
+  vertical-align: middle; margin-left: 10px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.actions-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.action-btn {
+  background: var(--card-bg); border: 1px solid var(--secondary-color);
+  color: var(--secondary-color); padding: 12px 22px; border-radius: 8px;
+  cursor: pointer; transition: all 0.2s;
+}
+.action-btn:hover { background: var(--secondary-color); color: #000; }
 
-        .empty-state { text-align:center; padding:24px; color:#8b949e; font-size:13px; }
-        .empty-state .icon { font-size:36px; margin-bottom:8px; opacity:0.5; animation:pulse 2s infinite; }
-        @keyframes pulse { 0%, 100% { opacity:0.5; } 50% { opacity:0.8; } }
+.live-feed { max-height: 350px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.feed-item {
+  display: grid; grid-template-columns: 50px 1fr 1fr 1fr; gap: 10px;
+  padding: 12px 15px; background: rgba(0,0,0,0.3); border-radius: 8px;
+  align-items: center; font-size: 0.9em;
+  border-right: 3px solid var(--secondary-color);
+  animation: slide-in 0.3s;
+}
+.feed-item.new { border-right-color: var(--main-color); background: rgba(0,255,136,0.05); }
+.feed-icon { font-size: 1.5em; }
+.feed-number { font-family: 'Courier New', monospace; color: var(--secondary-color); }
+.feed-code { color: var(--main-color); font-weight: bold; text-align: left; }
+.feed-time { font-size: 0.75em; opacity: 0.6; }
+@keyframes slide-in { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
 
-        .status { 
-            background:#1c2128; border:1px solid #30363d; border-radius:12px; 
-            padding:12px 16px; text-align:center; margin-top:10px; color:#8b949e; 
-            font-size:13px; font-weight:600;
-        }
+.card {
+  background: var(--card-bg); border: 1px solid var(--border-color);
+  border-radius: 12px; padding: 20px; margin-bottom: 20px;
+}
+.card h3 { color: var(--main-color); margin-bottom: 15px; }
+.empty { text-align: center; color: #888; padding: 20px; }
 
-        .footer-section { margin-top:12px; padding:0; border-top:1px solid #21262d; }
-        .footer-info { text-align:center; padding:12px 16px; color:#8b949e; font-size:12px; font-weight:600; }
-        .footer-info strong { color:var(--main-color); }
-        
-        .news-ticker {
-            background:linear-gradient(135deg, #1c2128 0%, #21262d 50%, #1c2128 100%);
-            border:1px solid #30363d; padding:8px 0; overflow:hidden; position:relative;
-            direction:ltr; border-radius:10px; margin:0 16px 6px 16px; max-width:calc(100% - 32px);
-        }
-        .news-ticker::before, .news-ticker::after {
-            content:''; position:absolute; top:0; bottom:0; width:30px; z-index:2; pointer-events:none;
-        }
-        .news-ticker::before { left:0; background:linear-gradient(90deg, #1c2128, transparent); border-radius:10px 0 0 10px; }
-        .news-ticker::after { right:0; background:linear-gradient(-90deg, #1c2128, transparent); border-radius:0 10px 10px 0; }
-        .ticker-content {
-            display:flex; gap:50px; padding:0 25px; white-space:nowrap;
-            animation:tickerScroll 35s linear infinite;
-            font-weight:600; font-size:12px; color:#c9d1d9; align-items:center;
-        }
-        .ticker-content:hover { animation-play-state:paused; }
-        @keyframes tickerScroll { 0% { transform:translateX(0); } 100% { transform:translateX(-50%); } }
-        .ticker-name {
-            background:linear-gradient(90deg, var(--main-color), var(--secondary-color), #f78166, var(--main-color));
-            background-size:300% 300%; -webkit-background-clip:text; background-clip:text;
-            -webkit-text-fill-color:transparent; animation:nameScroll 4s ease infinite;
-            display:inline-block; font-weight:800;
-        }
-        @keyframes nameScroll { 0%,100% { background-position:0% 50%; } 50% { background-position:100% 50%; } }
+.search-box { position: relative; margin-bottom: 25px; }
+.search-box input {
+  width: 100%; padding: 14px 20px; font-size: 1em;
+  background: var(--card-bg); border: 1px solid var(--border-color);
+  border-radius: 10px; color: var(--text-color);
+}
+.search-box input:focus { outline: none; border-color: var(--main-color); }
+.search-results {
+  position: absolute; top: 100%; left: 0; right: 0;
+  background: var(--bg-color); border: 1px solid var(--border-color);
+  border-radius: 0 0 10px 10px; max-height: 300px; overflow-y: auto;
+  z-index: 50; display: none;
+}
+.search-results.open { display: block; }
+.search-result-item { padding: 12px 20px; border-bottom: 1px solid var(--border-color); cursor: pointer; }
+.search-result-item:hover { background: var(--card-bg); }
 
-        .modal-overlay {
-            display:none; position:fixed; inset:0;
-            background:rgba(0,0,0,0.8); backdrop-filter:blur(10px); z-index:10000;
-            align-items:center; justify-content:center; padding:20px;
-        }
-        .modal-overlay.show { display:flex; }
-        .modal-box {
-            background:linear-gradient(180deg, #1c2128, #161b22);
-            border:1px solid #30363d; border-radius:18px; padding:28px;
-            max-width:420px; width:100%;
-        }
-        .modal-box h2 { color:#fff; font-size:20px; margin-bottom:8px; text-align:center; }
-        .modal-box p { color:#8b949e; font-size:14px; text-align:center; margin-bottom:14px; }
-        .modal-box textarea {
-            width:100%; min-height:100px; background:#0d1117; color:#e6e6e6;
-            border:1px solid #30363d; border-radius:12px; padding:14px;
-            font-family:'Cairo',sans-serif; font-size:14px; resize:vertical; outline:none;
-        }
-        .modal-box textarea:focus { border-color:var(--main-color); }
-        .modal-box .modal-actions { display:flex; gap:10px; margin-top:16px; }
-        .modal-box button {
-            flex:1; padding:14px; border:none; border-radius:12px;
-            font-family:'Cairo',sans-serif; font-size:14px; font-weight:700; cursor:pointer;
-        }
-        .modal-box .btn-send { background:linear-gradient(135deg, #238636, #2ea043); color:#fff; }
-        .modal-box .btn-cancel { background:#30363d; color:#e6e6e6; }
-        .modal-box .success-msg {
-            background:rgba(35, 134, 54, 0.15); border:1px solid #238636; color:#3fb950;
-            padding:14px; border-radius:12px; text-align:center; font-size:14px; margin-top:10px; display:none;
-        }
+.font-controls {
+  display: flex; gap: 8px; align-items: center; justify-content: center;
+  margin-bottom: 20px; padding: 12px; background: var(--card-bg);
+  border: 1px solid var(--border-color); border-radius: 10px;
+}
+.font-btn {
+  background: var(--main-color); color: #000; border: none;
+  padding: 8px 16px; border-radius: 6px; font-weight: bold; cursor: pointer;
+}
+.font-label { color: var(--text-color); font-size: 0.9em; }
 
-        /* Toast */
-        #toast-notification {
-            position:fixed; top:-80px; left:50%; transform:translateX(-50%);
-            background:linear-gradient(135deg, #238636, #2ea043); color:#fff;
-            padding:14px 28px; border-radius:14px; font-weight:700; font-size:15px;
-            z-index:100000; box-shadow:0 10px 40px rgba(35,134,54,0.6);
-            transition:top 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-            display:flex; align-items:center; gap:10px; max-width:90%;
-        }
-        #toast-notification.show { top:20px; }
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 300; display: flex; align-items: center; justify-content: center; }
+.modal-content { background: var(--bg-color); border: 2px solid var(--main-color); border-radius: 12px; padding: 25px; width: 90%; max-width: 450px; }
+.modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+.modal-header h3 { color: var(--main-color); }
+.modal-close { background: none; border: none; color: var(--text-color); font-size: 1.5em; cursor: pointer; }
+.modal-content textarea { width: 100%; padding: 12px; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: var(--text-color); border-radius: 6px; font-family: inherit; resize: vertical; }
+.primary-btn { width: 100%; padding: 14px; background: var(--main-color); color: #000; border: none; border-radius: 8px; font-weight: bold; margin-top: 12px; cursor: pointer; }
 
-        @media (max-width:400px) {
-            .hero h1 { font-size:19px; }
-            .platform-btn { font-size:13px; padding:14px 12px; }
-            .platform-btn img { width:32px; height:32px; }
-            .number-card .number { font-size:24px; }
-        }
-    </style>
+#toast-container { position: fixed; top: 80px; left: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; }
+.toast { background: var(--bg-color); border-left: 4px solid var(--main-color); padding: 14px 20px; border-radius: 6px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); animation: toast-in 0.3s; }
+.toast.error { border-left-color: #ff4444; }
+@keyframes toast-in { from { transform: translateX(-100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+.top-banner {
+  position: fixed; top: 0; left: 0; right: 0;
+  background: linear-gradient(135deg, var(--main-color), var(--secondary-color));
+  color: #000; padding: 15px 20px; font-weight: bold; text-align: center;
+  z-index: 9999; transform: translateY(-150%);
+  transition: transform 0.4s ease; box-shadow: 0 5px 20px rgba(0,0,0,0.5);
+  font-size: 1.1em;
+}
+.top-banner.show { transform: translateY(0); }
+.top-banner .banner-code { font-size: 1.4em; font-family: 'Courier New', monospace; background: #000; color: var(--main-color); padding: 4px 12px; border-radius: 6px; margin: 0 10px; }
+.top-banner .banner-close { position: absolute; right: 15px; top: 50%; transform: translateY(-50%); background: none; border: none; font-size: 1.5em; cursor: pointer; }
+
+.footer-info { text-align: center; padding: 20px; color: #888; font-size: 0.9em; }
+.footer-info strong { color: var(--main-color); }
+
+@media (max-width: 768px) {
+  .stats-bar { grid-template-columns: repeat(2, 1fr); }
+  .platforms-grid { grid-template-columns: repeat(3, 1fr); }
+  .countries-grid { grid-template-columns: repeat(2, 1fr); }
+  .number-value, .code-value { font-size: 1.5em; min-width: 200px; }
+  .feed-item { grid-template-columns: 40px 1fr 1fr; }
+  .feed-time { display: none; }
+}
+</style>
 </head>
 <body>
-    <canvas id="matrix-bg"></canvas>
-    <div class="falling-numbers" id="fallingNumbers"></div>
-    <div id="toast-notification"><span>🔔</span><span id="toast-text">تم استلام كود جديد!</span></div>
+<canvas id="matrix-rain" class="matrix-bg"></canvas>
+<canvas id="digit-rain" class="digit-bg"></canvas>
 
-    <div class="app">
-        <div class="top-bar">
-            <div class="brand">
-                <div class="brand-icon">🚀</div>
-                <div class="brand-text">{{ site_title }}</div>
-            </div>
-            <div class="top-actions">
-                <button class="menu-btn" onclick="toggleMenu()">☰</button>
-            </div>
-        </div>
+<div class="top-banner" id="top-banner"></div>
 
-        <div class="menu-overlay" id="menuOverlay" onclick="toggleMenu()"></div>
-        <div class="dropdown-menu" id="contactMenu">
-            <div class="menu-header-title">
-                <div class="icon">🚀</div>
-                <div style="font-weight:900; color:#fff; font-size:18px; margin-top:6px;">المطري OTP</div>
-            </div>
-            
-            <div class="menu-section-title">📞 تواصل معنا</div>
-            {% for key, value, icon in links %}
-            <a href="{{ value }}" target="_blank">
-                <span class="ico">{{ icon }}</span>
-                {{ key.replace('_', ' ').title() }}
-            </a>
-            {% endfor %}
-            
-            <div class="menu-divider"></div>
-            
-            <a href="/announcements"><span class="ico">📢</span> إعلانات الموقع</a>
-            <a href="#" onclick="openHelpModal(); return false;"><span class="ico">🆘</span> طلب مساعدة</a>
-            
-            <div class="menu-divider"></div>
-            <a href="/admin"><span class="ico">⚙️</span> لوحة التحكم</a>
-        </div>
+<div class="marquee">
+  <div class="marquee-inner">
+    <span>📢 {{ settings.announcement }}</span>
+    <span>•</span>
+    <span>{{ settings.marquee_text }}</span>
+    <span>•</span>
+    <span>📞 للدعم: 967733723953</span>
+  </div>
+</div>
 
-        <div class="main">
-            <div class="hero">
-                <h1>{{ site_title }}</h1>
-                <p>{{ site_subtitle }}</p>
-            </div>
+<header class="header">
+  <button id="menu-toggle" class="icon-btn">☰</button>
+  <h1 class="logo">
+    <span class="logo-icon">🔐</span>
+    <span class="logo-text">{{ settings.site_name }}</span>
+  </h1>
+  <div class="header-actions">
+    <button id="sound-toggle" class="icon-btn" title="تشغيل/إيقاف الصوت">🔔</button>
+  </div>
+</header>
 
-            <div class="section-title"><span class="icon">🎯</span> اختر المنصة</div>
-            <div class="platforms" id="platformSelector"></div>
+<aside id="side-menu" class="side-menu">
+  <div class="side-menu-header">
+    <h3>القائمة</h3>
+    <button id="menu-close" class="icon-btn">✕</button>
+  </div>
+  <nav class="side-menu-links" id="side-menu-links"></nav>
+  <div class="side-menu-footer">
+    <a href="/admin/login" class="admin-link">🔧 دخول الأدمن</a>
+  </div>
+</aside>
+<div id="menu-overlay" class="menu-overlay"></div>
 
-            <div class="section-title"><span class="icon">🌍</span> اختر الدولة</div>
-            <select id="country" class="form-control" disabled>
-                <option value="">-- اختر المنصة أولاً --</option>
-            </select>
+<div class="container">
+  <section class="stats-bar">
+    <div class="stat"><span class="stat-num">{{ stats.today_numbers }}</span><span class="stat-label">أرقام اليوم</span></div>
+    <div class="stat"><span class="stat-num">{{ stats.today_codes }}</span><span class="stat-label">أكواد اليوم</span></div>
+    <div class="stat"><span class="stat-num">{{ stats.active_users }}</span><span class="stat-label">نشطين الآن</span></div>
+    <div class="stat"><span class="stat-num">{{ stats.total_visits }}</span><span class="stat-label">إجمالي الزيارات</span></div>
+  </section>
 
-            <button class="btn-primary" id="getNumberBtn" onclick="getNumber()" disabled>{{ btn_get_number }}</button>
+  <button id="btn-smart-pick" class="smart-btn">
+    <span class="smart-btn-icon">⚡</span>
+    <span class="smart-btn-text">
+      <strong>{{ settings.smart_btn_text or '⚡ استلام ذكي فوري' }}</strong>
+      <small>{{ settings.smart_btn_subtext or 'يختار لك أفضل رقم متاح مع كوده تلقائياً' }}</small>
+    </span>
+  </button>
 
-            <div id="numberContainer" style="display:none;">
-                <div class="number-card">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                        <span style="font-size:11px; color:#8b949e; font-weight:600;">📞 الرقم</span>
-                        <button class="copy-btn-mini" onclick="copyNumber()" id="copyNumBtn">📋 نسخ</button>
-                    </div>
-                    <div class="number" id="numberDisplay">+</div>
-                    <div id="pullCount" style="font-size:11px; color:#8b949e; margin-top:6px;"></div>
-                    <div class="code-timer" id="codeTimer">
-                        <span>⏱️</span>
-                        <span>جاري السحب...</span>
-                    </div>
-                    <div style="margin-top:10px;">
-                        <button onclick="refreshNumber()" style="
-                            background:#30363d; border:1px solid #484f58; color:#fff;
-                            padding:10px 16px; border-radius:10px; cursor:pointer;
-                            font-size:13px; font-weight:600; width:100%;
-                        ">🔄 تبديل الرقم</button>
-                    </div>
-                </div>
-            </div>
+  <div class="card">
+    <h3>{{ settings.live_codes or '⚡ آخر الأكواد من القنوات (لايف)' }}</h3>
+    <div id="live-feed" class="live-feed"><div class="empty">جاري التحميل...</div></div>
+  </div>
 
-            <div class="section-title" style="margin-top:16px;"><span class="icon">📜</span> الأكواد المسحوبة</div>
-            <div class="otp-list" id="otpHistory">
-                <div class="empty-state"><div class="icon">⏳</div><div>في انتظار الأكواد...</div></div>
-            </div>
+  <div class="search-box">
+    <input type="text" id="instant-search" placeholder="{{ settings.search_placeholder or '🔍 بحث فوري...' }}" autocomplete="off">
+    <div id="search-results" class="search-results"></div>
+  </div>
 
-            <div class="status" id="status">⚡ اختر المنصة والدولة للبدء</div>
-        </div>
+  <div class="font-controls">
+    <button class="font-btn" onclick="changeFontSize(-2)">A-</button>
+    <span class="font-label">حجم الخط</span>
+    <button class="font-btn" onclick="changeFontSize(2)">A+</button>
+  </div>
 
-        <div class="footer-section">
-            <div class="news-ticker" id="tickerContainer">
-                <div class="ticker-content" id="tickerContent">{{ ticker_text }} • {{ ticker_text }}</div>
-            </div>
-            <div class="footer-info">{{ footer_text }}</div>
-        </div>
+  <section>
+    <h2 class="section-title">📱 {{ settings.choose_platform or 'اختر المنصة' }}</h2>
+    <div class="platforms-grid" id="platforms-grid">
+      {% for p in platforms %}
+      <div class="platform-card" data-platform-id="{{ p.id }}" style="--card-color: {{ p.color }}">
+        <div class="platform-icon">{{ p.icon }}</div>
+        <div class="platform-name">{{ p.name }}</div>
+      </div>
+      {% endfor %}
     </div>
+  </section>
 
-    <div class="modal-overlay" id="helpModal" onclick="if(event.target===this) closeHelpModal()">
-        <div class="modal-box">
-            <h2>🆘 طلب مساعدة</h2>
-            <p>اشرح مشكلتك وسنرد عليك بأسرع وقت</p>
-            <textarea id="helpMessage" placeholder="اكتب رسالتك هنا..."></textarea>
-            <div class="modal-actions">
-                <button class="btn-cancel" onclick="closeHelpModal()">إلغاء</button>
-                <button class="btn-send" id="sendHelpBtn" onclick="sendHelpRequest()">إرسال</button>
-            </div>
-            <div class="success-msg" id="helpSuccess">✅ تم إرسال رسالتك!</div>
-        </div>
+  <section id="countries-section" style="display:none">
+    <h2 class="section-title">🌍 {{ settings.choose_country or 'اختر الدولة' }}</h2>
+    <div class="countries-grid" id="countries-grid"></div>
+  </section>
+
+  <section class="number-display" id="number-display" style="display:none">
+    <div class="number-box">
+      <div class="number-label">📞 {{ settings.your_number or 'رقمك' }}</div>
+      <div class="number-value" id="number-value">---</div>
+      <button class="copy-btn" id="copy-number">📋 {{ settings.copy_number or 'نسخ الرقم' }}</button>
+      <div class="number-timer" id="number-timer">⏱ 02:00</div>
     </div>
+    <div class="code-box">
+      <div class="code-label">🔑 {{ settings.your_code or 'الكود' }}</div>
+      <div class="code-value" id="code-value">
+        <div class="waiting-spinner"></div>
+        <span>{{ settings.waiting_code or 'في انتظار الكود...' }}</span>
+      </div>
+      <button class="copy-btn" id="copy-code" style="display:none">📋 {{ settings.copy_code or 'نسخ الكود' }}</button>
+    </div>
+    <div class="actions-row">
+      <button class="action-btn" id="btn-next">🔄 {{ settings.next_number or 'الرقم التالي' }}</button>
+      <button class="action-btn" id="btn-help">🆘 {{ settings.help or 'مساعدة' }}</button>
+    </div>
+  </section>
+</div>
 
-    <script>
-        const platformLogos = {{ platform_logos | tojson }};
-        const platformNames = {{ platform_names | tojson }};
-        const platformColors = {{ platform_colors | tojson }};
-        let fallingEnabled = {{ falling_enabled }};
+<div class="footer-info">{{ settings.footer_text or '💎 صُنع بحب ⚡ بواسطة المطري' }}</div>
 
-        function toggleMenu() {
-            document.getElementById('contactMenu').classList.toggle('show');
-            document.getElementById('menuOverlay').classList.toggle('show');
-            document.body.style.overflow = document.getElementById('contactMenu').classList.contains('show') ? 'hidden' : '';
-        }
+<div id="help-modal" class="modal" style="display:none">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>🆘 طلب مساعدة</h3>
+      <button class="modal-close" id="help-close">✕</button>
+    </div>
+    <textarea id="help-message" rows="5" placeholder="اكتب مشكلتك هنا..."></textarea>
+    <button class="primary-btn" id="help-send">إرسال</button>
+  </div>
+</div>
 
-        function openHelpModal() {
-            toggleMenu();
-            setTimeout(() => {
-                document.getElementById('helpModal').style.display = 'flex';
-                document.getElementById('helpMessage').value = '';
-                document.getElementById('helpSuccess').style.display = 'none';
-            }, 300);
-        }
-        function closeHelpModal() { document.getElementById('helpModal').style.display = 'none'; }
+<div id="toast-container"></div>
 
-        async function sendHelpRequest() {
-            const msg = document.getElementById('helpMessage').value.trim();
-            if (!msg) { alert('الرجاء كتابة رسالتك'); return; }
-            const btn = document.getElementById('sendHelpBtn');
-            btn.disabled = true; btn.textContent = '⏳ جاري الإرسال...';
-            try {
-                const res = await fetch('/api/help', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message:msg})});
-                const data = await res.json();
-                if (data.ok) {
-                    document.getElementById('helpSuccess').style.display = 'block';
-                    document.getElementById('helpMessage').value = '';
-                    setTimeout(() => closeHelpModal(), 2000);
-                }
-            } catch(e) { alert('❌ فشل الاتصال'); }
-            btn.disabled = false; btn.textContent = 'إرسال';
-        }
+<script>
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
 
-        async function copyNumber() {
-            const num = document.getElementById('numberDisplay').textContent;
-            try { await navigator.clipboard.writeText(num); } catch(e) {}
-            const btn = document.getElementById('copyNumBtn');
-            btn.classList.add('copied');
-            btn.textContent = '✅ تم';
-            setTimeout(() => { btn.classList.remove('copied'); btn.textContent = '📋 نسخ'; }, 1800);
-        }
+// ============ الألوان والإعدادات ============
+fetch('/api/ui_settings').then(r=>r.json()).then(d=>{
+  if (d.ok && d.settings) {
+    const s = d.settings;
+    if (s.main_color) document.documentElement.style.setProperty('--main-color', s.main_color);
+    if (s.secondary_color) document.documentElement.style.setProperty('--secondary-color', s.secondary_color);
+    if (s.bg_color) document.documentElement.style.setProperty('--bg-color', s.bg_color);
+    if (s.text_color) document.documentElement.style.setProperty('--text-color', s.text_color);
+    if (s.digit_rain_enabled !== '1') { const dr = document.getElementById('digit-rain'); if (dr) dr.style.display = 'none'; }
+    if (s.matrix_rain_enabled !== '1') { const mr = document.getElementById('matrix-rain'); if (mr) mr.style.display = 'none'; }
+  }
+}).catch(()=>{});
 
-        function copyText(text, btn) {
-            navigator.clipboard.writeText(text);
-            if (btn) {
-                const orig = btn.textContent;
-                btn.textContent = '✅';
-                setTimeout(() => btn.textContent = orig, 1200);
-            }
-        }
+// ============ الصوت ============
+let soundEnabled = localStorage.getItem('soundEnabled') !== 'false';
+const soundBtn = document.getElementById('sound-toggle');
+if (soundBtn) {
+  soundBtn.textContent = soundEnabled ? '🔔' : '🔕';
+  soundBtn.addEventListener('click', () => {
+    soundEnabled = !soundEnabled;
+    localStorage.setItem('soundEnabled', soundEnabled);
+    soundBtn.textContent = soundEnabled ? '🔔' : '🔕';
+  });
+}
+function playAlert() {
+  if (!soundEnabled) return;
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [880, 1100, 1320].forEach((f, i) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.frequency.value = f; o.type = 'sine';
+      g.gain.setValueAtTime(0.3, ctx.currentTime + i * 0.15);
+      g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + i * 0.15 + 0.3);
+      o.start(ctx.currentTime + i * 0.15);
+      o.stop(ctx.currentTime + i * 0.15 + 0.3);
+    });
+  } catch (e) {}
+}
 
-        function animateNumber(element, text) {
-            element.innerHTML = '';
-            const chars = text.split('');
-            chars.forEach((ch, i) => {
-                const span = document.createElement('span');
-                span.className = 'digit';
-                span.textContent = ch;
-                span.style.animationDelay = (i * 0.05) + 's';
-                element.appendChild(span);
-            });
-        }
+// ============ الإشعارات ============
+function showTopBanner(title, code) {
+  const banner = document.getElementById('top-banner');
+  if (!banner) return;
+  banner.innerHTML = '<button class="banner-close" onclick="this.parentElement.classList.remove(\'show\')">✕</button>' + title + ' <span class="banner-code">' + code + '</span>';
+  banner.classList.add('show');
+  setTimeout(() => banner.classList.remove('show'), 5000);
+}
+function pushNotification(title, body) {
+  if ('Notification' in window && Notification.permission === 'granted') {
+    try { new Notification(title, { body }); } catch (e) {}
+  }
+}
+if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
 
-        // Matrix Background
-        function initMatrix() {
-            const canvas = document.getElementById('matrix-bg');
-            const ctx = canvas.getContext('2d');
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            const digits = "0123456789+()#-*$!%&";
-            const fontSize = 14;
-            const columns = Math.floor(canvas.width / fontSize);
-            const drops = [];
-            for (let i = 0; i < columns; i++) drops[i] = Math.random() * -100;
-            function draw() {
-                ctx.fillStyle = "rgba(7, 9, 13, 0.08)";
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                ctx.font = "bold " + fontSize + "px monospace";
-                for (let i = 0; i < drops.length; i++) {
-                    const text = digits.charAt(Math.floor(Math.random() * digits.length));
-                    ctx.shadowBlur = 12;
-                    ctx.shadowColor = "#00ffc8";
-                    ctx.fillStyle = Math.random() > 0.92 ? "#ffffff" : "#00ffc8";
-                    ctx.fillText(text, i * fontSize, drops[i] * fontSize);
-                    ctx.shadowBlur = 0;
-                    if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) drops[i] = 0;
-                    drops[i] += 0.8;
-                }
-            }
-            setInterval(draw, 50);
-            window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
-        }
-        initMatrix();
+// ============ القائمة ============
+const mt = document.getElementById('menu-toggle');
+if (mt) mt.addEventListener('click', () => {
+  document.getElementById('side-menu').classList.add('open');
+  document.getElementById('menu-overlay').classList.add('open');
+});
+const mc = document.getElementById('menu-close');
+if (mc) mc.addEventListener('click', () => {
+  document.getElementById('side-menu').classList.remove('open');
+  document.getElementById('menu-overlay').classList.remove('open');
+});
+const mo = document.getElementById('menu-overlay');
+if (mo) mo.addEventListener('click', () => {
+  document.getElementById('side-menu').classList.remove('open');
+  document.getElementById('menu-overlay').classList.remove('open');
+});
 
-        // Falling Numbers
-        function initFallingNumbers() {
-            const container = document.getElementById('fallingNumbers');
-            if (!fallingEnabled) { container.innerHTML = ''; return; }
-            container.innerHTML = '';
-            for (let i = 0; i < 20; i++) {
-                const digit = document.createElement('div');
-                digit.className = 'falling-digit';
-                digit.textContent = Math.floor(Math.random() * 10);
-                digit.style.left = Math.random() * 100 + '%';
-                digit.style.animationDuration = (Math.random() * 10 + 10) + 's';
-                digit.style.animationDelay = Math.random() * 10 + 's';
-                container.appendChild(digit);
-            }
-        }
-        initFallingNumbers();
+fetch('/api/links').then(r=>r.json()).then(d=>{
+  const el = document.getElementById('side-menu-links');
+  if (el && d.links) el.innerHTML = d.links.map(l => '<a href="'+l.url+'" target="_blank">'+(l.icon||'🔗')+' '+l.label+'</a>').join('');
+});
 
-        let currentPlatform = '';
-        let currentNumber = '';
-        let currentNumberIndex = 0;
-        let monitorInterval = null;
-        let allOtpsCache = [];
+// ============ Toast ============
+function toast(msg, type) {
+  const t = document.createElement('div');
+  t.className = 'toast ' + (type || '');
+  t.textContent = msg;
+  const c = document.getElementById('toast-container');
+  if (c) c.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
 
-        function initPlatformSelector() {
-            const selector = document.getElementById('platformSelector');
-            selector.innerHTML = '';
-            Object.keys(platformNames).forEach(platform => {
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = 'platform-btn';
-                btn.onclick = () => selectPlatform(platform, btn);
-                btn.style.setProperty('--platform-color', platformColors[platform] || '#1f6feb');
-                btn.innerHTML = '<img src="' + platformLogos[platform] + '" alt="' + platformNames[platform] + '"><span>' + platformNames[platform] + '</span>';
-                selector.appendChild(btn);
-            });
-        }
+// ============ حجم الخط ============
+function changeFontSize(delta) {
+  let f = parseInt(localStorage.getItem('fontSize') || '16');
+  f = Math.max(12, Math.min(24, f + delta));
+  localStorage.setItem('fontSize', f);
+  document.documentElement.style.setProperty('--base-font-size', f + 'px');
+  toast('📏 حجم الخط: ' + f + 'px');
+}
+document.documentElement.style.setProperty('--base-font-size', (parseInt(localStorage.getItem('fontSize') || '16')) + 'px');
 
-        function selectPlatform(platform, btn) {
-            currentPlatform = platform;
-            document.querySelectorAll('.platform-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            loadCountries();
-        }
+// ============ أرقام متساقطة ============
+function startDigitRain() {
+  const canvas = document.getElementById('digit-rain');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  const drops = [];
+  for (let i = 0; i < 40; i++) {
+    drops.push({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      s: Math.random() * 3 + 1,
+      txt: '0123456789'[Math.floor(Math.random() * 10)]
+    });
+  }
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#00ffc8';
+    ctx.font = '18px monospace';
+    drops.forEach(d => {
+      ctx.fillText(d.txt, d.x, d.y);
+      d.y += d.s;
+      if (d.y > canvas.height) { d.y = 0; d.x = Math.random() * canvas.width; d.txt = '0123456789'[Math.floor(Math.random() * 10)]; }
+    });
+  }
+  setInterval(draw, 80);
+  window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
+}
 
-        async function loadCountries() {
-            const countrySelect = document.getElementById('country');
-            if (!currentPlatform) {
-                countrySelect.innerHTML = '<option value="">-- اختر المنصة أولاً --</option>';
-                countrySelect.disabled = true;
-                document.getElementById('numberContainer').style.display = 'none';
-                document.getElementById('getNumberBtn').disabled = true;
-                return;
-            }
-            countrySelect.disabled = true;
-            countrySelect.innerHTML = '<option value="">جاري التحميل...</option>';
-            const res = await fetch('/api/countries', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform:currentPlatform})});
-            const data = await res.json();
-            let options = '<option value="">-- اختر الدولة --</option>';
-            data.forEach(c => { options += '<option value="' + c.code + '">' + c.flag + ' ' + c.name + '</option>'; });
-            countrySelect.innerHTML = options;
-            countrySelect.disabled = false;
-        }
+// ============ Matrix Rain ============
+function startMatrixRain() {
+  const canvas = document.getElementById('matrix-rain');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ابتثجحخدذرزسشصضطظعغفقكلمنهوي';
+  const fontSize = 14;
+  const cols = Math.floor(canvas.width / fontSize);
+  const drops = Array(cols).fill(1);
+  function draw() {
+    ctx.fillStyle = 'rgba(0,0,0,0.05)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#0f0';
+    ctx.font = fontSize + 'px monospace';
+    for (let i = 0; i < drops.length; i++) {
+      ctx.fillText(chars[Math.floor(Math.random() * chars.length)], i * fontSize, drops[i] * fontSize);
+      if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) drops[i] = 0;
+      drops[i]++;
+    }
+  }
+  setInterval(draw, 50);
+  window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
+}
 
-        document.getElementById('country').addEventListener('change', function() {
-            document.getElementById('getNumberBtn').disabled = !this.value;
-        });
+startMatrixRain();
+startDigitRain();
 
-        async function getNumber() {
-            const country = document.getElementById('country').value;
-            if (!currentPlatform || !country) return;
-            currentNumberIndex = 0;
-            document.getElementById('status').textContent = '⏳ جاري جلب رقم...';
-            const res = await fetch('/api/get_number', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform:currentPlatform, country, index: currentNumberIndex})});
-            const data = await res.json();
-            if (data.number) {
-                currentNumber = data.number;
-                animateNumber(document.getElementById('numberDisplay'), data.number);
-                document.getElementById('numberContainer').style.display = 'block';
-                document.getElementById('status').textContent = '✅ الرقم جاهز!';
-                startMonitoring();
-            } else {
-                document.getElementById('status').textContent = '❌ لا توجد أرقام متاحة';
-            }
-        }
+// ============ المنصات والدول ============
+let selectedPlatform = null;
+let currentNumber = null, currentCode = null, currentNumberId = null, currentCountryId = null, timerInterval = null;
 
-        async function refreshNumber() {
-            const country = document.getElementById('country').value;
-            if (!currentPlatform || !country) return;
-            stopMonitoring();
-            currentNumberIndex++;
-            try {
-                const res = await fetch('/api/get_number', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform:currentPlatform, country, index: currentNumberIndex})});
-                const data = await res.json();
-                if (data.number) {
-                    currentNumber = data.number;
-                    animateNumber(document.getElementById('numberDisplay'), data.number);
-                    document.getElementById('status').textContent = '🔄 تم التبديل!';
-                } else {
-                    currentNumberIndex = 0;
-                    const resRetry = await fetch('/api/get_number', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform:currentPlatform, country, index: 0})});
-                    const dataRetry = await resRetry.json();
-                    if (dataRetry.number) {
-                        currentNumber = dataRetry.number;
-                        animateNumber(document.getElementById('numberDisplay'), dataRetry.number);
-                        document.getElementById('status').textContent = '🔄 العودة للأول';
-                    }
-                }
-                startMonitoring();
-            } catch(e) {
-                document.getElementById('status').textContent = '❌ فشل التبديل';
-            }
-        }
+document.querySelectorAll('.platform-card').forEach(card => {
+  card.addEventListener('click', () => {
+    document.querySelectorAll('.platform-card').forEach(c => c.classList.remove('active'));
+    card.classList.add('active');
+    selectedPlatform = card.dataset.platformId;
+    loadCountries(selectedPlatform);
+  });
+});
 
-        function startMonitoring() {
-            if (!currentNumber) return;
-            if (monitorInterval) clearInterval(monitorInterval);
-            let lastSeenOtpTime = '';
-            monitorInterval = setInterval(() => {
-                if (!currentNumber) { stopMonitoring(); return; }
-                fetch('/api/get_otp', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({number:currentNumber})})
-                .then(res => res.json()).then(data => {
-                    if (data.otp && data.otp !== lastSeenOtpTime) {
-                        lastSeenOtpTime = data.otp;
-                        const now = new Date().toLocaleString('en-US', {timeZone:'Asia/Aden', hour12:true});
-                        addOtpToHistory(currentNumber, data.otp, now, currentPlatform);
-                        showToast('🔔 تم استلام كود: ' + data.otp);
-                        document.getElementById('status').innerHTML = '✅ <b>تم استلام كود!</b>';
-                    }
-                }).catch(()=>{});
-            }, 3000);
-        }
+function loadCountries(pid) {
+  fetch('/api/countries/' + pid).then(r=>r.json()).then(d => {
+    if (!d.countries || !d.countries.length) { toast('لا توجد دول لهذه المنصة', 'error'); return; }
+    const g = document.getElementById('countries-grid');
+    if (g) g.innerHTML = d.countries.map(c => '<div class="country-card" data-country-id="'+c.id+'"><div class="country-name"><span class="country-flag">'+(c.flag||'🌍')+'</span><span>'+c.name+'</span></div><span class="country-available">'+c.available+'</span></div>').join('');
+    const s = document.getElementById('countries-section');
+    if (s) s.style.display = 'block';
+    document.querySelectorAll('#countries-grid .country-card').forEach(c => {
+      c.addEventListener('click', () => { currentCountryId = c.dataset.countryId; requestNumber(currentCountryId); });
+    });
+  });
+}
 
-        function stopMonitoring() {
-            if (monitorInterval) { clearInterval(monitorInterval); monitorInterval = null; }
-        }
+function requestNumber(countryId, numberId) {
+  const url = numberId ? '/api/next_number' : '/api/get_number';
+  fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ country_id: countryId, current_number_id: numberId }) })
+    .then(r=>r.json()).then(d => {
+      if (!d.ok) { toast(d.error, 'error'); return; }
+      currentNumber = d.number; currentNumberId = d.number_id; currentCode = d.code;
+      renderNumberWithDrop(d.number, 'number-value');
+      if (d.code) {
+        document.getElementById('code-value').textContent = d.code;
+        document.getElementById('copy-code').style.display = 'inline-block';
+      } else {
+        document.getElementById('code-value').innerHTML = '<div class="waiting-spinner"></div><span>في انتظار الكود...</span>';
+        document.getElementById('copy-code').style.display = 'none';
+        startCodePolling(d.number_id);
+      }
+      document.getElementById('number-display').style.display = 'block';
+      document.getElementById('number-display').scrollIntoView({ behavior: 'smooth' });
+      startTimer(d.expires_in || 120);
+    });
+}
 
-        function showToast(text) {
-            const toast = document.getElementById('toast-notification');
-            document.getElementById('toast-text').textContent = text;
-            toast.classList.add('show');
-            setTimeout(() => toast.classList.remove('show'), 4000);
-        }
+function renderNumberWithDrop(text, id) {
+  const el = document.getElementById(id);
+  el.innerHTML = '';
+  text.split('').forEach((ch, i) => {
+    const s = document.createElement('span');
+    s.className = 'digit';
+    s.textContent = ch;
+    s.style.animationDelay = (i * 0.05) + 's';
+    el.appendChild(s);
+  });
+}
 
-        function addOtpToHistory(number, otp, timestamp, platform) {
-            const container = document.getElementById('otpHistory');
-            if (container.querySelector('.empty-state')) container.innerHTML = '';
-            const otpData = {id: Date.now(), number, otp, timestamp, platform: platform || currentPlatform || 'unknown'};
-            allOtpsCache.unshift(otpData);
-            try { localStorage.setItem('allOtps', JSON.stringify(allOtpsCache.slice(0, 30))); } catch(e) {}
-            renderOtpSections();
-        }
+const bn = document.getElementById('btn-next');
+if (bn) bn.addEventListener('click', () => {
+  if (currentCountryId) { stopCodePolling(); requestNumber(currentCountryId, currentNumberId); }
+});
 
-        function renderOtpSections() {
-            const container = document.getElementById('otpHistory');
-            if (!allOtpsCache.length) {
-                container.innerHTML = '<div class="empty-state"><div class="icon">⏳</div><div>في انتظار الأكواد...</div></div>';
-                return;
-            }
-            container.innerHTML = allOtpsCache.map(o => {
-                const logoUrl = platformLogos[o.platform] || '';
-                const name = platformNames[o.platform] || o.platform;
-                return '<div class="otp-item">' +
-                    '<div><div class="otp-code">🔑 ' + o.otp + '</div><div class="otp-info">📞 ' + o.number + '</div><div class="otp-time">🕒 ' + o.timestamp + '</div></div>' +
-                    '<button class="copy-btn" onclick="copyText(\'' + o.otp + '\', this)">نسخ</button>' +
-                '</div>';
-            }).join('');
-        }
+// ============ زر الاستلام الذكي ============
+const bs = document.getElementById('btn-smart-pick');
+if (bs) bs.addEventListener('click', () => {
+  fetch('/api/smart_pick', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({}) })
+    .then(r=>r.json()).then(d => {
+      if (!d.ok) { toast(d.error, 'error'); return; }
+      currentNumber = d.number; currentNumberId = d.number_id; currentCode = d.code;
+      renderNumberWithDrop(d.number, 'number-value');
+      if (d.code) {
+        document.getElementById('code-value').textContent = d.code;
+        document.getElementById('copy-code').style.display = 'inline-block';
+        playAlert();
+        showTopBanner('✅ كود جاهز', d.code);
+        toast('✅ ' + d.platform + ' - ' + d.country);
+      } else {
+        document.getElementById('code-value').innerHTML = '<div class="waiting-spinner"></div><span>في انتظار الكود...</span>';
+        document.getElementById('copy-code').style.display = 'none';
+        startCodePolling(d.number_id);
+        toast('⏳ في انتظار الكود...');
+      }
+      document.getElementById('number-display').style.display = 'block';
+      document.getElementById('number-display').scrollIntoView({ behavior: 'smooth' });
+      startTimer(d.expires_in || 120);
+    });
+});
 
-        function loadCachedOtps() {
-            try {
-                const cached = localStorage.getItem('allOtps');
-                if (cached) {
-                    allOtpsCache = JSON.parse(cached);
-                    if (allOtpsCache.length) renderOtpSections();
-                }
-            } catch(e) {}
-        }
+// ============ التايمر ============
+function startTimer(seconds) {
+  if (timerInterval) clearInterval(timerInterval);
+  let remaining = seconds;
+  const update = () => {
+    const m = Math.floor(remaining / 60); const s = remaining % 60;
+    const t = document.getElementById('number-timer');
+    if (t) t.textContent = '⏱ ' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+    if (remaining <= 0) { clearInterval(timerInterval); toast('⏰ انتهت صلاحية الرقم'); }
+    else remaining--;
+  };
+  update();
+  timerInterval = setInterval(update, 1000);
+}
 
-        document.addEventListener('DOMContentLoaded', () => {
-            initPlatformSelector();
-            loadCachedOtps();
-        });
-    </script>
+// ============ سحب الكود ============
+let codePollInterval = null;
+function startCodePolling(numberId) {
+  if (codePollInterval) clearInterval(codePollInterval);
+  codePollInterval = setInterval(() => {
+    fetch('/api/check_code/' + numberId).then(r=>r.json()).then(d => {
+      if (d.code && d.code !== currentCode) {
+        currentCode = d.code;
+        document.getElementById('code-value').textContent = d.code;
+        document.getElementById('copy-code').style.display = 'inline-block';
+        playAlert();
+        pushNotification('🔑 كود جديد!', 'الكود: ' + d.code);
+        showTopBanner('🔑 كود جديد!', d.code);
+        toast('🔑 الكود وصل: ' + d.code);
+      }
+    });
+  }, 3000);
+}
+function stopCodePolling() { if (codePollInterval) clearInterval(codePollInterval); }
+
+// ============ مساعدة ============
+const bh = document.getElementById('btn-help');
+if (bh) bh.addEventListener('click', () => { const m = document.getElementById('help-modal'); if (m) m.style.display = 'flex'; });
+const hc = document.getElementById('help-close');
+if (hc) hc.addEventListener('click', () => { const m = document.getElementById('help-modal'); if (m) m.style.display = 'none'; });
+const hs = document.getElementById('help-send');
+if (hs) hs.addEventListener('click', () => {
+  const me = document.getElementById('help-message');
+  const msg = me ? me.value.trim() : '';
+  if (!msg) { toast('اكتب رسالتك أولاً', 'error'); return; }
+  fetch('/api/help', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ message: msg }) })
+    .then(r=>r.json()).then(d => { if (d.ok) { toast(d.message); const m = document.getElementById('help-modal'); if (m) m.style.display = 'none'; if (me) me.value = ''; } });
+});
+
+// ============ بحث ============
+const isearch = document.getElementById('instant-search');
+if (isearch) isearch.addEventListener('input', e => {
+  const q = e.target.value.trim();
+  if (q.length < 2) { document.getElementById('search-results').classList.remove('open'); return; }
+  fetch('/api/search?q=' + encodeURIComponent(q)).then(r=>r.json()).then(d => {
+    if (!d.results || !d.results.length) { document.getElementById('search-results').classList.remove('open'); return; }
+    document.getElementById('search-results').innerHTML = d.results.map(r => '<div class="search-result-item">'+r.icon+' <b>'+r.platform+'</b> / '+r.country+' — <code>'+r.number+'</code></div>').join('');
+    document.getElementById('search-results').classList.add('open');
+  });
+});
+document.addEventListener('click', e => { if (!e.target.closest('.search-box')) { const sr = document.getElementById('search-results'); if (sr) sr.classList.remove('open'); } });
+
+// ============ اللايف فيد ============
+function loadFeed() {
+  fetch('/api/feed').then(r=>r.json()).then(d => {
+    const box = document.getElementById('live-feed');
+    if (!box) return;
+    if (!d.feed || !d.feed.length) { box.innerHTML = '<div class="empty">لا توجد أكواد بعد</div>'; return; }
+    box.innerHTML = d.feed.map(f => '<div class="feed-item"><div class="feed-icon">'+(f.icon||'📱')+'</div><div><b style="color:'+(f.color||'#00ff88')+'">'+f.platform+'</b> / '+(f.flag||'')+' '+f.country+'</div><div class="feed-number">'+f.number+'</div><div class="feed-code">'+f.code+' <span class="feed-time">'+(f.received_at||'').slice(11,19)+'</span></div></div>').join('');
+  });
+}
+loadFeed();
+setInterval(loadFeed, 5000);
+
+// ============ نسخ ============
+function copyText(text) {
+  if (!text) return;
+  if (navigator.clipboard) navigator.clipboard.writeText(text).then(() => toast('✅ تم النسخ: ' + text));
+}
+document.getElementById('copy-number')?.addEventListener('click', () => copyText(currentNumber));
+document.getElementById('copy-code')?.addEventListener('click', () => copyText(currentCode));
+</script>
 </body>
 </html>
 """
 
-# ========== Routes ==========
-@app.route('/')
-def home():
-    site_title = get_text('site_title') or '🚀 المطري OTP'
-    site_subtitle = get_text('site_subtitle') or '👑 أرقام واتساب سحب أكواد 👑'
-    btn_get_number = get_text('btn_get_number') or '🚀 جلب رقم'
-    footer_text = get_text('footer_text') or '💎 صُنع بحب'
-    ticker_text = get_text('ticker_text') or '🚀 المطري OTP'
-    
-    links = get_all_links()
-    platforms = get_platforms() or list(platform_names.keys())
-    main_color = get_setting('main_color') or '#00ffc8'
-    secondary_color = get_setting('secondary_color') or '#8b5cf6'
-    background_color = get_setting('background_color') or '#0a0e1a'
-    text_color = get_setting('text_color') or '#ffffff'
-    falling_enabled = '1' if get_setting('falling_numbers_enabled') == '1' else '0'
-    
-    return render_template_string(main_html,
-        site_title=site_title, site_subtitle=site_subtitle,
-        btn_get_number=btn_get_number, footer_text=footer_text,
-        ticker_text=ticker_text, links=links, platforms=platforms,
-        platform_logos=PLATFORM_LOGOS, platform_names=platform_names,
-        platform_colors=platform_colors,
-        main_color=main_color, secondary_color=secondary_color,
-        background_color=background_color, text_color=text_color,
-        falling_enabled=falling_enabled
-    )
+# =========================================================================
+# 9) لوحة الأدمن - HTML مع ألوان جديدة
+# =========================================================================
+ADMIN_CSS = """
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Arial, sans-serif; }
+body { background: linear-gradient(135deg, #0f0f23, #1a1a35); color: #e0e0ff; min-height: 100vh; padding: 20px; }
+.header {
+  display: flex; justify-content: space-between; align-items: center;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  padding: 20px 30px; border-radius: 15px; margin-bottom: 25px;
+  box-shadow: 0 10px 40px rgba(102, 126, 234, 0.3);
+}
+h1 { color: #fff; font-size: 1.8em; text-shadow: 0 2px 10px rgba(0,0,0,0.3); }
+h3 { color: #a78bfa; margin-bottom: 15px; }
+.nav {
+  display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 25px;
+  background: rgba(255,255,255,0.05); padding: 15px; border-radius: 12px;
+}
+.nav a {
+  padding: 10px 16px; background: linear-gradient(135deg, #667eea, #764ba2);
+  color: #fff; text-decoration: none; border-radius: 8px; font-size: 13px;
+  font-weight: 600; transition: all 0.3s; border: 1px solid transparent;
+}
+.nav a:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(102,126,234,0.4); border-color: #fff; }
+.nav a.active { background: linear-gradient(135deg, #f093fb, #f5576c); }
+.stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 15px; margin-bottom: 25px;
+}
+.stat {
+  background: linear-gradient(135deg, #1a1a35, #2d2d5a);
+  padding: 22px; border-radius: 12px; text-align: center;
+  border: 1px solid #667eea; box-shadow: 0 5px 20px rgba(102,126,234,0.2);
+}
+.stat-num { font-size: 2.2em; color: #a78bfa; font-weight: bold; display: block; }
+.stat-label { color: #9ca3af; font-size: 13px; margin-top: 5px; }
+.card {
+  background: linear-gradient(135deg, #1a1a35, #2d2d5a);
+  padding: 25px; border-radius: 15px; margin-bottom: 25px;
+  border: 1px solid #667eea; box-shadow: 0 5px 25px rgba(102,126,234,0.15);
+}
+table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+th, td { padding: 12px 8px; text-align: right; border-bottom: 1px solid #374151; font-size: 13px; }
+th {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: #fff; font-weight: 600; border-radius: 8px 8px 0 0;
+}
+tr:hover td { background: rgba(102, 126, 234, 0.1); }
+.logout {
+  background: linear-gradient(135deg, #f5576c, #f093fb);
+  color: #fff; padding: 10px 20px; border-radius: 8px; text-decoration: none;
+  font-weight: 600; transition: all 0.3s;
+}
+.logout:hover { transform: scale(1.05); box-shadow: 0 5px 20px rgba(245,87,108,0.4); }
+.form-row { margin-bottom: 15px; }
+label { display: block; color: #a78bfa; margin-bottom: 8px; font-size: 13px; font-weight: 600; }
+input, select, textarea {
+  width: 100%; padding: 12px; background: rgba(0,0,0,0.3);
+  border: 1px solid #4b5563; color: #fff; border-radius: 8px;
+  font-family: inherit; font-size: 14px;
+}
+input:focus, select:focus, textarea:focus { outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102,126,234,0.2); }
+input[type=color] { height: 45px; padding: 5px; cursor: pointer; }
+button[type=submit] {
+  padding: 14px 28px; background: linear-gradient(135deg, #667eea, #764ba2);
+  color: #fff; border: none; border-radius: 8px; font-weight: bold;
+  cursor: pointer; font-size: 14px; transition: all 0.3s;
+}
+button[type=submit]:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(102,126,234,0.4); }
+.del-btn {
+  background: linear-gradient(135deg, #f5576c, #e53935);
+  color: #fff; padding: 6px 12px; border-radius: 6px; border: none; cursor: pointer; font-size: 12px;
+}
+.unban-btn {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #fff; padding: 6px 12px; border-radius: 6px; border: none; cursor: pointer; font-size: 12px;
+}
+.ban-btn {
+  background: linear-gradient(135deg, #f5576c, #e53935);
+  color: #fff; padding: 6px 12px; border-radius: 6px; border: none; cursor: pointer; font-size: 12px;
+}
+.flash {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #fff; padding: 14px; border-radius: 8px; margin-bottom: 15px; text-align: center; font-weight: 600;
+}
+.flash.error { background: linear-gradient(135deg, #f5576c, #e53935); }
+pre { background: #000; padding: 15px; border-radius: 8px; color: #0f0; overflow-x: auto; font-size: 12px; }
+.banned { color: #f5576c; font-weight: bold; }
+.row { display: flex; gap: 12px; margin-bottom: 15px; flex-wrap: wrap; align-items: flex-end; }
+.row form { margin: 0; }
+.switch {
+  position: relative; width: 55px; height: 28px;
+  background: #374151; border-radius: 14px; cursor: pointer; transition: 0.3s;
+}
+.switch.on { background: linear-gradient(135deg, #667eea, #764ba2); }
+.switch::after {
+  content: ''; position: absolute; top: 3px; right: 3px;
+  width: 22px; height: 22px; background: #fff; border-radius: 50%; transition: 0.3s;
+}
+.switch.on::after { right: 30px; }
+.toggle-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px; background: rgba(0,0,0,0.2); border-radius: 8px; margin-bottom: 10px;
+}
+.toggle-row label { color: #a78bfa; font-size: 14px; margin: 0; }
+.section {
+  background: linear-gradient(135deg, #1a1a35, #2d2d5a);
+  padding: 20px; border-radius: 12px; margin-bottom: 20px;
+  border: 1px solid #667eea;
+}
+.section h3 { color: #f093fb; margin-bottom: 15px; }
+.color-row { display: grid; grid-template-columns: 1fr 100px; gap: 10px; align-items: center; margin-bottom: 10px; }
+.text-row { display: grid; grid-template-columns: 1fr 2fr; gap: 10px; margin-bottom: 10px; }
+"""
 
-@app.route('/announcements')
-def announcements_page():
-    return '''
-    <!DOCTYPE html>
-    <html lang="ar" dir="rtl">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>إعلانات الموقع</title>
-        <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
-        <style>
-            * { margin:0; padding:0; box-sizing:border-box; }
-            body { font-family:Cairo,sans-serif; background:#07090d; color:#c9d1d9; min-height:100vh; }
-            .container { max-width:480px; margin:0 auto; padding:16px; }
-            .header { background:linear-gradient(135deg, #00ffc8, #8b5cf6); padding:20px; border-radius:14px; margin-bottom:16px; text-align:center; }
-            .header h1 { color:#fff; font-size:22px; font-weight:900; }
-            .header p { color:rgba(255,255,255,0.85); font-size:13px; }
-            .ann-card { background:#1c2128; border:1px solid #30363d; border-radius:12px; padding:14px; margin-bottom:10px; }
-            .ann-content { color:#e6e6e6; font-size:14px; line-height:1.6; }
-            .ann-time { color:#6e7681; font-size:11px; margin-top:8px; }
-            .empty { text-align:center; padding:30px; color:#6e7681; }
-            .back-btn { display:inline-block; padding:10px 18px; background:#30363d; color:#fff; text-decoration:none; border-radius:10px; font-weight:700; font-size:13px; margin-bottom:12px; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <a href="/" class="back-btn">🔙 العودة</a>
-            <div class="header"><h1>📢 إعلانات الموقع</h1><p>آخر الإعلانات والتحديثات</p></div>
-            <div id="annList"><div class="empty">⏳ جاري التحميل...</div></div>
-        </div>
-        <script>
-            fetch('/api/announcements').then(r=>r.json()).then(data=>{
-                const c=document.getElementById('annList');
-                if(!data.length){c.innerHTML='<div class=empty>📭 لا توجد إعلانات</div>';return;}
-                c.innerHTML=data.map(a=>'<div class=ann-card><div class=ann-content>'+(a.content||'')+'</div><div class=ann-time>🕒 '+a.created_at+'</div></div>').join('');
-            });
-        </script>
-    </body>
-    </html>
-    '''
+ADMIN_NAV = """
+<div class="nav">
+  <a href="/admin">🏠 الرئيسية</a>
+  <a href="/admin/settings">⚙️ الإعدادات</a>
+  <a href="/admin/customize">🎨 تخصيص الموقع</a>
+  <a href="/admin/platforms">📱 المنصات</a>
+  <a href="/admin/combos">📂 الكومبوهات</a>
+  <a href="/admin/users">👥 المستخدمون</a>
+  <a href="/admin/links">🔗 الروابط</a>
+  <a href="/admin/codes">🔑 الأكواد</a>
+  <a href="/admin/audits">📋 السجلات</a>
+  <a href="/admin/backup">💾 نسخة احتياطية</a>
+</div>
+"""
 
-# ========== API Routes ==========
-@app.route('/api/countries', methods=['POST'])
-def api_countries():
-    return jsonify(get_countries_by_platform(request.json.get('platform')))
-
-@app.route('/api/get_number', methods=['POST'])
-def api_get_number():
-    d = request.json
-    platform = d.get('platform')
-    country = d.get('country')
-    index = int(d.get('index', 0))
-    nums = get_numbers(platform, country)
-    if not nums or index >= len(nums):
-        return jsonify({'number': None})
-    number = nums[index]
-    log_code_pull(number, platform)
-    pull_count = get_code_pull_count(number, platform)
-    return jsonify({'number': number, 'pull_count': pull_count})
-
-@app.route('/api/get_otp', methods=['POST'])
-def api_get_otp():
-    num = request.json.get('number')
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT otp FROM otp_logs WHERE number LIKE ? ORDER BY id DESC LIMIT 1", (f"%{num[-4:]}",))
-    row = c.fetchone()
-    conn.close()
-    return jsonify({'otp': row[0] if row else None})
-
-@app.route('/api/announcements', methods=['GET'])
-def api_get_announcements():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT content, created_at FROM announcements ORDER BY id DESC LIMIT 20")
-    rows = c.fetchall()
-    conn.close()
-    return jsonify([{'content': r[0], 'created_at': r[1]} for r in rows])
-
-@app.route('/api/help', methods=['POST'])
-def api_help():
-    msg = request.json.get('message', '').strip()
-    if not msg:
-        return jsonify({'ok': False}), 400
-    user_id = request.headers.get('X-Forwarded-For', request.remote_addr or 'unknown')
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("INSERT INTO help_requests (user_id, message, source, created_at) VALUES (?, ?, ?, ?)",
-              (user_id, msg, 'website', datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-    conn.commit()
-    conn.close()
-    notify_admin(f"🆘 <b>طلب مساعدة جديد</b>\n\n👤 المستخدم: {user_id}\n💬 الرسالة:\n{msg}")
-    return jsonify({'ok': True})
-
-# ========== Admin Panel ==========
-@app.route('/admin_login', methods=['GET', 'POST'])
-def admin_login():
-    if request.method == 'POST':
-        if request.form.get('password') == ADMIN_PASSWORD:
-            session['logged_in'] = True
-            return redirect(url_for('admin_dashboard'))
-        return '<script>alert("❌ كلمة المرور خاطئة!"); history.back();</script>'
-    return '''
-    <div style="text-align:center; margin-top:100px; font-family:Cairo,sans-serif; background:#0d1117; color:#fff; padding:40px; border-radius:20px; max-width:400px; margin-left:auto; margin-right:auto; border:1px solid #30363d;">
-        <h2 style="color:#00ffc8;">🔐 دخول الأدمن</h2>
-        <form method="POST">
-            <input type="password" name="password" placeholder="كلمة المرور" style="padding:14px; border-radius:10px; border:1px solid #30363d; background:#161b22; color:#fff; width:100%; margin:12px 0; font-size:15px;">
-            <button type="submit" style="padding:14px 25px; background:linear-gradient(135deg,#00ffc8,#8b5cf6); color:#000; border:none; border-radius:10px; cursor:pointer; font-weight:bold; width:100%; font-size:16px;">دخول</button>
-        </form>
-    </div>
-    '''
-
-@app.route('/admin')
-@login_required
-def admin_dashboard():
-    total_visitors, today_visitors, unique_visitors = get_visitor_stats()
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT COUNT(*) FROM otp_logs")
-    total_otps = c.fetchone()[0]
-    c.execute("SELECT COUNT(*) FROM otp_logs WHERE timestamp LIKE ?", (datetime.now().strftime("%Y-%m-%d") + '%',))
-    today_otps = c.fetchone()[0]
-    c.execute("SELECT COUNT(*) FROM users")
-    total_users = c.fetchone()[0]
-    c.execute("SELECT COUNT(*) FROM code_pulls")
-    total_pulls = c.fetchone()[0]
-    c.execute("SELECT platform, COUNT(*) as cnt FROM otp_logs GROUP BY platform ORDER BY cnt DESC LIMIT 10")
-    platform_stats = c.fetchall()
-    c.execute("SELECT * FROM announcements ORDER BY id DESC LIMIT 10")
-    announcements = c.fetchall()
-    c.execute("SELECT * FROM help_requests WHERE status='pending' ORDER BY id DESC LIMIT 10")
-    pending_requests = c.fetchall()
-    conn.close()
-    
-    links = get_all_links()
-    combos = get_all_combos()
-    all_texts = {
-        'site_title': get_text('site_title'),
-        'site_subtitle': get_text('site_subtitle'),
-        'btn_get_number': get_text('btn_get_number'),
-        'footer_text': get_text('footer_text'),
-        'ticker_text': get_text('ticker_text'),
-    }
-    
-    return render_template_string('''
+ADMIN_LOGIN_HTML = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>⚙️ لوحة التحكم</title>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
-    <style>
-        * { margin:0; padding:0; box-sizing:border-box; }
-        body { font-family:Cairo,sans-serif; background:#07090d; color:#fff; min-height:100vh; padding:20px; }
-        .container { max-width:600px; margin:0 auto; }
-        
-        .header { text-align:center; margin-bottom:20px; }
-        .header h1 { font-size:26px; font-weight:900; background:linear-gradient(90deg,#00ffc8,#8b5cf6); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
-        
-        .stats-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:20px; }
-        .stat-card { background:#1c2128; border:1px solid #30363d; border-radius:14px; padding:16px; text-align:center; }
-        .stat-card .num { font-size:28px; font-weight:900; color:#00ffc8; }
-        .stat-card .label { font-size:11px; color:#8b949e; margin-top:4px; }
-        
-        .section { background:#1c2128; border:1px solid #30363d; border-radius:16px; padding:20px; margin-bottom:14px; }
-        .section-title { font-size:16px; font-weight:800; color:#fff; margin-bottom:14px; display:flex; align-items:center; gap:8px; }
-        .section-title .icon { font-size:20px; }
-        
-        .form-group { margin-bottom:12px; }
-        .form-group label { display:block; color:#c9d1d9; font-weight:700; font-size:13px; margin-bottom:6px; }
-        .form-control { width:100%; padding:12px; border-radius:10px; border:1px solid #30363d; background:#0d1117; color:#fff; font-family:Cairo,sans-serif; font-size:13px; }
-        .form-control:focus { border-color:#00ffc8; outline:none; }
-        
-        .btn { padding:12px 20px; border:none; border-radius:10px; font-weight:700; cursor:pointer; font-family:Cairo,sans-serif; font-size:13px; }
-        .btn-primary { background:linear-gradient(135deg,#00ffc8,#00d2ff); color:#000; }
-        .btn-danger { background:linear-gradient(135deg,#ef4444,#b91c1c); color:#fff; }
-        .btn-secondary { background:#30363d; color:#fff; }
-        .btn-success { background:linear-gradient(135deg,#22c55e,#16a34a); color:#fff; }
-        .btn:hover { transform:translateY(-2px); }
-        
-        .link-item { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
-        .link-item input { flex:1; }
-        .link-item .icon-input { width:50px; text-align:center; }
-        
-        .combo-item { display:flex; justify-content:space-between; align-items:center; background:#0d1117; padding:10px 14px; border-radius:10px; margin-bottom:6px; font-size:13px; }
-        .combo-item button { padding:4px 10px; font-size:11px; }
-        
-        .platform-stat { display:flex; justify-content:space-between; padding:8px 12px; background:#0d1117; border-radius:8px; margin-bottom:4px; font-size:13px; }
-        .platform-stat .name { font-weight:700; }
-        .platform-stat .count { color:#00ffc8; font-weight:800; }
-        
-        .color-item { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
-        .color-item label { flex:1; font-size:12px; color:#8b949e; }
-        .color-item input[type="color"] { width:50px; height:36px; border:none; border-radius:8px; cursor:pointer; }
-        
-        .toggle-switch { position:relative; display:inline-block; width:50px; height:26px; }
-        .toggle-switch input { opacity:0; width:0; height:0; }
-        .slider { position:absolute; cursor:pointer; inset:0; background:#30363d; border-radius:26px; transition:.3s; }
-        .slider:before { content:''; position:absolute; height:20px; width:20px; left:3px; bottom:3px; background:#fff; border-radius:50%; transition:.3s; }
-        input:checked + .slider { background:#00ffc8; }
-        input:checked + .slider:before { transform:translateX(24px); }
-        
-        .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-        .grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
-        
-        .back-link { display:block; text-align:center; color:#58a6ff; text-decoration:none; margin-top:20px; font-weight:700; }
-        .back-link:hover { text-decoration:underline; }
-        
-        .ann-item { background:#0d1117; border:1px solid #30363d; border-radius:8px; padding:12px; margin-bottom:8px; }
-        .ann-item .time { font-size:10px; color:#6e7681; margin-top:4px; }
-        .ann-item textarea { width:100%; background:#161b22; border:1px solid #30363d; color:#fff; border-radius:8px; padding:10px; font-family:Cairo; resize:vertical; min-height:60px; }
-        
-        .request-item { background:#0d1117; border:1px solid #30363d; border-radius:8px; padding:10px; margin-bottom:6px; font-size:12px; }
-        .request-item .msg { color:#c9d1d9; margin-bottom:4px; }
-        .request-item .meta { color:#6e7681; font-size:10px; }
-        
-        @media (max-width:480px) { .stats-grid { grid-template-columns:1fr 1fr; } .grid-2 { grid-template-columns:1fr; } .grid-3 { grid-template-columns:1fr; } }
-    </style>
-</head>
+<head><meta charset="UTF-8"><title>دخول الأدمن</title>
+<style>""" + ADMIN_CSS + """
+.login-box {
+  background: linear-gradient(135deg, #1a1a35, #2d2d5a);
+  padding: 50px; border-radius: 20px; border: 2px solid #667eea;
+  width: 400px; margin: 80px auto;
+  box-shadow: 0 20px 60px rgba(102,126,234,0.3);
+}
+h1 { text-align: center; margin-bottom: 30px; font-size: 2em; }
+</style></head>
 <body>
-<div class="container">
-    <div class="header"><h1>⚙️ لوحة التحكم</h1></div>
-    
-    <!-- الإحصائيات -->
-    <div class="stats-grid">
-        <div class="stat-card"><div class="num">{{ total_visitors }}</div><div class="label">👥 الزوار</div></div>
-        <div class="stat-card"><div class="num">{{ today_visitors }}</div><div class="label">📅 اليوم</div></div>
-        <div class="stat-card"><div class="num">{{ total_otps }}</div><div class="label">🔑 الأكواد</div></div>
-        <div class="stat-card"><div class="num">{{ today_otps }}</div><div class="label">📈 اليوم</div></div>
-        <div class="stat-card"><div class="num">{{ total_users }}</div><div class="label">👤 المستخدمين</div></div>
-        <div class="stat-card"><div class="num">{{ total_pulls }}</div><div class="label">📡 السحوبات</div></div>
-    </div>
-    
-    <!-- النصوص -->
-    <div class="section">
-        <div class="section-title"><span class="icon">✏️</span> تحرير النصوص</div>
-        <div class="form-group"><label>عنوان الموقع</label><input type="text" id="siteTitle" class="form-control" value="{{ all_texts.site_title }}"></div>
-        <div class="form-group"><label>وصف الموقع</label><input type="text" id="siteSubtitle" class="form-control" value="{{ all_texts.site_subtitle }}"></div>
-        <div class="form-group"><label>زر جلب الرقم</label><input type="text" id="btnGetNumber" class="form-control" value="{{ all_texts.btn_get_number }}"></div>
-        <div class="form-group"><label>النص السفلي</label><input type="text" id="footerText" class="form-control" value="{{ all_texts.footer_text }}"></div>
-        <div class="form-group"><label>شريط الأخبار</label><input type="text" id="tickerText" class="form-control" value="{{ all_texts.ticker_text }}"></div>
-        <button class="btn btn-primary" onclick="saveTexts()" style="width:100%; margin-top:6px;">💾 حفظ النصوص</button>
-    </div>
-    
-    <!-- الألوان -->
-    <div class="section">
-        <div class="section-title"><span class="icon">🎨</span> تخصيص الألوان</div>
-        <div class="color-item"><label>اللون الرئيسي</label><input type="color" id="mainColor" value="{{ main_color }}"></div>
-        <div class="color-item"><label>اللون الثانوي</label><input type="color" id="secondaryColor" value="{{ secondary_color }}"></div>
-        <div class="color-item"><label>لون الخلفية</label><input type="color" id="bgColor" value="{{ bg_color }}"></div>
-        <div class="color-item"><label>لون النص</label><input type="color" id="textColor" value="{{ text_color }}"></div>
-        <button class="btn btn-primary" onclick="saveColors()" style="width:100%; margin-top:8px;">💾 حفظ الألوان</button>
-    </div>
-    
-    <!-- الإعدادات -->
-    <div class="section">
-        <div class="section-title"><span class="icon">⚡</span> الإعدادات</div>
-        <div class="color-item">
-            <label>تفعيل أرقام متساقطة</label>
-            <label class="toggle-switch">
-                <input type="checkbox" id="fallingToggle" {{ 'checked' if falling_enabled == '1' else '' }}>
-                <span class="slider"></span>
-            </label>
-        </div>
-        <div class="color-item">
-            <label>تفعيل Matrix Background</label>
-            <label class="toggle-switch">
-                <input type="checkbox" id="matrixToggle" {{ 'checked' if matrix_enabled == '1' else '' }}>
-                <span class="slider"></span>
-            </label>
-        </div>
-        <div class="color-item">
-            <label>تفعيل الإشعارات</label>
-            <label class="toggle-switch">
-                <input type="checkbox" id="notifToggle" {{ 'checked' if notification_enabled == '1' else '' }}>
-                <span class="slider"></span>
-            </label>
-        </div>
-        <button class="btn btn-primary" onclick="saveSettings()" style="width:100%; margin-top:8px;">💾 حفظ الإعدادات</button>
-    </div>
-    
-    <!-- الروابط -->
-    <div class="section">
-        <div class="section-title"><span class="icon">🔗</span> الروابط</div>
-        {% for key, value, icon in links %}
-        <div class="link-item">
-            <input type="text" class="form-control icon-input" value="{{ icon }}" data-key="{{ key }}" id="icon-{{ key }}">
-            <input type="text" class="form-control" value="{{ value }}" data-key="{{ key }}" id="link-{{ key }}">
-            <button class="btn btn-danger" onclick="deleteLink('{{ key }}')">🗑️</button>
-        </div>
-        {% endfor %}
-        <div class="link-item" style="margin-top:10px;">
-            <input type="text" class="form-control icon-input" id="newIcon" placeholder="🎵">
-            <input type="text" class="form-control" id="newLink" placeholder="الرابط الجديد">
-            <button class="btn btn-success" onclick="addLink()">➕</button>
-        </div>
-        <button class="btn btn-primary" onclick="saveLinks()" style="width:100%; margin-top:8px;">💾 حفظ الروابط</button>
-    </div>
-    
-    <!-- الكومبوهات -->
-    <div class="section">
-        <div class="section-title"><span class="icon">📦</span> الكومبوهات</div>
-        <form method="POST" enctype="multipart/form-data" action="/admin/upload_combo">
-            <div class="grid-2">
-                <select name="platform" class="form-control">
-                    <option value="whatsapp">واتساب</option><option value="telegram">تيليجرام</option>
-                    <option value="tiktok">تيك توك</option><option value="facebook">فيسبوك</option>
-                    <option value="instagram">انستقرام</option><option value="snapchat">سناب شات</option>
-                    <option value="google">جوجل</option><option value="twitter">تويتر</option>
-                </select>
-                <input type="file" name="file" accept=".txt" class="form-control" required>
-            </div>
-            <button type="submit" class="btn btn-primary" style="width:100%; margin-top:8px;">📤 رفع ملف</button>
-        </form>
-        <div style="margin-top:12px;">
-            {% for platform, code, name, flag in combos %}
-            <div class="combo-item">
-                <span>{{ flag }} {{ name }} ({{ platform }})</span>
-                <form method="POST" action="/admin/delete_combo" style="display:inline;">
-                    <input type="hidden" name="platform" value="{{ platform }}">
-                    <input type="hidden" name="country_code" value="{{ code }}">
-                    <button type="submit" class="btn btn-danger">🗑️</button>
-                </form>
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-    
-    <!-- الإعلانات -->
-    <div class="section">
-        <div class="section-title"><span class="icon">📢</span> الإعلانات</div>
-        <form method="POST" action="/admin/add_announcement">
-            <textarea name="content" class="form-control" placeholder="نص الإعلان الجديد..." rows="2" required></textarea>
-            <div class="grid-2" style="margin-top:8px;">
-                <input type="text" name="button_text" class="form-control" placeholder="نص الزر">
-                <input type="text" name="button_url" class="form-control" placeholder="رابط الزر">
-            </div>
-            <button type="submit" class="btn btn-primary" style="width:100%; margin-top:8px;">➕ إضافة إعلان</button>
-        </form>
-        {% for ann in announcements %}
-        <div class="ann-item">
-            <div>{{ ann[2] }}</div>
-            <div class="time">{{ ann[7] }}</div>
-            <form method="POST" action="/admin/delete_announcement" style="margin-top:6px;">
-                <input type="hidden" name="id" value="{{ ann[0] }}">
-                <button type="submit" class="btn btn-danger" style="padding:6px 12px; font-size:11px;">🗑️ حذف</button>
-            </form>
-        </div>
-        {% endfor %}
-    </div>
-    
-    <!-- طلبات المساعدة -->
-    <div class="section">
-        <div class="section-title"><span class="icon">🆘</span> طلبات المساعدة ({{ pending_requests|length }})</div>
-        {% for req in pending_requests %}
-        <div class="request-item">
-            <div class="msg">{{ req[2] }}</div>
-            <div class="meta">👤 {{ req[1] }} | 🕒 {{ req[5] }}</div>
-            <form method="POST" action="/admin/resolve_request" style="margin-top:6px;">
-                <input type="hidden" name="id" value="{{ req[0] }}">
-                <button type="submit" class="btn btn-success" style="padding:6px 12px; font-size:11px;">✅ تم الحل</button>
-            </form>
-        </div>
-        {% else %}
-        <div style="text-align:center; color:#6e7681; padding:20px;">✅ لا توجد طلبات معلقة</div>
-        {% endfor %}
-    </div>
-    
-    <!-- إعدادات الأدمن -->
-    <div class="section">
-        <div class="section-title"><span class="icon">🔑</span> إعدادات الأدمن</div>
-        <div class="form-group"><label>Chat ID للإشعاع</label><input type="text" id="adminChatId" class="form-control" value="{{ admin_chat_id }}"></div>
-        <div class="form-group"><label>كلمة المرور الجديدة</label><input type="password" id="newPassword" class="form-control" placeholder="اتركها فارغة"></div>
-        <div class="grid-2">
-            <button class="btn btn-primary" onclick="saveAdminId()">💾 حفظ Chat ID</button>
-            <button class="btn btn-secondary" onclick="changePassword()">🔑 تغيير كلمة المرور</button>
-        </div>
-    </div>
-    
-    <!-- الإحصائيات -->
-    <div class="section">
-        <div class="section-title"><span class="icon">📊</span> إحصائيات المنصات</div>
-        {% for platform, count in platform_stats %}
-        <div class="platform-stat">
-            <span class="name">{{ platform }}</span>
-            <span class="count">{{ count }}</span>
-        </div>
-        {% endfor %}
-    </div>
-    
-    <a href="/" class="back-link">🔙 العودة للموقع</a>
+<form class="login-box" method="POST">
+  <h1>🔐 لوحة الأدمن</h1>
+  {% with messages = get_flashed_messages(with_categories=true) %}{% for cat,msg in messages %}
+  <div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}{% endwith %}
+  <div class="form-row"><input type="text" name="username" placeholder="اسم المستخدم" required autofocus></div>
+  <div class="form-row"><input type="password" name="password" placeholder="كلمة المرور" required></div>
+  <button type="submit" style="width:100%;margin-top:10px">دخول</button>
+</form>
+</body></html>
+"""
+
+ADMIN_DASHBOARD_HTML = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head><meta charset="UTF-8"><title>لوحة الأدمن</title>
+<style>""" + ADMIN_CSS + """</style></head>
+<body>
+<div class="header">
+  <h1>🔐 مرحباً {{ admin_user }} ({{ role }})</h1>
+  <a class="logout" href="/admin/logout">خروج</a>
 </div>
+""" + ADMIN_NAV + """
+<div class="stats">
+  <div class="stat"><span class="stat-num">{{ stats.total_numbers }}</span><span class="stat-label">إجمالي الأرقام</span></div>
+  <div class="stat"><span class="stat-num">{{ stats.available }}</span><span class="stat-label">متاحة</span></div>
+  <div class="stat"><span class="stat-num">{{ stats.total_codes }}</span><span class="stat-label">إجمالي الأكواد</span></div>
+  <div class="stat"><span class="stat-num">{{ stats.total_users }}</span><span class="stat-label">مستخدمين</span></div>
+  <div class="stat"><span class="stat-num">{{ stats.banned_users }}</span><span class="stat-label">محظورين</span></div>
+  <div class="stat"><span class="stat-num">{{ stats.platforms }}</span><span class="stat-label">منصات</span></div>
+  <div class="stat"><span class="stat-num">{{ stats.countries }}</span><span class="stat-label">دول</span></div>
+</div>
+<div class="card">
+  <h3>📋 آخر 10 حركات</h3>
+  <table>
+    <tr><th>الوقت</th><th>المستخدم</th><th>الحركة</th><th>التفاصيل</th><th>IP</th></tr>
+    {% for a in audits %}
+    <tr><td>{{ a.created_at }}</td><td>{{ a.admin_user }}</td><td>{{ a.action }}</td><td>{{ a.details }}</td><td>{{ a.ip }}</td></tr>
+    {% else %}<tr><td colspan="5" style="text-align:center;color:#888">لا يوجد</td></tr>{% endfor %}
+  </table>
+</div>
+</body></html>
+"""
 
+ADMIN_SETTINGS_HTML = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head><meta charset="UTF-8"><title>الإعدادات</title>
+<style>""" + ADMIN_CSS + """.form{max-width:700px}</style></head>
+<body>
+""" + ADMIN_NAV + """
+<h1>⚙️ إعدادات الموقع</h1>
+{% with messages = get_flashed_messages(with_categories=true) %}{% for cat,msg in messages %}
+<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}{% endwith %}
+<form method="POST" class="form">
+  <div class="form-row"><label>اسم الموقع</label><input name="site_name" value="{{ settings.site_name }}"></div>
+  <div class="form-row"><label>نص الإعلانات</label><input name="announcement" value="{{ settings.announcement }}"></div>
+  <div class="form-row"><label>نص Marquee المتحرك</label><input name="marquee_text" value="{{ settings.marquee_text }}"></div>
+  <div class="form-row"><label>اللون الرئيسي</label><input type="color" name="main_color" value="{{ settings.main_color }}"></div>
+  <div class="form-row"><label>اللون الثانوي</label><input type="color" name="secondary_color" value="{{ settings.secondary_color }}"></div>
+  <div class="form-row"><label>لون الخلفية</label><input type="color" name="bg_color" value="{{ settings.bg_color }}"></div>
+  <div class="form-row"><label>لون النص</label><input type="color" name="text_color" value="{{ settings.text_color }}"></div>
+  <div class="form-row"><label>وضع الصيانة</label>
+    <select name="maintenance_mode">
+      <option value="off" {% if settings.maintenance_mode=='off' %}selected{% endif %}>off</option>
+      <option value="on" {% if settings.maintenance_mode=='on' %}selected{% endif %}>on</option>
+    </select>
+  </div>
+  <div class="form-row"><label>حد الطلبات/دقيقة</label><input type="number" name="rate_limit_per_minute" value="{{ settings.rate_limit_per_minute }}"></div>
+  <div class="form-row"><label>نص الفوتر</label><input name="footer_text" value="{{ settings.footer_text }}"></div>
+  <button type="submit">💾 حفظ</button>
+</form>
+</body></html>
+"""
+
+ADMIN_PLATFORMS_HTML = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head><meta charset="UTF-8"><title>المنصات</title>
+<style>""" + ADMIN_CSS + """</style></head>
+<body>
+""" + ADMIN_NAV + """
+<h1>📱 إدارة المنصات</h1>
+<div class="card">
+  <h3>➕ إضافة منصة جديدة</h3>
+  <form method="POST" class="row">
+    <input type="hidden" name="action" value="add">
+    <input name="name" placeholder="اسم المنصة" required>
+    <input name="icon" placeholder="📱" maxlength="4">
+    <input type="color" name="color" value="#667eea">
+    <input type="number" name="sort_order" value="0" style="width:80px">
+    <button type="submit">إضافة</button>
+  </form>
+</div>
+<div class="card">
+  <h3>📋 المنصات الحالية</h3>
+  <table>
+    <tr><th>الأيقونة</th><th>الاسم</th><th>اللون</th><th>الترتيب</th><th>إجراءات</th></tr>
+    {% for p in platforms %}
+    <tr>
+      <td style="font-size:28px">{{ p.icon }}</td>
+      <td>{{ p.name }}</td>
+      <td><span style="display:inline-block;width:35px;height:22px;background:{{ p.color }};border-radius:4px"></span> {{ p.color }}</td>
+      <td>{{ p.sort_order }}</td>
+      <td>
+        <form method="POST" style="display:inline">
+          <input type="hidden" name="action" value="delete">
+          <input type="hidden" name="id" value="{{ p.id }}">
+          <button class="del-btn" onclick="return confirm('تأكيد الحذف؟')">🗑</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+</body></html>
+"""
+
+ADMIN_COMBOS_HTML = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head><meta charset="UTF-8"><title>الكومبوهات</title>
+<style>""" + ADMIN_CSS + """</style></head>
+<body>
+""" + ADMIN_NAV + """
+<h1>📂 إدارة الكومبوهات</h1>
+{% with messages = get_flashed_messages(with_categories=true) %}{% for cat,msg in messages %}
+<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}{% endwith %}
+<div class="card">
+  <h3>📤 رفع ملف كومبو (.txt)</h3>
+  <p style="color:#9ca3af;margin-bottom:10px">الصيغة: <code>platform|country_name|country_code|flag|number</code></p>
+  <form method="POST" enctype="multipart/form-data">
+    <input type="hidden" name="action" value="upload_combo">
+    <input type="file" name="file" accept=".txt" required>
+    <button type="submit">رفع الملف</button>
+  </form>
+  <pre style="margin-top:15px">WhatsApp|اليمن|967|🇾🇪|+967700000001
+Telegram|مصر|20|🇪🇬|+201000000002
+Instagram|سعودية|966|🇸🇦|+966500000003</pre>
+</div>
+<div class="card">
+  <h3>🌍 الدول الحالية ({{ countries|length }})</h3>
+  <table>
+    <tr><th>المنصة</th><th>الدولة</th><th>الكود</th><th>العلم</th><th>الأرقام</th><th>إجراءات</th></tr>
+    {% for c in countries %}
+    <tr>
+      <td>{{ c.platform_name }}</td>
+      <td>{{ c.name }}</td>
+      <td>{{ c.code }}</td>
+      <td style="font-size:22px">{{ c.flag or '🌍' }}</td>
+      <td>{{ c.num_count }}</td>
+      <td>
+        <form method="POST" style="display:inline">
+          <input type="hidden" name="action" value="delete_country">
+          <input type="hidden" name="id" value="{{ c.id }}">
+          <button class="del-btn" onclick="return confirm('سيتم حذف كل الأرقام!')">🗑</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+</body></html>
+"""
+
+ADMIN_USERS_HTML = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head><meta charset="UTF-8"><title>المستخدمون</title>
+<style>""" + ADMIN_CSS + """</style></head>
+<body>
+""" + ADMIN_NAV + """
+<h1>👥 المستخدمون وحظر IP</h1>
+<div class="card">
+  <h3>🚫 إضافة IP للقائمة السوداء</h3>
+  <form method="POST" class="row">
+    <input type="hidden" name="action" value="blacklist_ip">
+    <input name="ip" placeholder="1.2.3.4" required>
+    <input name="reason" placeholder="السبب" style="flex:1">
+    <button type="submit">حظر</button>
+  </form>
+</div>
+<div class="card">
+  <h3>📋 القائمة السوداء</h3>
+  <table>
+    <tr><th>IP</th><th>السبب</th><th>التاريخ</th><th>إجراءات</th></tr>
+    {% for b in blacklisted %}
+    <tr>
+      <td><code>{{ b.ip }}</code></td>
+      <td>{{ b.reason }}</td>
+      <td>{{ b.banned_at }}</td>
+      <td>
+        <form method="POST" style="display:inline">
+          <input type="hidden" name="action" value="unblacklist_ip">
+          <input type="hidden" name="ip" value="{{ b.ip }}">
+          <button class="unban-btn">🔓 فك الحظر</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}<tr><td colspan="4" style="text-align:center;color:#888">لا يوجد</td></tr>{% endfor %}
+  </table>
+</div>
+<div class="card">
+  <h3>👥 الزائرون</h3>
+  <table>
+    <tr><th>IP</th><th>آخر زيارة</th><th>الطلبات</th><th>الحالة</th><th>إجراءات</th></tr>
+    {% for u in users %}
+    <tr>
+      <td><code>{{ u.ip }}</code></td>
+      <td>{{ u.last_seen }}</td>
+      <td>{{ u.requests_count }}</td>
+      <td>{% if u.banned %}<span class="banned">محظور</span>{% else %}نشط{% endif %}</td>
+      <td>
+        <form method="POST" style="display:inline">
+          <input type="hidden" name="id" value="{{ u.id }}">
+          {% if u.banned %}
+          <input type="hidden" name="action" value="unban">
+          <button class="unban-btn">🔓 فك</button>
+          {% else %}
+          <input type="hidden" name="action" value="ban">
+          <button class="ban-btn" onclick="return confirm('حظر هذا المستخدم؟')">🚫 حظر</button>
+          {% endif %}
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+</body></html>
+"""
+
+ADMIN_LINKS_HTML = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head><meta charset="UTF-8"><title>الروابط</title>
+<style>""" + ADMIN_CSS + """</style></head>
+<body>
+""" + ADMIN_NAV + """
+<h1>🔗 إدارة الروابط</h1>
+<form method="POST" class="row">
+  <input type="hidden" name="action" value="add">
+  <input name="label" placeholder="اسم الرابط" required>
+  <input name="url" placeholder="https://..." required style="flex:1">
+  <input name="icon" placeholder="🔗" maxlength="4">
+  <input type="number" name="sort_order" value="0" style="width:80px">
+  <button type="submit">إضافة</button>
+</form>
+<table>
+  <tr><th>الأيقونة</th><th>الاسم</th><th>الرابط</th><th>إجراءات</th></tr>
+  {% for l in links %}
+  <tr>
+    <td style="font-size:24px">{{ l.icon }}</td>
+    <td>{{ l.label }}</td>
+    <td><a href="{{ l.url }}" style="color:#a78bfa" target="_blank">{{ l.url }}</a></td>
+    <td>
+      <form method="POST" style="display:inline">
+        <input type="hidden" name="action" value="delete">
+        <input type="hidden" name="id" value="{{ l.id }}">
+        <button class="del-btn">🗑</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+</body></html>
+"""
+
+ADMIN_CODES_HTML = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head><meta charset="UTF-8"><title>الأكواد</title>
+<style>""" + ADMIN_CSS + """</style></head>
+<body>
+""" + ADMIN_NAV + """
+<h1>🔑 إدارة الأكواد</h1>
+<div class="card">
+  <h3>🗑 مسح الأكواد</h3>
+  <form method="POST" class="row">
+    <select name="action">
+      <option value="delete_filter">حذف أقدم من...</option>
+      <option value="delete_all">حذف الكل</option>
+    </select>
+    <input type="number" name="days" value="7" min="1" style="width:80px"> يوم
+    <button type="submit" onclick="return confirm('تأكيد؟')">تنفيذ</button>
+  </form>
+</div>
+<div class="card">
+  <h3>📜 آخر 200 كود</h3>
+  <table>
+    <tr><th>الوقت</th><th>المنصة</th><th>الدولة</th><th>الرقم</th><th>الكود</th><th>المصدر</th><th>حذف</th></tr>
+    {% for c in codes %}
+    <tr>
+      <td>{{ c.received_at }}</td>
+      <td>{{ c.platform }}</td>
+      <td>{{ c.country }}</td>
+      <td><code>{{ c.number }}</code></td>
+      <td style="color:#a78bfa;font-weight:bold;font-size:16px">{{ c.code }}</td>
+      <td style="font-size:10px">{{ c.source[:30] }}</td>
+      <td>
+        <form method="POST" style="display:inline">
+          <input type="hidden" name="action" value="delete_id">
+          <input type="hidden" name="id" value="{{ c.id }}">
+          <button class="del-btn">🗑</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+</body></html>
+"""
+
+ADMIN_AUDITS_HTML = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head><meta charset="UTF-8"><title>السجلات</title>
+<style>""" + ADMIN_CSS + """</style></head>
+<body>
+""" + ADMIN_NAV + """
+<h1>📋 سجل حركات الأدمن</h1>
+<table>
+  <tr><th>الوقت</th><th>المستخدم</th><th>الحركة</th><th>التفاصيل</th><th>IP</th></tr>
+  {% for a in audits %}
+  <tr>
+    <td>{{ a.created_at }}</td>
+    <td><b style="color:#a78bfa">{{ a.admin_user }}</b></td>
+    <td>{{ a.action }}</td>
+    <td>{{ a.details }}</td>
+    <td><code style="font-size:11px">{{ a.ip }}</code></td>
+  </tr>
+  {% else %}<tr><td colspan="5" style="text-align:center;color:#888;padding:30px">لا توجد حركات</td></tr>{% endfor %}
+</table>
+</body></html>
+"""
+
+ADMIN_CUSTOMIZE_HTML = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head><meta charset="UTF-8"><title>تخصيص الموقع</title>
+<style>""" + ADMIN_CSS + """</style></head>
+<body>
+""" + ADMIN_NAV + """
+<h1>🎨 تخصيص الموقع الكامل</h1>
+{% with messages = get_flashed_messages(with_categories=true) %}{% for cat,msg in messages %}
+<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}{% endwith %}
+<form method="POST">
+<div class="section">
+  <h3>🎛️ تشغيل / إيقاف الميزات</h3>
+  <div class="toggle-row">
+    <label>🌧️ مطر الأرقام خلف المنصات</label>
+    <div class="switch {% if settings.digit_rain_enabled == '1' %}on{% endif %}" onclick="toggleSwitch(this)"></div>
+    <input type="hidden" name="digit_rain_enabled" id="digit_rain_enabled" value="{{ settings.digit_rain_enabled }}">
+  </div>
+  <div class="toggle-row">
+    <label>🌃 Matrix Rain</label>
+    <div class="switch {% if settings.matrix_rain_enabled == '1' %}on{% endif %}" onclick="toggleSwitch(this)"></div>
+    <input type="hidden" name="matrix_rain_enabled" id="matrix_rain_enabled" value="{{ settings.matrix_rain_enabled }}">
+  </div>
+  <div class="toggle-row">
+    <label>🔊 صوت الإشعارات</label>
+    <div class="switch {% if settings.sound_enabled == '1' %}on{% endif %}" onclick="toggleSwitch(this)"></div>
+    <input type="hidden" name="sound_enabled" id="sound_enabled" value="{{ settings.sound_enabled }}">
+  </div>
+  <div class="toggle-row">
+    <label>📬 إشعارات المتصفح</label>
+    <div class="switch {% if settings.push_enabled == '1' %}on{% endif %}" onclick="toggleSwitch(this)"></div>
+    <input type="hidden" name="push_enabled" id="push_enabled" value="{{ settings.push_enabled }}">
+  </div>
+</div>
+<div class="section">
+  <h3>🎨 ألوان العناصر</h3>
+  <div class="color-row"><label>الخلفية الرئيسية</label><input type="color" name="bg_color" value="{{ settings.bg_color }}"></div>
+  <div class="color-row"><label>اللون الرئيسي</label><input type="color" name="main_color" value="{{ settings.main_color }}"></div>
+  <div class="color-row"><label>اللون الثانوي</label><input type="color" name="secondary_color" value="{{ settings.secondary_color }}"></div>
+  <div class="color-row"><label>لون النص</label><input type="color" name="text_color" value="{{ settings.text_color }}"></div>
+</div>
+<div class="section">
+  <h3>✏️ نصوص قابلة للتعديل</h3>
+  <div class="text-row"><label>اسم الموقع</label><input name="site_name" value="{{ settings.site_name }}"></div>
+  <div class="text-row"><label>شريط الإعلانات</label><input name="announcement" value="{{ settings.announcement }}"></div>
+  <div class="text-row"><label>نص Marquee</label><input name="marquee_text" value="{{ settings.marquee_text }}"></div>
+  <div class="text-row"><label>زر الاستلام الذكي</label><input name="smart_btn_text" value="{{ settings.smart_btn_text }}"></div>
+  <div class="text-row"><label>وصف زر الاستلام</label><input name="smart_btn_subtext" value="{{ settings.smart_btn_subtext }}"></div>
+  <div class="text-row"><label>نص الفوتر</label><input name="footer_text" value="{{ settings.footer_text }}"></div>
+  <div class="text-row"><label>Placeholder البحث</label><input name="search_placeholder" value="{{ settings.search_placeholder }}"></div>
+</div>
+<button type="submit" style="width:100%;padding:18px;font-size:16px">💾 حفظ كل التغييرات</button>
+</form>
 <script>
-async function saveTexts() {
-    const data = {
-        site_title: document.getElementById('siteTitle').value,
-        site_subtitle: document.getElementById('siteSubtitle').value,
-        btn_get_number: document.getElementById('btnGetNumber').value,
-        footer_text: document.getElementById('footerText').value,
-        ticker_text: document.getElementById('tickerText').value
-    };
-    await fetch('/admin/api/save_texts', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
-    alert('✅ تم الحفظ!');
-}
-
-async function saveColors() {
-    const data = {
-        main_color: document.getElementById('mainColor').value,
-        secondary_color: document.getElementById('secondaryColor').value,
-        background_color: document.getElementById('bgColor').value,
-        text_color: document.getElementById('textColor').value
-    };
-    await fetch('/admin/api/save_settings', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
-    alert('✅ تم الحفظ!');
-}
-
-async function saveSettings() {
-    const data = {
-        falling_numbers_enabled: document.getElementById('fallingToggle').checked ? '1' : '0',
-        matrix_enabled: document.getElementById('matrixToggle').checked ? '1' : '0',
-        notification_enabled: document.getElementById('notifToggle').checked ? '1' : '0'
-    };
-    await fetch('/admin/api/save_settings', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
-    alert('✅ تم الحفظ!');
-}
-
-async function saveLinks() {
-    const links = {};
-    document.querySelectorAll('[id^="link-"]').forEach(inp => {
-        const key = inp.dataset.key;
-        const icon = document.getElementById('icon-' + key).value;
-        if(key) links[key] = {value: inp.value, icon: icon};
-    });
-    await fetch('/admin/api/save_links', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(links)});
-    alert('✅ تم الحفظ!');
-}
-
-async function addLink() {
-    const icon = document.getElementById('newIcon').value.trim();
-    const value = document.getElementById('newLink').value.trim();
-    if(!value) { alert('اكتب الرابط!'); return; }
-    await fetch('/admin/api/add_link', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({key: 'custom_' + Date.now(), value, icon: icon || '🔗'})});
-    location.reload();
-}
-
-async function deleteLink(key) {
-    if(!confirm('حذف هذا الرابط؟')) return;
-    await fetch('/admin/api/delete_link', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({key})});
-    location.reload();
-}
-
-async function saveAdminId() {
-    const val = document.getElementById('adminChatId').value.trim();
-    await fetch('/admin/api/save_admin_id', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({admin_telegram_id: val})});
-    alert('✅ تم الحفظ!');
-}
-
-async function changePassword() {
-    const pwd = document.getElementById('newPassword').value.trim();
-    if(!pwd) { alert('اكتب كلمة المرور الجديدة!'); return; }
-    await fetch('/admin/api/change_password', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password: pwd})});
-    alert('✅ تم التغيير!');
+function toggleSwitch(el) {
+  el.classList.toggle('on');
+  const inputs = el.parentElement.querySelectorAll('input[type=hidden]');
+  inputs.forEach(input => {
+    input.value = el.classList.contains('on') ? '1' : '0';
+  });
 }
 </script>
-</body>
-</html>
-''', total_visitors=total_visitors, today_visitors=today_visitors, 
-       total_otps=total_otps, today_otps=today_otps, total_users=total_users, total_pulls=total_pulls,
-       platform_stats=platform_stats, links=links, combos=combos, 
-       announcements=announcements, pending_requests=pending_requests,
-       all_texts=all_texts, 
-       main_color=get_setting('main_color') or '#00ffc8',
-       secondary_color=get_setting('secondary_color') or '#8b5cf6',
-       bg_color=get_setting('background_color') or '#0a0e1a',
-       text_color=get_setting('text_color') or '#ffffff',
-       falling_enabled=get_setting('falling_numbers_enabled') or '1',
-       matrix_enabled=get_setting('matrix_enabled') or '1',
-       notification_enabled=get_setting('notification_enabled') or '1',
-       admin_chat_id=get_admin_setting('admin_telegram_id', ''))
+</body></html>
+"""
 
-# ========== Admin API Routes ==========
-@app.route('/admin/api/save_texts', methods=['POST'])
-def admin_api_save_texts():
-    data = request.json
-    for key, value in data.items():
-        update_text(key, value)
-    return jsonify({'ok': True})
+MAINTENANCE_HTML = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head><meta charset="UTF-8"><title>صيانة</title>
+<style>
+body{margin:0;padding:0;height:100vh;display:flex;align-items:center;justify-content:center;
+background:linear-gradient(135deg,#0f0f23,#1a1a35);color:#e0e0ff;font-family:Tahoma,Arial,sans-serif;text-align:center}
+.box{padding:50px;border:2px solid #667eea;border-radius:20px;background:rgba(102,126,234,0.1);max-width:500px}
+h1{color:#a78bfa;font-size:2.5em;margin-bottom:20px}
+p{font-size:1.2em;line-height:1.6}
+.icon{font-size:5em;margin-bottom:20px}
+</style></head>
+<body>
+<div class="box">
+  <div class="icon">🔧</div>
+  <h1>الموقع تحت الصيانة</h1>
+  <p>نعمل على تحسين الخدمة حالياً. سنعود قريباً إن شاء الله.</p>
+  <p style="margin-top:20px;color:#a78bfa">📞 للدعم: 967733723953</p>
+</div>
+</body></html>
+"""
 
-@app.route('/admin/api/save_settings', methods=['POST'])
-def admin_api_save_settings():
-    data = request.json
-    for key, value in data.items():
-        set_setting(key, value)
-    return jsonify({'ok': True})
+# =========================================================================
+# 10) Routes
+# =========================================================================
+@app.route("/")
+def index():
+    settings = get_settings()
+    conn = db()
+    platforms = conn.execute("SELECT * FROM platforms ORDER BY sort_order").fetchall()
+    today = datetime.now().strftime("%Y-%m-%d")
+    stats = {
+        "today_numbers": conn.execute("SELECT COUNT(*) as c FROM numbers WHERE date(used_at)=?", (today,)).fetchone()["c"],
+        "today_codes": conn.execute("SELECT COUNT(*) as c FROM codes WHERE date(received_at)=?", (today,)).fetchone()["c"],
+        "total_visits": conn.execute("SELECT COALESCE(SUM(requests_count),0) as c FROM users").fetchone()["c"],
+        "active_users": conn.execute("SELECT COUNT(*) as c FROM users WHERE last_seen > datetime('now','-1 hour')").fetchone()["c"],
+    }
+    conn.close()
+    return render_template_string(INDEX_HTML, settings=settings, platforms=platforms, stats=stats)
 
-@app.route('/admin/api/save_links', methods=['POST'])
-def admin_api_save_links():
-    data = request.json
-    for key, val in data.items():
-        if isinstance(val, dict):
-            update_link(key, val['value'], val.get('icon'))
-        else:
-            update_link(key, val)
-    return jsonify({'ok': True})
+@app.route("/maintenance")
+def maintenance():
+    return render_template_string(MAINTENANCE_HTML), 503
 
-@app.route('/admin/api/add_link', methods=['POST'])
-def admin_api_add_link():
+@app.route("/api/ui_settings")
+def api_ui_settings():
+    return jsonify({"ok": True, "settings": get_settings()})
+
+@app.route("/api/links")
+def api_links():
+    conn = db()
+    links = conn.execute("SELECT * FROM links ORDER BY sort_order").fetchall()
+    conn.close()
+    return jsonify({"links": [dict(l) for l in links]})
+
+@app.route("/api/countries/<int:pid>")
+def api_countries(pid):
+    conn = db()
+    countries = conn.execute("""
+        SELECT c.*, COUNT(n.id) as available
+        FROM countries c LEFT JOIN numbers n ON n.country_id = c.id AND n.status='available'
+        WHERE c.platform_id=? GROUP BY c.id
+    """, (pid,)).fetchall()
+    conn.close()
+    return jsonify({"countries": [dict(c) for c in countries]})
+
+@app.route("/api/get_number", methods=["POST"])
+def api_get_number():
+    allowed, msg = security_check()
+    if not allowed: return jsonify({"ok": False, "error": msg}), 429
     data = request.json
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("INSERT OR REPLACE INTO site_links (key, value, icon) VALUES (?, ?, ?)",
-              (data.get('key'), data.get('value'), data.get('icon', '🔗')))
+    country_id = data.get("country_id")
+    if not country_id: return jsonify({"ok": False, "error": "الدولة مطلوبة"})
+    conn = db()
+    num = conn.execute("SELECT * FROM numbers WHERE country_id=? AND status='available' ORDER BY RANDOM() LIMIT 1").fetchone()
+    if not num:
+        conn.close()
+        return jsonify({"ok": False, "error": "لا توجد أرقام متاحة"})
+    conn.execute("UPDATE numbers SET status='in_use', used_by_ip=?, used_at=CURRENT_TIMESTAMP WHERE id=?", (client_ip(), num["id"]))
     conn.commit()
     conn.close()
-    return jsonify({'ok': True})
+    return jsonify({"ok": True, "number_id": num["id"], "number": num["number"], "expires_in": 120})
 
-@app.route('/admin/api/delete_link', methods=['POST'])
-def admin_api_delete_link():
-    key = request.json.get('key')
-    if key:
-        delete_link(key)
-    return jsonify({'ok': True})
-
-@app.route('/admin/api/save_admin_id', methods=['POST'])
-def admin_api_save_admin_id():
-    admin_id = request.json.get('admin_telegram_id')
-    if admin_id:
-        set_admin_setting('admin_telegram_id', admin_id)
-    return jsonify({'ok': True})
-
-@app.route('/admin/api/change_password', methods=['POST'])
-def admin_api_change_password():
-    global ADMIN_PASSWORD
-    new_pwd = request.json.get('password')
-    if new_pwd:
-        ADMIN_PASSWORD = new_pwd
-    return jsonify({'ok': True})
-
-@app.route('/admin/upload_combo', methods=['POST'])
-def admin_upload_combo():
-    platform = request.form.get('platform')
-    file = request.files.get('file')
-    if not file or not file.filename.endswith('.txt'):
-        return redirect(url_for('admin_dashboard'))
-    content = file.read().decode('utf-8')
-    numbers = [line.strip() for line in content.splitlines() if line.strip()]
-    if not numbers:
-        return redirect(url_for('admin_dashboard'))
-    first = numbers[0]
-    codes = sorted(COUNTRY_DATA.keys(), key=len, reverse=True)
-    cc = None
-    for c in codes:
-        if first.startswith(c):
-            cc = c
-            break
-    if cc:
-        name, flag = get_country_info(cc)
-        save_combo(platform, cc, name, flag, numbers)
-    return redirect(url_for('admin_dashboard'))
-
-@app.route('/admin/delete_combo', methods=['POST'])
-def admin_delete_combo():
-    platform = request.form.get('platform')
-    country_code = request.form.get('country_code')
-    if platform and country_code:
-        delete_combo(platform, country_code)
-    return redirect(url_for('admin_dashboard'))
-
-@app.route('/admin/add_announcement', methods=['POST'])
-def admin_add_announcement():
-    content = request.form.get('content', '').strip()
-    button_text = request.form.get('button_text', '').strip()
-    button_url = request.form.get('button_url', '').strip()
-    if content:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute("INSERT INTO announcements (type, content, button_text, button_url, created_at) VALUES (?, ?, ?, ?, ?)",
-                  ('info', content, button_text, button_url, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-        conn.commit()
+@app.route("/api/next_number", methods=["POST"])
+def api_next_number():
+    allowed, msg = security_check()
+    if not allowed: return jsonify({"ok": False, "error": msg}), 429
+    data = request.json
+    country_id = data.get("country_id")
+    conn = db()
+    num = conn.execute("SELECT * FROM numbers WHERE country_id=? AND status='available' ORDER BY RANDOM() LIMIT 1").fetchone()
+    if not num:
         conn.close()
-    return redirect(url_for('admin_dashboard'))
+        return jsonify({"ok": False, "error": "لا توجد أرقام متاحة"})
+    conn.execute("UPDATE numbers SET status='in_use', used_by_ip=?, used_at=CURRENT_TIMESTAMP WHERE id=?", (client_ip(), num["id"]))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "number_id": num["id"], "number": num["number"], "expires_in": 120})
 
-@app.route('/admin/delete_announcement', methods=['POST'])
-def admin_delete_announcement():
-    ann_id = request.form.get('id')
-    if ann_id:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute("DELETE FROM announcements WHERE id=?", (ann_id,))
-        conn.commit()
+@app.route("/api/smart_pick", methods=["POST"])
+def api_smart_pick():
+    allowed, msg = security_check()
+    if not allowed: return jsonify({"ok": False, "error": msg}), 429
+    conn = db()
+    num = conn.execute("SELECT * FROM numbers WHERE status='available' ORDER BY RANDOM() LIMIT 1").fetchone()
+    if not num:
         conn.close()
-    return redirect(url_for('admin_dashboard'))
+        return jsonify({"ok": False, "error": "لا توجد أرقام متاحة"})
+    country = conn.execute("SELECT c.*, p.name as platform, p.icon as icon, p.color as color FROM countries c JOIN platforms p ON c.platform_id = p.id WHERE c.id=?", (num["country_id"],)).fetchone()
+    conn.execute("UPDATE numbers SET status='in_use', used_by_ip=?, used_at=CURRENT_TIMESTAMP WHERE id=?", (client_ip(), num["id"]))
+    conn.commit()
+    conn.close()
+    code_row = None
+    return jsonify({
+        "ok": True, "number_id": num["id"], "number": num["number"],
+        "platform": country["platform"] if country else "?",
+        "country": country["name"] if country else "?",
+        "code": code_row["code"] if code_row else None,
+        "expires_in": 120
+    })
 
-@app.route('/admin/resolve_request', methods=['POST'])
-def admin_resolve_request():
-    req_id = request.form.get('id')
-    if req_id:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute("UPDATE help_requests SET status='resolved' WHERE id=?", (req_id,))
-        conn.commit()
+@app.route("/api/check_code/<int:number_id>")
+def api_check_code(number_id):
+    conn = db()
+    code = conn.execute("SELECT code FROM codes WHERE number_id=? ORDER BY received_at DESC LIMIT 1", (number_id,)).fetchone()
+    conn.close()
+    return jsonify({"code": code["code"] if code else None})
+
+@app.route("/api/feed")
+def api_feed():
+    conn = db()
+    feed = conn.execute("""
+        SELECT c.code, n.number, p.name as platform, p.icon, p.color, co.name as country, co.flag, c.received_at
+        FROM codes c
+        JOIN numbers n ON c.number_id = n.id
+        JOIN countries co ON n.country_id = co.id
+        JOIN platforms p ON co.platform_id = p.id
+        ORDER BY c.received_at DESC LIMIT 20
+    """).fetchall()
+    conn.close()
+    return jsonify({"feed": [dict(f) for f in feed]})
+
+@app.route("/api/search")
+def api_search():
+    q = request.args.get("q", "")
+    conn = db()
+    results = conn.execute("""
+        SELECT n.number, p.name as platform, p.icon, p.color, co.name as country, co.flag
+        FROM numbers n
+        JOIN countries co ON n.country_id = co.id
+        JOIN platforms p ON co.platform_id = p.id
+        WHERE n.number LIKE ? OR co.name LIKE ? OR p.name LIKE ?
+        LIMIT 10
+    """, (f"%{q}%", f"%{q}%", f"%{q}%")).fetchall()
+    conn.close()
+    return jsonify({"results": [dict(r) for r in results]})
+
+@app.route("/api/help", methods=["POST"])
+def api_help():
+    data = request.json
+    msg = data.get("message", "").strip()
+    if not msg: return jsonify({"ok": False, "error": "الرسالة مطلوبة"})
+    conn = db()
+    conn.execute("INSERT INTO help_requests (user_id, message, source) VALUES (?, ?, ?)",
+                 (client_ip(), msg, "website"))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "message": "✅ تم إرسال رسالتك!"})
+
+# =========================================================================
+# 11) Routes - الأدمن
+# =========================================================================
+@app.route("/admin/login", methods=["GET", "POST"])
+def admin_login():
+    if request.method == "POST":
+        username = request.form.get("username")
+        password = request.form.get("password")
+        conn = db()
+        admin = conn.execute("SELECT * FROM admins WHERE username=?", (username,)).fetchone()
         conn.close()
-    return redirect(url_for('admin_dashboard'))
+        if admin and bcrypt.checkpw(password.encode(), admin["password_hash"]):
+            session["admin_user"] = admin["username"]
+            session["admin_role"] = admin["role"]
+            audit(username, "دخول الأدمن")
+            return redirect("/admin")
+        flash("بيانات الدخول غير صحيحة", "error")
+    return render_template_string(ADMIN_LOGIN_HTML)
 
-# ========== Telegram Bot ==========
-def monitor_channel():
-    last_update_id = 0
-    while True:
-        try:
-            url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
-            params = {"timeout": 10, "offset": last_update_id + 1}
-            r = requests.get(url, params=params, timeout=15)
-            if r.status_code == 200:
-                data = r.json()
-                if data.get('ok'):
-                    for upd in data.get('result', []):
-                        last_update_id = upd['update_id']
-                        if 'channel_post' in upd:
-                            text = upd['channel_post'].get('text', '')
-                            if not text: continue
-                            clean = re.sub(r'[\u200B-\u200F\u202A-\u202E]', '', text)
-                            all_numbers = re.findall(r'\b\d{8,15}\b', clean)
-                            user_number = max(all_numbers, key=len) if all_numbers else None
-                            last_digits = user_number[-4:] if user_number else None
-                            all_codes = [c for c in re.findall(r'\b\d{4,8}\b', clean) if not (last_digits and c.endswith(last_digits))]
-                            otp = all_codes[0] if all_codes else None
-                            platform = "غير معروف"
-                            for name in platform_names.keys():
-                                if name in clean.lower():
-                                    platform = name
-                                    break
-                            if otp:
-                                conn = sqlite3.connect(DB_PATH)
-                                conn.cursor().execute(
-                                    "INSERT INTO otp_logs (number, otp, timestamp, platform) VALUES (?, ?, ?, ?)",
-                                    (last_digits or "0000", otp, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), platform)
-                                )
-                                conn.commit()
-                                conn.close()
-                                print(f"✅ [{platform}] {otp}")
-        except Exception as e:
-            print(f"❌ {e}")
-        time.sleep(5)
+@app.route("/admin/logout")
+def admin_logout():
+    user = session.get("admin_user", "?")
+    audit(user, "خروج من الأدمن")
+    session.clear()
+    return redirect("/admin/login")
 
-threading.Thread(target=monitor_channel, daemon=True).start()
+def admin_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("admin_user"):
+            return redirect("/admin/login")
+        return f(*args, **kwargs)
+    return decorated
 
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+@app.route("/admin")
+@admin_required
+def admin_dashboard():
+    conn = db()
+    stats = {
+        "total_numbers": conn.execute("SELECT COUNT(*) as c FROM numbers").fetchone()["c"],
+        "available": conn.execute("SELECT COUNT(*) as c FROM numbers WHERE status='available'").fetchone()["c"],
+        "total_codes": conn.execute("SELECT COUNT(*) as c FROM codes").fetchone()["c"],
+        "total_users": conn.execute("SELECT COUNT(*) as c FROM users").fetchone()["c"],
+        "banned_users": conn.execute("SELECT COUNT(*) as c FROM users WHERE banned=1").fetchone()["c"],
+        "platforms": conn.execute("SELECT COUNT(*) as c FROM platforms").fetchone()["c"],
+        "countries": conn.execute("SELECT COUNT(*) as c FROM countries").fetchone()["c"],
+    }
+    audits = conn.execute("SELECT * FROM audit_logs ORDER BY id DESC LIMIT 10").fetchall()
+    conn.close()
+    return render_template_string(ADMIN_DASHBOARD_HTML, stats=stats, audits=[dict(a) for a in audits],
+                                  admin_user=session["admin_user"], role=session["admin_role"])
+
+@app.route("/admin/settings", methods=["GET", "POST"])
+@admin_required
+def admin_settings():
+    if request.method == "POST":
+        for key in ["site_name", "announcement", "marquee_text", "main_color", "secondary_color",
+                    "bg_color", "text_color", "maintenance_mode", "rate_limit_per_minute", "footer_text"]:
+            val = request.form.get(key, "")
+            set_setting(key, val)
+        audit(session["admin_user"], "تعديل الإعدادات")
+        flash("✅ تم حفظ الإعدادات")
+    settings = get_settings()
+    return render_template_string(ADMIN_SETTINGS_HTML, settings=settings)
+
+@app.route("/admin/customize", methods=["GET", "POST"])
+@admin_required
+def admin_customize():
+    if request.method == "POST":
+        for key in ["digit_rain_enabled", "matrix_rain_enabled", "sound_enabled", "push_enabled",
+                    "bg_color", "main_color", "secondary_color", "text_color",
+                    "site_name", "announcement", "marquee_text", "smart_btn_text",
+                    "smart_btn_subtext", "footer_text", "search_placeholder"]:
+            val = request.form.get(key, "0")
+            set_setting(key, val)
+        audit(session["admin_user"], "تخصيص الموقع")
+        flash("✅ تم حفظ التخصيصات")
+    settings = get_settings()
+    return render_template_string(ADMIN_CUSTOMIZE_HTML, settings=settings)
+
+@app.route("/admin/platforms", methods=["GET", "POST"])
+@admin_required
+def admin_platforms():
+    conn = db()
+    if request.method == "POST":
+        action = request.form.get("action")
+        if action == "add":
+            conn.execute("INSERT INTO platforms (name, icon, color, sort_order) VALUES (?, ?, ?, ?)",
+                        (request.form["name"], request.form.get("icon", "📱"),
+                         request.form.get("color", "#667eea"), request.form.get("sort_order", 0)))
+            conn.commit()
+            audit(session["admin_user"], "إضافة منصة", request.form["name"])
+            flash("✅ تمت إضافة المنصة")
+        elif action == "delete":
+            conn.execute("DELETE FROM platforms WHERE id=?", (request.form["id"],))
+            conn.commit()
+            audit(session["admin_user"], "حذف منصة", request.form["id"])
+            flash("✅ تم الحذف")
+    platforms = conn.execute("SELECT * FROM platforms ORDER BY sort_order").fetchall()
+    conn.close()
+    return render_template_string(ADMIN_PLATFORMS_HTML, platforms=[dict(p) for p in platforms])
+
+@app.route("/admin/combos", methods=["GET", "POST"])
+@admin_required
+def admin_combos():
+    conn = db()
+    if request.method == "POST":
+        action = request.form.get("action")
+        if action == "upload_combo":
+            file = request.files.get("file")
+            if file:
+                content = file.read().decode("utf-8")
+                count = 0
+                for line in content.strip().split("\n"):
+                    parts = line.strip().split("|")
+                    if len(parts) >= 5:
+                        platform, country_name, code, flag, number = parts[0], parts[1], parts[2], parts[3], parts[4]
+                        # Find or create platform
+                        p = conn.execute("SELECT id FROM platforms WHERE LOWER(name)=LOWER(?)", (platform,)).fetchone()
+                        if p:
+                            # Find or create country
+                            c = conn.execute("SELECT id FROM countries WHERE platform_id=? AND code=?",
+                                           (p["id"], code)).fetchone()
+                            if c:
+                                conn.execute("INSERT INTO numbers (country_id, number, status) VALUES (?, ?, 'available')",
+                                            (c["id"], number))
+                            else:
+                                conn.execute("INSERT INTO countries (platform_id, name, code, flag) VALUES (?, ?, ?, ?)",
+                                            (p["id"], country_name, code, flag))
+                                cid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+                                conn.execute("INSERT INTO numbers (country_id, number, status) VALUES (?, ?, 'available')",
+                                            (cid, number))
+                            count += 1
+                conn.commit()
+                audit(session["admin_user"], "رفع كومبو", f"{count} رقم")
+                flash(f"✅ تم إضافة {count} رقم")
+        elif action == "delete_country":
+            conn.execute("DELETE FROM countries WHERE id=?", (request.form["id"],))
+            conn.commit()
+            audit(session["admin_user"], "حذف دولة", request.form["id"])
+            flash("✅ تم الحذف")
+    countries = conn.execute("""
+        SELECT c.*, p.name as platform_name, COUNT(n.id) as num_count
+        FROM countries c
+        JOIN platforms p ON c.platform_id = p.id
+        LEFT JOIN numbers n ON n.country_id = c.id
+        GROUP BY c.id
+    """).fetchall()
+    conn.close()
+    return render_template_string(ADMIN_COMBOS_HTML, countries=[dict(c) for c in countries])
+
+@app.route("/admin/users", methods=["GET", "POST"])
+@admin_required
+def admin_users():
+    conn = db()
+    if request.method == "POST":
+        action = request.form.get("action")
+        if action == "ban":
+            conn.execute("UPDATE users SET banned=1 WHERE id=?", (request.form["id"],))
+            conn.commit()
+            audit(session["admin_user"], "حظر مستخدم", request.form["id"])
+            flash("✅ تم الحظر")
+        elif action == "unban":
+            conn.execute("UPDATE users SET banned=0 WHERE id=?", (request.form["id"],))
+            conn.commit()
+            audit(session["admin_user"], "فك حظر", request.form["id"])
+            flash("✅ تم فك الحظر")
+        elif action == "blacklist_ip":
+            conn.execute("INSERT OR REPLACE INTO ip_blacklist (ip, reason) VALUES (?, ?)",
+                        (request.form["ip"], request.form.get("reason", "")))
+            conn.commit()
+            global blacklist_cache
+            blacklist_cache = set()
+            audit(session["admin_user"], "إضافة IP للقائمة السوداء", request.form["ip"])
+            flash("✅ تم الحظر")
+        elif action == "unblacklist_ip":
+            conn.execute("DELETE FROM ip_blacklist WHERE ip=?", (request.form["ip"],))
+            conn.commit()
+            global blacklist_cache
+            blacklist_cache = set()
+            audit(session["admin_user"], "إزالة من القائمة السوداء", request.form["ip"])
+            flash("✅ تم الإزالة")
+    users = conn.execute("SELECT * FROM users ORDER BY id DESC LIMIT 100").fetchall()
+    blacklisted = conn.execute("SELECT * FROM ip_blacklist ORDER BY id DESC").fetchall()
+    conn.close()
+    return render_template_string(ADMIN_USERS_HTML, users=[dict(u) for u in users],
+                                 blacklisted=[dict(b) for b in blacklisted])
+
+@app.route("/admin/links", methods=["GET", "POST"])
+@admin_required
+def admin_links():
+    conn = db()
+    if request.method == "POST":
+        action = request.form.get("action")
+        if action == "add":
+            conn.execute("INSERT INTO links (label, url, icon, sort_order) VALUES (?, ?, ?, ?)",
+                        (request.form["label"], request.form["url"],
+                         request.form.get("icon", "🔗"), request.form.get("sort_order", 0)))
+            conn.commit()
+            audit(session["admin_user"], "إضافة رابط", request.form["label"])
+            flash("✅ تمت إضافة الرابط")
+        elif action == "delete":
+            conn.execute("DELETE FROM links WHERE id=?", (request.form["id"],))
+            conn.commit()
+            audit(session["admin_user"], "حذف رابط", request.form["id"])
+            flash("✅ تم الحذف")
+    links = conn.execute("SELECT * FROM links ORDER BY sort_order").fetchall()
+    conn.close()
+    return render_template_string(ADMIN_LINKS_HTML, links=[dict(l) for l in links])
+
+@app.route("/admin/codes", methods=["GET", "POST"])
+@admin_required
+def admin_codes():
+    conn = db()
+    if request.method == "POST":
+        action = request.form.get("action")
+        if action == "delete_all":
+            conn.execute("DELETE FROM codes")
+            conn.commit()
+            audit(session["admin_user"], "حذف كل الأكواد", "ALL")
+            flash("✅ تم حذف كل الأكواد")
+        elif action == "delete_filter":
+            days = int(request.form.get("days", 7))
+            conn.execute("DELETE FROM codes WHERE received_at < datetime('now', ?)", (f"-{days} days",))
+            conn.commit()
+            audit(session["admin_user"], "حذف أكواد قديمة", f"{days} يوم")
+            flash(f"✅ تم حذف الأكواد الأقدم من {days} يوم")
+        elif action == "delete_id":
+            conn.execute("DELETE FROM codes WHERE id=?", (request.form["id"],))
+            conn.commit()
+            audit(session["admin_user"], "حذف كود", request.form["id"])
+            flash("✅ تم الحذف")
+    codes = conn.execute("""
+        SELECT c.*, n.number, p.name as platform, co.name as country
+        FROM codes c
+        JOIN numbers n ON c.number_id = n.id
+        JOIN countries co ON n.country_id = co.id
+        JOIN platforms p ON co.platform_id = p.id
+        ORDER BY c.id DESC LIMIT 200
+    """).fetchall()
+    conn.close()
+    return render_template_string(ADMIN_CODES_HTML, codes=[dict(c) for c in codes])
+
+@app.route("/admin/audits")
+@admin_required
+def admin_audits():
+    conn = db()
+    audits = conn.execute("SELECT * FROM audit_logs ORDER BY id DESC LIMIT 200").fetchall()
+    conn.close()
+    return render_template_string(ADMIN_AUDITS_HTML, audits=[dict(a) for a in audits])
+
+@app.route("/admin/backup")
+@admin_required
+def admin_backup():
+    conn = db()
+    with open("backup_" + datetime.now().strftime("%Y%m%d_%H%M%S") + ".db", "wb") as f:
+        f.write(conn.execute("SELECT * FROM sqlite_master").fetchone()["sql"].encode() if False else b"")
+    # Export as JSON
+    tables = ["platforms", "countries", "numbers", "codes", "users", "links", "settings"]
+    data = {}
+    for table in tables:
+        rows = conn.execute(f"SELECT * FROM {table}").fetchall()
+        data[table] = [dict(r) for r in rows]
+    conn.close()
+    return jsonify({"ok": True, "backup": data, "message": "تم إنشاء نسخة احتياطية"})
+
+@app.route("/api/pull_code/<int:number_id>", methods=["POST"])
+def api_pull_code(number_id):
+    conn = db()
+    conn.execute("INSERT INTO code_pulls (number_id, ip) VALUES (?, ?)", (number_id, client_ip()))
+    code = conn.execute("SELECT code, received_at FROM codes WHERE number_id=? ORDER BY received_at DESC LIMIT 1",
+                        (number_id,)).fetchone()
+    conn.commit()
+    conn.close()
+    if code:
+        return jsonify({"ok": True, "code": code["code"], "received_at": code["received_at"]})
+    return jsonify({"ok": True, "code": None, "message": "لا يوجد كود بعد"})
+
+# =========================================================================
+# 12) تشغيل البوتات والتطبيق
+# =========================================================================
+if __name__ == "__main__":
+    init_db()
+    print("🚀 جاري تشغيل البوتات...")
+    start_all_pollers()
+    print("✅ تم تشغيل البوتات")
+    print(f"🌐 الموقع: http://localhost:5000")
+    print(f"🔐 الأدمن: http://localhost:5000/admin/login")
+    print(f"   Username: {ADMIN_USER}")
+    print(f"   Password: {ADMIN_PASS}")
+    app.run(host="0.0.0.0", port=5000, debug=True)
