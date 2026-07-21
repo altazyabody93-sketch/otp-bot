@@ -786,22 +786,7 @@ main_html = """
             gap: 6px;
             z-index: 999;
         }
-        .font-btn {
-            width: 40px; height: 40px;
-            background: linear-gradient(135deg, #1c2128, #21262d);
-            border: 1px solid #30363d;
-            color: #c9d1d9;
-            border-radius: 50%;
-            cursor: pointer;
-            font-size: 16px;
-            display: flex; align-items: center; justify-content: center;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.4);
-            transition: all 0.2s;
-        }
-        .font-btn:hover {
-            transform: scale(1.1);
-            border-color: #58a6ff;
-        }
+
 
         /* [تايمر تحت الرقم] */
         .otp-timer-below {
@@ -1346,13 +1331,6 @@ main_html = """
     }
     document.body.classList.add(fontSizes[fontIndex]);
 
-    function changeFontSize(dir) {
-        fontIndex = Math.max(0, Math.min(fontSizes.length - 1, fontIndex + dir));
-        fontSizes.forEach(s => document.body.classList.remove(s));
-        document.body.classList.add(fontSizes[fontIndex]);
-        localStorage.setItem('fontSize', fontSizes[fontIndex]);
-    }
-
     // ============ [أرقام متساقطة خلف المنصات] قابلة للتشغيل/الإيقاف ============
     let platformsRainEnabled = localStorage.getItem('platformsRain') !== '0';
     let rainCanvas, rainCtx, rainDrops = [], rainAnimId;
@@ -1430,10 +1408,8 @@ main_html = """
         <span id="topNotifText">كود جديد!</span>
     </div>
 
-    <!-- [أدوات التحكم] تكبير/تصغير الخط -->
+    <!-- [أدوات التحكم] -->
     <div class="font-controls">
-        <button class="font-btn" onclick="changeFontSize(1)" title="تكبير">+</button>
-        <button class="font-btn" onclick="changeFontSize(-1)" title="تصغير">−</button>
     </div>
 </body>
 </html>
