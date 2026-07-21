@@ -126,6 +126,19 @@ def get_setting(key):
     conn.close()
     return row[0] if row else ''
 
+
+def hex_to_rgb(hex_color):
+    """تحويل hex إلى قيم R,G,B لاستخدامها في rgba"""
+    h = (hex_color or '').lstrip('#')
+    if len(h) == 3:
+        h = ''.join(c*2 for c in h)
+    if len(h) != 6:
+        return '0, 255, 200'
+    try:
+        return f"{int(h[0:2], 16)}, {int(h[2:4], 16)}, {int(h[4:6], 16)}"
+    except Exception:
+        return '0, 255, 200'
+
 def set_setting(key, value):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -523,6 +536,8 @@ main_html = """
             --secondary-color: {{ settings.secondary_color }};
             --bg-color: {{ settings.background_color }};
             --text-color: {{ settings.text_color }};
+            --main-rgb: {{ settings.main_rgb }};
+            --main-glow: rgba({{ settings.main_rgb }}, 0.4);
             --card-bg: #1c2128;
             --border-color: #30363d;
             --top-bar-bg: #0d1117;
@@ -556,6 +571,9 @@ main_html = """
         body.theme-light .number-card { background: linear-gradient(135deg, #f0f9ff, #e0e7ff); }
         body.theme-light .otp-item { background: #f9fafb; color: #1a202c; }
         body.theme-light .form-control { background: #ffffff; color: #1a202c; border-color: #d1d5db; }
+        /* ============ [إخفاء قاطع لأدوات الأدمن عن الزوار] ============ */
+        body:not(.admin-mode) [data-admin-only] { display: none !important; }
+        body.admin-mode [data-admin-only] { display: inline-flex; }
         body.theme-light .section-title { color: #1a202c; }
         body.theme-light .hero h1 { color: #1a202c; }
         body.theme-light .footer-info { color: #4a5568; }
@@ -645,7 +663,7 @@ main_html = """
         }
         .platform-btn:hover { background:#21262d; border-color:#484f58; transform:translateY(-2px); }
         .platform-btn:active { transform:scale(0.97); }
-        .platform-btn.active { background:var(--platform-color, #1f6feb); border-color:var(--platform-color, #1f6feb); color:#fff; box-shadow:0 0 0 1px var(--platform-color, #1f6feb), 0 0 20px rgba(31,111,235,0.4); transform:translateY(-2px); }
+        .platform-btn.active { background:var(--platform-color, var(--main-color)); border-color:var(--platform-color, var(--main-color)); color:#fff; box-shadow:0 0 0 1px var(--platform-color, var(--main-color)), 0 0 20px var(--main-glow, rgba(0,255,200,0.4)); transform:translateY(-2px); }
         .platform-btn img { width:38px; height:38px; object-fit:contain; border-radius:8px; background:#fff; padding:3px; }
         .platform-btn .platform-label { flex:1; }
         /* [drag & drop] - للأدمن فقط */
@@ -665,7 +683,7 @@ main_html = """
             background-repeat:no-repeat; background-position:left 14px center; padding-left:36px;
         }
 
-        /* ============ [شريط البحث + زر الثيم] ============ */
+        /* ============ [شريط البحث + زر الثيم] - مطابق للصورة المرفقة ============ */
         .search-row {
             display: flex;
             gap: 8px;
@@ -676,47 +694,41 @@ main_html = """
             flex: 1;
             margin: 0;
         }
+        /* الزر مثل الصورة: دائري، بجانب select، أبيض في الوضع النهاري وأسود في الليلي */
         .theme-toggle-btn {
             flex-shrink: 0;
             width: 46px;
             height: 46px;
-            border-radius: 12px;
-            border: 1px solid #30363d;
-            background: linear-gradient(135deg, #1c2128, #21262d);
-            color: #ffd54a;
-            font-size: 22px;
+            min-width: 46px;
+            border-radius: 50%;
+            border: 2px solid #30363d;
+            background: #ffffff;
+            color: #1a202c;
+            font-size: 20px;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            position: relative;
-            overflow: hidden;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+            padding: 0;
         }
-        .theme-toggle-btn::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background: linear-gradient(135deg, rgba(255,213,74,0.15), rgba(139,92,246,0.15));
-            opacity: 0;
-            transition: opacity 0.3s;
-        }
-        .theme-toggle-btn:hover { transform: scale(1.06); border-color: #ffd54a; box-shadow: 0 0 14px rgba(255,213,74,0.35); }
-        .theme-toggle-btn:hover::before { opacity: 1; }
-        .theme-toggle-btn:active { transform: scale(0.95); }
+        .theme-toggle-btn:hover { transform: scale(1.08); box-shadow: 0 4px 12px rgba(0,0,0,0.35); }
+        .theme-toggle-btn:active { transform: scale(0.94); }
         .theme-toggle-btn .icon-sun { display: none; }
-        .theme-toggle-btn .icon-moon { display: block; }
+        .theme-toggle-btn .icon-moon { display: inline-block; }
+        /* الوضع النهاري: الزر بنفس اللون لكن مع شمس */
         body.theme-light .theme-toggle-btn {
-            background: linear-gradient(135deg, #e0e7ff, #c7d2fe);
-            border-color: #6366f1;
-            color: #4338ca;
+            background: #1a202c;
+            color: #ffffff;
+            border-color: #ffffff;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
         }
-        body.theme-light .theme-toggle-btn .icon-sun { display: block; }
+        body.theme-light .theme-toggle-btn .icon-sun { display: inline-block; }
         body.theme-light .theme-toggle-btn .icon-moon { display: none; }
-        body.theme-light .theme-toggle-btn:hover { box-shadow: 0 0 14px rgba(99,102,241,0.35); border-color: #4338ca; }
-        .theme-toggle-btn .icon { line-height: 1; transition: transform 0.4s ease; }
+        .theme-toggle-btn .icon { line-height: 1; transition: transform 0.4s ease; pointer-events: none; }
         .theme-toggle-btn:hover .icon { transform: rotate(20deg) scale(1.1); }
-        .form-control:focus { border-color:#1f6feb; }
+        .form-control:focus { border-color:var(--main-color, #00ffc8); }
         .form-control:disabled { opacity:0.5; cursor:not-allowed; }
 
         .btn-primary {
@@ -725,7 +737,7 @@ main_html = """
             cursor:pointer; margin-top:6px; font-family:'Cairo',sans-serif;
             transition:all 0.15s ease;
         }
-        .btn-primary:hover:not(:disabled) { background:#2ea043; }
+        .btn-primary:hover:not(:disabled) { filter: brightness(1.15); box-shadow: 0 0 18px var(--main-glow, rgba(0,255,200,0.35)); }
         .btn-primary:disabled { opacity:0.5; cursor:not-allowed; }
 
         .number-card {
@@ -912,7 +924,7 @@ main_html = """
             top: 60px;
             left: 50%;
             transform: translateX(-50%) translateY(-150px);
-            background: linear-gradient(135deg, #238636, #2ea043);
+            background: linear-gradient(135deg, var(--main-color, #00ffc8), var(--secondary-color, #8b5cf6));
             color: #fff;
             padding: 14px 24px;
             border-radius: 12px;
@@ -1068,6 +1080,9 @@ main_html = """
     </div>
 
     <script>
+        // [Admin mode flag] - يضاف على body قبل أي كود آخر لإخفاء أدوات الأدمن عن الزوار
+        const __IS_ADMIN__ = {{ 'true' if is_admin else 'false' }};
+        if (__IS_ADMIN__) document.body.classList.add('admin-mode');
         const platformLogos = {{ platform_logos | tojson }};
         const platformNames = {{ platform_names | tojson }};
         const platformGradients = {{ platform_gradients | tojson }};
@@ -1269,10 +1284,16 @@ main_html = """
             const cur = Array.from(selector.querySelectorAll('.platform-btn')).map(b => b.dataset.platform);
             const srcIdx = cur.indexOf(srcPlatform);
             const dstIdx = cur.indexOf(dstPlatform);
-            if (srcIdx === -1 || dstIdx === -1) return;
+            if (srcIdx === -1 || dstIdx === -1 || srcIdx === dstIdx) return;
+            // [حفظ في DB] بدلاً من localStorage فقط
             cur.splice(srcIdx, 1);
             cur.splice(dstIdx, 0, srcPlatform);
-            // [حفظ في DB] بدلاً من localStorage فقط
+            // [إعادة ترتيب DOM فوراً] بدون rebuild كامل (أنعم وأسرع)
+            const btns = {};
+            selector.querySelectorAll('.platform-btn').forEach(b => { btns[b.dataset.platform] = b; });
+            // إفراغ وإعادة الإدراج بالترتيب الجديد
+            selector.innerHTML = '';
+            cur.forEach(p => { if (btns[p]) selector.appendChild(btns[p]); });
             try {
                 const res = await fetch('/api/save_platform_order', {
                     method: 'POST',
@@ -1282,15 +1303,16 @@ main_html = """
                 const data = await res.json();
                 if (data.ok) {
                     localStorage.setItem('platformOrder', JSON.stringify(cur));
-                    initPlatformSelector();
-                    showTopNotification && showTopNotification('✅ تم حفظ ترتيب المنصات');
+                    if (typeof showTopNotification === 'function') showTopNotification('✅ تم حفظ ترتيب المنصات');
                 } else {
                     alert('❌ فشل حفظ الترتيب: ' + (data.error || ''));
+                    // rollback بـ reload
+                    location.reload();
                 }
             } catch(err) {
                 // fallback لـ localStorage
                 localStorage.setItem('platformOrder', JSON.stringify(cur));
-                initPlatformSelector();
+                if (typeof showTopNotification === 'function') showTopNotification('✅ تم الحفظ محلياً');
             }
         }
 
@@ -1496,7 +1518,7 @@ main_html = """
                 const logoUrl = platformLogos[platform] || '';
                 const name = platformNames[platform] || platform;
                 // [زر مسح كل الأكواد] للأدمن فقط
-                const clearAllBtn = isAdmin ? `<button onclick="clearAllOtps()" class="clear-all-btn" style="margin-right:auto; background:rgba(239,68,68,0.15); border:1px solid #ef4444; color:#ef4444; padding:2px 6px; border-radius:4px; font-size:10px; cursor:pointer;">🗑️ مسح الكل</button>` : '';
+                const clearAllBtn = isAdmin ? `<button data-admin-only="1" onclick="clearAllOtps()" class="clear-all-btn" style="margin-right:auto; background:rgba(239,68,68,0.15); border:1px solid #ef4444; color:#ef4444; padding:2px 6px; border-radius:4px; font-size:10px; cursor:pointer;">🗑️ مسح الكل</button>` : '';
                 html += `
                 <div style="margin-bottom:8px;">
                     <div style="display:flex; align-items:center; gap:4px; padding:4px 8px; background:#1c2128; border:1px solid #30363d; border-radius:6px; margin-bottom:4px;">
@@ -1507,7 +1529,7 @@ main_html = """
                     </div>
                     ${items.map(o => {
                         // [زر حذف] للأدمن فقط
-                        const deleteBtn = isAdmin ? `<button onclick="deleteOtpFromCache('${o.id || ''}','${o.otp}', this)" class="delete-otp-btn" style="background:rgba(239,68,68,0.15); border:1px solid #ef4444; color:#ef4444; padding:3px 6px; border-radius:4px; font-size:10px; cursor:pointer;" title="حذف">🗑️</button>` : '';
+                        const deleteBtn = isAdmin ? `<button data-admin-only="1" onclick="deleteOtpFromCache('${o.id || ''}','${o.otp}', this)" class="delete-otp-btn" style="background:rgba(239,68,68,0.15); border:1px solid #ef4444; color:#ef4444; padding:3px 6px; border-radius:4px; font-size:10px; cursor:pointer;" title="حذف">🗑️</button>` : '';
                         return `
                     <div class="otp-item">
                         <div>
@@ -1625,48 +1647,74 @@ main_html = """
     </script>
 
     <script>
-    // ============ [صوت إشعارات] Web Audio API - نغمة مميزة ============
+    // ============ [صوت إشعارات] Web Audio API - نغمة مميزة + unlock للموبايل ============
     // [تم نقل تعريف soundEnabled إلى أعلى الكود] (يُعرّف مرة واحدة)
     const audioCtx = (function() {
         try { return new (window.AudioContext || window.webkitAudioContext)(); }
         catch(e) { return null; }
     })();
 
+    // [فتح AudioContext] عند أول تفاعل (iOS/Safari يتطلب ذلك)
+    function unlockAudio() {
+        if (!audioCtx) return;
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume().catch(()=>{});
+        }
+    }
+    document.addEventListener('touchstart', unlockAudio, {once: true, passive: true});
+    document.addEventListener('click', unlockAudio, {once: true});
+    document.addEventListener('keydown', unlockAudio, {once: true});
+
     function playNotificationSound() {
-        if (!soundEnabled || !audioCtx) return;
+        if (!soundEnabled) return;
+        if (!audioCtx) return;
         try {
+            // ضمان فتح الـ context (بعض المتصفحات)
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume().catch(()=>{});
+            }
             const ctx = audioCtx;
             const now = ctx.currentTime;
-            // نغمة 1: 880Hz
+            // نغمة 1: 880Hz (جرس بداية)
             let osc = ctx.createOscillator();
             let gain = ctx.createGain();
             osc.connect(gain); gain.connect(ctx.destination);
             osc.frequency.value = 880;
             osc.type = 'sine';
             gain.gain.setValueAtTime(0, now);
-            gain.gain.linearRampToValueAtTime(0.2, now + 0.03);
-            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
-            osc.start(now); osc.stop(now + 0.22);
-            // نغمة 2: 1320Hz بعد 0.12s
+            gain.gain.linearRampToValueAtTime(0.25, now + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+            osc.start(now); osc.stop(now + 0.2);
+            // نغمة 2: 1320Hz بعد 0.1s (أعلى)
             osc = ctx.createOscillator();
             gain = ctx.createGain();
             osc.connect(gain); gain.connect(ctx.destination);
             osc.frequency.value = 1320;
             osc.type = 'sine';
-            gain.gain.setValueAtTime(0, now + 0.12);
-            gain.gain.linearRampToValueAtTime(0.22, now + 0.15);
-            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-            osc.start(now + 0.12); osc.stop(now + 0.37);
-            // نغمة 3: 1760Hz بعد 0.25s
+            gain.gain.setValueAtTime(0, now + 0.1);
+            gain.gain.linearRampToValueAtTime(0.28, now + 0.13);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+            osc.start(now + 0.1); osc.stop(now + 0.32);
+            // نغمة 3: 1760Hz بعد 0.22s (أعلى جرس)
             osc = ctx.createOscillator();
             gain = ctx.createGain();
             osc.connect(gain); gain.connect(ctx.destination);
             osc.frequency.value = 1760;
             osc.type = 'triangle';
-            gain.gain.setValueAtTime(0, now + 0.25);
-            gain.gain.linearRampToValueAtTime(0.25, now + 0.28);
-            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
-            osc.start(now + 0.25); osc.stop(now + 0.57);
+            gain.gain.setValueAtTime(0, now + 0.22);
+            gain.gain.linearRampToValueAtTime(0.3, now + 0.25);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+            osc.start(now + 0.22); osc.stop(now + 0.52);
+            // نغمة 4: تأكيد 2200Hz بعد 0.4s
+            osc = ctx.createOscillator();
+            gain = ctx.createGain();
+            osc.connect(gain); gain.connect(ctx.destination);
+            osc.frequency.value = 2200;
+            osc.type = 'sine';
+            gain.gain.setValueAtTime(0, now + 0.4);
+            gain.gain.linearRampToValueAtTime(0.22, now + 0.43);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.75);
+            osc.start(now + 0.4); osc.stop(now + 0.77);
         } catch(e) {}
     }
 
@@ -1782,11 +1830,13 @@ def home():
     platforms = get_platforms() or list(platform_names.keys())
     
     # تمرير الإعدادات والألوان والأدمن للقالب
+    main_color = get_setting('main_color') or '#00ffc8'
     settings = {
-        'main_color': get_setting('main_color') or '#00ffc8',
+        'main_color': main_color,
         'secondary_color': get_setting('secondary_color') or '#8b5cf6',
         'background_color': get_setting('background_color') or '#0a0e1a',
         'text_color': get_setting('text_color') or '#ffffff',
+        'main_rgb': hex_to_rgb(main_color),
         'sound_enabled': get_setting('sound_enabled') or '1',
         'theme_mode': get_setting('theme_mode') or 'dark',
         'matrix_enabled': get_setting('matrix_enabled') or '1',
@@ -1848,6 +1898,8 @@ body { font-family:'Cairo',sans-serif; background:#07090d; color:#c9d1d9; min-he
 .back-btn:hover { background:#484f58; }
 .ann-delete-btn { position:absolute; top:8px; left:8px; background:rgba(239,68,68,0.15); border:1px solid #ef4444; color:#ef4444; padding:4px 8px; border-radius:6px; font-size:12px; cursor:pointer; font-weight:700; transition:all 0.2s; }
 .ann-delete-btn:hover { background:#ef4444; color:#fff; }
+/* إخفاء قاطع لأدوات الأدمن عن الزوار في صفحة الإعلانات */
+body:not(.admin-mode) [data-admin-only] { display: none !important; }
 </style>
 </head>
 <body>
@@ -1858,6 +1910,7 @@ body { font-family:'Cairo',sans-serif; background:#07090d; color:#c9d1d9; min-he
 </div>
 <script>
 const isAdmin = {{ 'true' if is_admin else 'false' }};
+if (isAdmin) document.body.classList.add('admin-mode');
 async function loadAnnouncements() {
     try {
         const res = await fetch('/api/announcements');
@@ -1872,8 +1925,8 @@ async function loadAnnouncements() {
                 media = `<div class="ann-video-wrap"><video src="${a.media_url}" controls preload="metadata"></video></div>`;
             }
             const btn = a.button_url ? `<a href="${a.button_url}" target="_blank" class="ann-btn">${a.button_text || 'افتح'}</a>` : '';
-            // زر الحذف للأدمن فقط
-            const deleteBtn = isAdmin ? `<button onclick="deleteAnn(${a.id})" class="ann-delete-btn" title="حذف">🗑️</button>` : '';
+            // زر الحذف للأدمن فقط (مخفي تماماً بالـ CSS عن الزوار)
+            const deleteBtn = isAdmin ? `<button data-admin-only="1" onclick="deleteAnn(${a.id})" class="ann-delete-btn" title="حذف">🗑️</button>` : '';
             return `<div class="ann-card" style="position:relative;"><span class="ann-type ${a.type}">${a.type}</span>${media}<div class="ann-content">${a.content || ''}</div>${btn}<div class="ann-time">🕒 ${a.created_at}</div>${deleteBtn}</div>`;
         }).join('');
     } catch(e) { document.getElementById('annList').innerHTML = '<div class="empty">❌ فشل التحميل</div>'; }
@@ -2151,12 +2204,18 @@ def admin_dashboard():
     
     <hr>
     
-    <!-- مدير النصوص -->
+    <!-- مدير النصوص - شامل لكل النصوص في الموقع -->
     <h3>✏️ مدير النصوص</h3>
     <div class="section">
-        <div class="form-group"><label>عنوان الموقع</label><input type="text" id="siteTitle" class="form-control" value="{{ site_title }}"></div>
-        <div class="form-group"><label>الوصف</label><input type="text" id="siteSubtitle" class="form-control" value="{{ site_subtitle }}"></div>
-        <div class="form-group"><label>شريط الأخبار</label><input type="text" id="tickerText" class="form-control" value="{{ ticker_text }}"></div>
+        <div class="form-group"><label>🚀 عنوان الموقع</label><input type="text" id="siteTitle" class="form-control" value="{{ site_title }}"></div>
+        <div class="form-group"><label>👑 وصف الموقع</label><input type="text" id="siteSubtitle" class="form-control" value="{{ site_subtitle }}"></div>
+        <div class="form-group"><label>📰 نص شريط الأخبار (Ticker)</label><input type="text" id="tickerText" class="form-control" value="{{ ticker_text }}"></div>
+        <hr style="margin:8px 0; border:0; border-top:1px dashed rgba(255,255,255,0.1);">
+        <div class="form-group"><label>🔘 نص زر "جلب رقم"</label><input type="text" id="btnGetNumber" class="form-control" value="{{ btn_get_number }}"></div>
+        <div class="form-group"><label>🔄 نص زر "تبديل"</label><input type="text" id="btnRefresh" class="form-control" value="{{ btn_refresh }}"></div>
+        <div class="form-group"><label>📡 نص زر "بدء السحب"</label><input type="text" id="btnStartMonitor" class="form-control" value="{{ btn_start_monitor }}"></div>
+        <div class="form-group"><label>⏹️ نص زر "إيقاف"</label><input type="text" id="btnStopMonitor" class="form-control" value="{{ btn_stop_monitor }}"></div>
+        <div class="form-group"><label>💎 نص الفوتر</label><input type="text" id="footerText" class="form-control" value="{{ footer_text }}"></div>
         <button class="btn btn-primary" onclick="saveTexts()">💾 حفظ النصوص</button>
     </div>
     
@@ -2484,7 +2543,12 @@ async function saveTexts() {
     const data = {
         site_title: document.getElementById('siteTitle').value,
         site_subtitle: document.getElementById('siteSubtitle').value,
-        ticker_text: document.getElementById('tickerText').value
+        ticker_text: document.getElementById('tickerText').value,
+        btn_get_number: document.getElementById('btnGetNumber').value,
+        btn_refresh: document.getElementById('btnRefresh').value,
+        btn_start_monitor: document.getElementById('btnStartMonitor').value,
+        btn_stop_monitor: document.getElementById('btnStopMonitor').value,
+        footer_text: document.getElementById('footerText').value
     };
     try {
         const res = await fetch('/admin/api/save_texts', {
@@ -2591,6 +2655,9 @@ setInterval(loadAnnouncementsAdmin, 60000);
 </body>
 </html>
 ''', site_title=get_text('site_title'), site_subtitle=get_text('site_subtitle'), ticker_text=get_text('ticker_text'),
+       btn_get_number=get_text('btn_get_number'), btn_refresh=get_text('btn_refresh'),
+       btn_start_monitor=get_text('btn_start_monitor'), btn_stop_monitor=get_text('btn_stop_monitor'),
+       footer_text=get_text('footer_text'),
        links=get_all_links(), combos=get_all_combos(), admin_chat_id=get_admin_setting('admin_telegram_id', ''),
        main_color=get_setting('main_color') or '#00ffc8', background_color=get_setting('background_color') or '#0a0e1a',
        text_color=get_setting('text_color') or '#ffffff', secondary_color=get_setting('secondary_color') or '#8b5cf6',
