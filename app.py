@@ -980,10 +980,6 @@ main_html = """
             0%,100% { opacity: 1; }
             50%     { opacity: 0.3; }
         }
-        /* اخفاء أزرار الحذف عن الزوار */
-body:not(.admin-mode) [data-admin-only] {
-    display: none !important;
-}
     </style>
 </head>
 <body>
@@ -1538,7 +1534,8 @@ body:not(.admin-mode) [data-admin-only] {
                     <div class="otp-item">
                         <div>
                             <div class="otp-code" dir="ltr" style="direction:ltr; unicode-bidi:bidi-override; text-align:left; font-size:14px;">🔑 ${o.otp}</div>
-                            <div class="otp-info">📞 ${o.number} • 🕒 ${o.timestamp}</div>
+                            <div class="otp-info" style="margin-top:2px;">📞 ${o.number}</div>
+                            <div class="otp-info" style="margin-top:2px;">🕒 ${o.timestamp}</div>
                         </div>
                         <div style="display:flex; gap:4px;">
                             <button class="copy-btn" onclick="copyText('${o.otp}', this)">نسخ</button>
