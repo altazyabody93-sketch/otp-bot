@@ -664,6 +664,58 @@ main_html = """
             background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='%238b949e' d='M6 9L1 4h10z'/></svg>");
             background-repeat:no-repeat; background-position:left 14px center; padding-left:36px;
         }
+
+        /* ============ [شريط البحث + زر الثيم] ============ */
+        .search-row {
+            display: flex;
+            gap: 8px;
+            align-items: stretch;
+            margin-bottom: 10px;
+        }
+        .search-row .form-control {
+            flex: 1;
+            margin: 0;
+        }
+        .theme-toggle-btn {
+            flex-shrink: 0;
+            width: 46px;
+            height: 46px;
+            border-radius: 12px;
+            border: 1px solid #30363d;
+            background: linear-gradient(135deg, #1c2128, #21262d);
+            color: #ffd54a;
+            font-size: 22px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        .theme-toggle-btn::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(255,213,74,0.15), rgba(139,92,246,0.15));
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .theme-toggle-btn:hover { transform: scale(1.06); border-color: #ffd54a; box-shadow: 0 0 14px rgba(255,213,74,0.35); }
+        .theme-toggle-btn:hover::before { opacity: 1; }
+        .theme-toggle-btn:active { transform: scale(0.95); }
+        .theme-toggle-btn .icon-sun { display: none; }
+        .theme-toggle-btn .icon-moon { display: block; }
+        body.theme-light .theme-toggle-btn {
+            background: linear-gradient(135deg, #e0e7ff, #c7d2fe);
+            border-color: #6366f1;
+            color: #4338ca;
+        }
+        body.theme-light .theme-toggle-btn .icon-sun { display: block; }
+        body.theme-light .theme-toggle-btn .icon-moon { display: none; }
+        body.theme-light .theme-toggle-btn:hover { box-shadow: 0 0 14px rgba(99,102,241,0.35); border-color: #4338ca; }
+        .theme-toggle-btn .icon { line-height: 1; transition: transform 0.4s ease; }
+        .theme-toggle-btn:hover .icon { transform: rotate(20deg) scale(1.1); }
         .form-control:focus { border-color:#1f6feb; }
         .form-control:disabled { opacity:0.5; cursor:not-allowed; }
 
@@ -938,16 +990,6 @@ main_html = """
                     <div class="menu-divider"></div>
                     <a href="/announcements"><span class="ico">📢</span> إعلانات الموقع</a>
                     <a href="#" onclick="openHelpModal(); return false;"><span class="ico">🆘</span> طلب مساعدة</a>
-                    <div class="menu-divider"></div>
-                    <div class="menu-header">⚙️ الإعدادات</div>
-                    <a href="#" onclick="toggleTheme(); return false;"><span class="ico" id="themeIcon">🌙</span> <span id="themeLabel">الوضع الليلي</span></a>
-                    <a href="#" onclick="toggleSound(); return false;"><span class="ico" id="soundIcon">🔔</span> <span id="soundLabel">الصوت: تشغيل</span></a>
-                    {% if is_admin %}
-                    <div class="menu-divider"></div>
-                    <div class="menu-header">🛠️ أدوات الأدمن</div>
-                    <a href="/admin"><span class="ico">⚙️</span> لوحة التحكم</a>
-                    <a href="#" onclick="clearAllOtps(); return false;"><span class="ico">🗑️</span> مسح جميع الأكواد</a>
-                    {% endif %}
                 </div>
             </div>
         </div>
@@ -965,9 +1007,15 @@ main_html = """
             </div>
 
             <div class="section-title"><span class="icon">🌍</span> اختر الدولة</div>
-            <select id="country" class="form-control" disabled>
-                <option value="">-- اختر المنصة أولاً --</option>
-            </select>
+            <div class="search-row">
+                <select id="country" class="form-control" disabled>
+                    <option value="">-- اختر المنصة أولاً --</option>
+                </select>
+                <button type="button" class="theme-toggle-btn" id="themeToggleBtn" onclick="toggleTheme()" title="تبديل الوضع" aria-label="تبديل الوضع">
+                    <span class="icon icon-moon">🌙</span>
+                    <span class="icon icon-sun">☀️</span>
+                </button>
+            </div>
 
             <button class="btn-primary" id="getNumberBtn" onclick="getNumber()" disabled>{{ btn_get_number }}</button>
 
@@ -1135,7 +1183,7 @@ main_html = """
                 canvas.height = window.innerHeight;
             });
         }
-        initMatrix();
+        // [نقل تشغيل initMatrix] إلى DOMContentLoaded في الأسفل
 
         let currentPlatform = '';
         let currentNumber = '';
@@ -1185,47 +1233,126 @@ main_html = """
                 if (isAdmin) {
                     btn.addEventListener('dragstart', e => {
                         e.dataTransfer.setData('text/plain', platform);
+                        e.dataTransfer.effectAllowed = 'move';
                         btn.classList.add('dragging');
                     });
-                    btn.addEventListener('dragend', () => btn.classList.remove('dragging'));
-                    btn.addEventListener('dragover', e => { e.preventDefault(); btn.classList.add('drag-over'); });
+                    btn.addEventListener('dragend', () => {
+                        btn.classList.remove('dragging');
+                        document.querySelectorAll('.platform-btn.drag-over').forEach(b => b.classList.remove('drag-over'));
+                    });
+                    btn.addEventListener('dragover', e => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'move';
+                        document.querySelectorAll('.platform-btn.drag-over').forEach(b => b.classList.remove('drag-over'));
+                        btn.classList.add('drag-over');
+                    });
                     btn.addEventListener('dragleave', () => btn.classList.remove('drag-over'));
                     btn.addEventListener('drop', async e => {
                         e.preventDefault();
                         btn.classList.remove('drag-over');
                         const srcPlatform = e.dataTransfer.getData('text/plain');
                         if (srcPlatform && srcPlatform !== platform) {
-                            const cur = Array.from(selector.querySelectorAll('.platform-btn')).map(b => b.dataset.platform);
-                            const srcIdx = cur.indexOf(srcPlatform);
-                            const dstIdx = cur.indexOf(platform);
-                            cur.splice(srcIdx, 1);
-                            cur.splice(dstIdx, 0, srcPlatform);
-                            // [حفظ في DB] بدلاً من localStorage فقط
-                            try {
-                                const res = await fetch('/api/save_platform_order', {
-                                    method: 'POST',
-                                    headers: {'Content-Type': 'application/json'},
-                                    body: JSON.stringify({order: cur})
-                                });
-                                const data = await res.json();
-                                if (data.ok) {
-                                    localStorage.setItem('platformOrder', JSON.stringify(cur));
-                                    initPlatformSelector();
-                                } else {
-                                    alert('❌ فشل حفظ الترتيب: ' + (data.error || ''));
-                                }
-                            } catch(err) {
-                                // fallback لـ localStorage
-                                localStorage.setItem('platformOrder', JSON.stringify(cur));
-                                initPlatformSelector();
-                            }
+                            await reorderPlatforms(srcPlatform, platform, selector);
                         }
                     });
+                    // [سحب باللمس] للموبايل - ضغط مطوّل ثم سحب
+                    attachTouchDrag(btn, selector);
                 }
                 selector.appendChild(btn);
             });
             // تشغيل الأرقام المتساقطة بعد بناء الأزرار
             if (window.startPlatformsRain) window.startPlatformsRain();
+        }
+
+        // ============ [إعادة ترتيب المنصات] (موحّد بين السحب واللمس) ============
+        async function reorderPlatforms(srcPlatform, dstPlatform, selector) {
+            const cur = Array.from(selector.querySelectorAll('.platform-btn')).map(b => b.dataset.platform);
+            const srcIdx = cur.indexOf(srcPlatform);
+            const dstIdx = cur.indexOf(dstPlatform);
+            if (srcIdx === -1 || dstIdx === -1) return;
+            cur.splice(srcIdx, 1);
+            cur.splice(dstIdx, 0, srcPlatform);
+            // [حفظ في DB] بدلاً من localStorage فقط
+            try {
+                const res = await fetch('/api/save_platform_order', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({order: cur})
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    localStorage.setItem('platformOrder', JSON.stringify(cur));
+                    initPlatformSelector();
+                    showTopNotification && showTopNotification('✅ تم حفظ ترتيب المنصات');
+                } else {
+                    alert('❌ فشل حفظ الترتيب: ' + (data.error || ''));
+                }
+            } catch(err) {
+                // fallback لـ localStorage
+                localStorage.setItem('platformOrder', JSON.stringify(cur));
+                initPlatformSelector();
+            }
+        }
+
+        // ============ [سحب باللمس للموبايل] (ضغط مطوّل ثم سحب) ============
+        function attachTouchDrag(btn, selector) {
+            let longPressTimer = null;
+            let startX = 0, startY = 0;
+            let draggingBtn = null;
+            let placeholder = null;
+            const LONG_PRESS_MS = 350;
+
+            btn.addEventListener('touchstart', e => {
+                if (e.touches.length !== 1) return;
+                const t = e.touches[0];
+                startX = t.clientX;
+                startY = t.clientY;
+                longPressTimer = setTimeout(() => {
+                    draggingBtn = btn;
+                    btn.classList.add('dragging');
+                    if (navigator.vibrate) navigator.vibrate(40);
+                }, LONG_PRESS_MS);
+            }, {passive: true});
+
+            btn.addEventListener('touchmove', e => {
+                if (!draggingBtn) {
+                    // إلغاء الضغط المطوّل عند التحرّك كثيراً
+                    const t = e.touches[0];
+                    if (Math.abs(t.clientX - startX) > 8 || Math.abs(t.clientY - startY) > 8) {
+                        clearTimeout(longPressTimer);
+                    }
+                    return;
+                }
+                e.preventDefault();
+                const t = e.touches[0];
+                // تحديد الزر الواقع تحته الإصبع
+                const elBelow = document.elementFromPoint(t.clientX, t.clientY);
+                const targetBtn = elBelow ? elBelow.closest('.platform-btn') : null;
+                document.querySelectorAll('.platform-btn.drag-over').forEach(b => b.classList.remove('drag-over'));
+                if (targetBtn && targetBtn !== draggingBtn) {
+                    targetBtn.classList.add('drag-over');
+                }
+            }, {passive: false});
+
+            const endDrag = (e) => {
+                clearTimeout(longPressTimer);
+                if (!draggingBtn) return;
+                const t = (e.changedTouches && e.changedTouches[0]) || null;
+                let targetBtn = null;
+                if (t) {
+                    const elBelow = document.elementFromPoint(t.clientX, t.clientY);
+                    targetBtn = elBelow ? elBelow.closest('.platform-btn') : null;
+                }
+                const src = draggingBtn.dataset.platform;
+                draggingBtn.classList.remove('dragging');
+                document.querySelectorAll('.platform-btn.drag-over').forEach(b => b.classList.remove('drag-over'));
+                if (targetBtn && targetBtn !== draggingBtn) {
+                    reorderPlatforms(src, targetBtn.dataset.platform, selector);
+                }
+                draggingBtn = null;
+            };
+            btn.addEventListener('touchend', endDrag);
+            btn.addEventListener('touchcancel', endDrag);
         }
 
         function selectPlatform(platform, btn) {
@@ -1345,6 +1472,9 @@ main_html = """
             allOtpsCache.unshift(otpData);
             try { localStorage.setItem('allOtps', JSON.stringify(allOtpsCache.slice(0, 30))); } catch(e) {}
             renderOtpSections();
+            // [إشعار + صوت] عند وصول كود جديد
+            try { if (typeof playNotificationSound === 'function') playNotificationSound(); } catch(e) {}
+            try { if (typeof showTopNotification === 'function') showTopNotification('كود جديد: ' + otp); } catch(e) {}
         }
 
         function renderOtpSections() {
@@ -1466,10 +1596,9 @@ main_html = """
             document.body.classList.remove('theme-dark', 'theme-light');
             document.body.classList.add('theme-' + t);
             localStorage.setItem('themeMode', t);
-            const icon = document.getElementById('themeIcon');
-            const label = document.getElementById('themeLabel');
-            if (icon) icon.textContent = t === 'dark' ? '☀️' : '🌙';
-            if (label) label.textContent = t === 'dark' ? 'الوضع النهاري' : 'الوضع الليلي';
+            // الزر الجديد (شريط البحث) - الأيقونات تظهر/تختفي تلقائياً عبر CSS
+            const btn = document.getElementById('themeToggleBtn');
+            if (btn) btn.setAttribute('title', t === 'dark' ? 'التبديل للوضع النهاري' : 'التبديل للوضع الليلي');
         }
         function toggleTheme() {
             applyTheme(currentTheme === 'dark' ? 'light' : 'dark');
@@ -1477,34 +1606,27 @@ main_html = """
         // تطبيق الثيم عند التحميل
         applyTheme(currentTheme);
 
-        // ============ [تبديل الصوت] ============
+        // ============ [الصوت] (محفوظ في JS فقط - لم يُطلب نقله للقائمة) ============
         let soundEnabled = localStorage.getItem('soundEnabled') !== '0' && ('{{ settings.sound_enabled }}' !== '0');
-        function updateSoundUi() {
-            const icon = document.getElementById('soundIcon');
-            const label = document.getElementById('soundLabel');
-            if (icon) icon.textContent = soundEnabled ? '🔔' : '🔕';
-            if (label) label.textContent = 'الصوت: ' + (soundEnabled ? 'تشغيل' : 'إيقاف');
-        }
         function toggleSound() {
             soundEnabled = !soundEnabled;
             localStorage.setItem('soundEnabled', soundEnabled ? '1' : '0');
-            updateSoundUi();
             if (soundEnabled && typeof playNotificationSound === 'function') {
-                // تشغيل نغمة تأكيد
                 try { playNotificationSound(); } catch(e) {}
             }
         }
-        updateSoundUi();
 
         document.addEventListener('DOMContentLoaded', () => {
             initPlatformSelector();
             loadCachedOtps();
+            initMatrix();
+            if (typeof startPlatformsRainSafe === 'function') startPlatformsRainSafe();
         });
     </script>
 
     <script>
     // ============ [صوت إشعارات] Web Audio API - نغمة مميزة ============
-    let soundEnabled = localStorage.getItem('soundEnabled') !== '0';
+    // [تم نقل تعريف soundEnabled إلى أعلى الكود] (يُعرّف مرة واحدة)
     const audioCtx = (function() {
         try { return new (window.AudioContext || window.webkitAudioContext)(); }
         catch(e) { return null; }
@@ -1614,30 +1736,21 @@ main_html = """
         }
         draw();
     }
-    startPlatformsRain();
+    // [نقل تشغيل startPlatformsRain] إلى DOMContentLoaded لتجنّب null canvas
+    function startPlatformsRainSafe() {
+        if (document.getElementById('platforms-rain-canvas')) startPlatformsRain();
+    }
 
     function togglePlatformsRain() {
         platformsRainEnabled = !platformsRainEnabled;
         localStorage.setItem('platformsRain', platformsRainEnabled ? '1' : '0');
-        if (platformsRainEnabled) startPlatformsRain();
+        if (platformsRainEnabled) startPlatformsRainSafe();
         else if (rainCtx) rainCtx.clearRect(0, 0, rainCanvas.width, rainCanvas.height);
     }
 
     // ============ [إشعار + صوت] عند وصول كود جديد ============
-    const _origAddOtp = window.addOtpToHistory;
-    if (typeof window.addOtpToHistory === 'function') {
-        window.addOtpToHistory = function(...args) {
-            const result = _origAddOtp.apply(this, args);
-            playNotificationSound();
-            showTopNotification('كود جديد: ' + (args[1] || ''));
-            return result;
-        };
-    } else {
-        window.addOtpToHistory = function(number, otp, timestamp, platform) {
-            playNotificationSound();
-            showTopNotification('كود جديد: ' + otp);
-        };
-    }
+    // [تم نقل الاستدعاء داخل addOtpToHistory] - لا حاجة لمنطق window.addOtpToHistory المعقّد
+    // (الدالة الأصلية أصبحت تستدعي playNotificationSound و showTopNotification مباشرة)
     </script>
 
     <!-- [إشعار رأسي] يظهر من أعلى الشاشة عند كود جديد -->
