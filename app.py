@@ -59,8 +59,8 @@ def init_db():
     for key, value in default_texts.items():
         c.execute("INSERT OR IGNORE INTO site_texts (key, value) VALUES (?, ?)", (key, value))
     
-    # إدخال الروابط الافتراضية
-            default_links = [
+    # إدخال الروابط الافتراضية - شعارات SVG رسمية
+    default_links = [
         ('whatsapp_developer', OWNER_LINK, 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="%2325D366"/><path fill="%23fff" d="M50 18c-17.6 0-32 14.4-32 32 0 6 1.7 11.8 4.8 16.8L18 82l15.6-4.7C38.6 80.1 44.2 82 50 82c17.6 0 32-14.4 32-32S67.6 18 50 18zm18.6 45.6c-.8 2.2-4.6 4.2-6.4 4.5-1.6.3-3.7.4-5.9-.4-1.4-.5-3.1-1.1-5.4-2.2-9.5-4.1-15.7-13.7-16.2-14.3-.5-.7-3.9-5.1-3.9-9.7s2.4-6.9 3.3-7.9c.9-.9 1.9-1.2 2.6-1.2.6 0 1.2 0 1.7 0 .6 0 1.3-.2 2 .1 1.6.7 2.6 3 2.9 3.9.3.9.5 1.5 0 2.4-.4.9-1.5 2.4-2.2 3.4 0 0 .7.7 1.4 1.5 2.4 2.7 5.3 5.5 9.6 7.1 1.5.5 2.3.6 3-.4.6-1 2.5-3 3.2-4 .7-1 1.4-.8 2.3-.5.9.3 5.8 2.7 6.8 3.2 1 .5 1.6.7 1.8 1.1.2.5.2 2.5-.6 4.7z"/></svg>'),
         ('whatsapp_group', WHATSAPP_GROUP_LINK, 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="%2325D366"/><path fill="%23fff" d="M50 18c-17.6 0-32 14.4-32 32 0 6 1.7 11.8 4.8 16.8L18 82l15.6-4.7C38.6 80.1 44.2 82 50 82c17.6 0 32-14.4 32-32S67.6 18 50 18zm18.6 45.6c-.8 2.2-4.6 4.2-6.4 4.5-1.6.3-3.7.4-5.9-.4-1.4-.5-3.1-1.1-5.4-2.2-9.5-4.1-15.7-13.7-16.2-14.3-.5-.7-3.9-5.1-3.9-9.7s2.4-6.9 3.3-7.9c.9-.9 1.9-1.2 2.6-1.2.6 0 1.2 0 1.7 0 .6 0 1.3-.2 2 .1 1.6.7 2.6 3 2.9 3.9.3.9.5 1.5 0 2.4-.4.9-1.5 2.4-2.2 3.4 0 0 .7.7 1.4 1.5 2.4 2.7 5.3 5.5 9.6 7.1 1.5.5 2.3.6 3-.4.6-1 2.5-3 3.2-4 .7-1 1.4-.8 2.3-.5.9.3 5.8 2.7 6.8 3.2 1 .5 1.6.7 1.8 1.1.2.5.2 2.5-.6 4.7z"/></svg>'),
         ('telegram_channel', 'https://t.me/jsjsgsjsvh', 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="%2326A5E4"/><path fill="%23fff" d="M22 50l50-22-7 48-18-8-7 12-3-17 31-26-37 24-9-4z"/></svg>'),
@@ -617,11 +617,18 @@ main_html = """
             z-index:9999;
         }
         .menu-overlay.show { display:block; }
-        .dropdown-menu a { 
-            display:flex; align-items:center; gap:10px; color:#c9d1d9; text-decoration:none; 
-            padding:10px 14px; border-radius:8px; font-size:13px; font-weight:600; 
+        .dropdown-menu a {
+            display:flex; align-items:center; gap:10px; color:#c9d1d9; text-decoration:none;
+            padding:10px 14px; border-radius:8px; font-size:13px; font-weight:600;
             transition:all 0.3s ease; border:1px solid transparent;
         }
+        /* ============ [شعارات القائمة الجانبية] ============ */
+        .dropdown-menu .menu-logo {
+            width: 22px; height: 22px; object-fit: contain;
+            border-radius: 4px; display: block;
+            background: #fff; padding: 1px;
+        }
+        .dropdown-menu a .menu-text { flex: 1; line-height: 1.2; }
         .dropdown-menu a:hover { background:rgba(88,166,255,0.1); color:#58a6ff; border-color:rgba(88,166,255,0.2); }
         .dropdown-menu a .ico { font-size:16px; width:24px; height:24px; display:flex; align-items:center; justify-content:center; background:rgba(88,166,255,0.1); border-radius:4px; flex-shrink:0; }
         .dropdown-menu .menu-divider { height:1px; background:linear-gradient(90deg, transparent, #30363d, transparent); margin:4px 0; }
@@ -985,11 +992,11 @@ main_html = """
                     </div>
                     <div class="menu-header">📞 تواصل معنا</div>
                     {% for key, value, icon in links %}
-                    <a href="{{ value }}" target="_blank"><span class="ico">{{ icon }}</span> {{ key.replace('_', ' ').title() }}</a>
+                    <a href="{{ value }}" target="_blank"><span class="ico">{% if icon.startswith('data:image') %}<img src="{{ icon }}" alt="" class="menu-logo">{% else %}{{ icon }}{% endif %}</span><span class="menu-text">{{ key.replace('_', ' ').title() }}</span></a>
                     {% endfor %}
                     <div class="menu-divider"></div>
-                    <a href="/announcements"><span class="ico">📢</span> إعلانات الموقع</a>
-                    <a href="#" onclick="openHelpModal(); return false;"><span class="ico">🆘</span> طلب مساعدة</a>
+                    <a href="/announcements"><span class="ico">📢</span><span class="menu-text">إعلانات الموقع</span></a>
+                    <a href="#" onclick="openHelpModal(); return false;"><span class="ico">🆘</span><span class="menu-text">طلب مساعدة</span></a>
                 </div>
             </div>
         </div>
