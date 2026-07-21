@@ -79,10 +79,16 @@ def init_db():
         'main_color': '#00ffc8',
         'secondary_color': '#8b5cf6',
         'background_color': '#0a0e1a',
-        'text_color': '#ffffff'
+        'text_color': '#ffffff',
+        'sound_enabled': '1',
+        'theme_mode': 'dark',
+        'platform_order': 'whatsapp,telegram,tiktok,facebook,instagram,snapchat,google,twitter'
     }
     for key, value in default_settings.items():
         c.execute("INSERT OR IGNORE INTO site_settings (key, value) VALUES (?, ?)", (key, value))
+    
+    # جدول ترتيب المنصات (للحفظ من لوحة التحكم)
+    c.execute('''CREATE TABLE IF NOT EXISTS platform_order (platform TEXT PRIMARY KEY, sort_order INTEGER)''')
     
     conn.commit()
     conn.close()
@@ -126,6 +132,72 @@ def set_setting(key, value):
     c.execute("REPLACE INTO site_settings (key, value) VALUES (?, ?)", (key, value))
     conn.commit()
     conn.close()
+
+def get_platform_order():
+    """استرجاع ترتيب المنصات من DB"""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT platform, sort_order FROM platform_order ORDER BY sort_order ASC")
+    rows = c.fetchall()
+    conn.close()
+    if rows:
+        return [r[0] for r in rows]
+    # الترتيب الافتراضي
+    return ['whatsapp', 'telegram', 'tiktok', 'facebook', 'instagram', 'snapchat', 'google', 'twitter']
+
+def save_platform_order(ordered_list):
+    """حفظ ترتيب المنصات في DB"""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("DELETE FROM platform_order")
+    for idx, p in enumerate(ordered_list):
+        c.execute("INSERT INTO platform_order (platform, sort_order) VALUES (?, ?)", (p, idx))
+    # حفظ نسخة نصية في site_settings للاستخدام من Frontend
+    c.execute("REPLACE INTO site_settings (key, value) VALUES (?, ?)", ('platform_order', ','.join(ordered_list)))
+    conn.commit()
+    conn.close()
+
+def delete_otp(otp_id=None, otp_value=None, all_otps=False):
+    """حذف كود واحد أو جميع الأكواد"""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    try:
+        if all_otps:
+            c.execute("DELETE FROM otp_logs")
+        elif otp_id is not None:
+            c.execute("DELETE FROM otp_logs WHERE id=?", (otp_id,))
+        elif otp_value is not None:
+            # قد يكون هناك عدة سجلات بنفس الكود - نحذف الأحدث فقط
+            c.execute("DELETE FROM otp_logs WHERE id IN (SELECT id FROM otp_logs WHERE otp=? ORDER BY id DESC LIMIT 1)", (otp_value,))
+        conn.commit()
+        # تنظيف الكاش
+        global _otp_cache
+        if '_otp_cache' in globals():
+            _otp_cache['data'] = None
+            _otp_cache['time'] = 0
+        return True
+    except Exception as e:
+        print(f"❌ خطأ حذف OTP: {e}")
+        return False
+    finally:
+        conn.close()
+
+def delete_announcement(ann_id):
+    """حذف إعلان من جدول الإعلانات"""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    try:
+        c.execute("DELETE FROM announcements WHERE id=?", (ann_id,))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"❌ خطأ حذف إعلان: {e}")
+        return False
+    finally:
+        conn.close()
+
+def is_admin_logged_in():
+    return bool(session.get('logged_in'))
 
 def update_text(key, value):
     conn = sqlite3.connect(DB_PATH)
@@ -444,6 +516,50 @@ main_html = """
         * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
         html, body { font-family:'Cairo',sans-serif; background:#07090d; color:#c9d1d9; overflow-x:hidden; }
         body { min-height:100vh; }
+
+        /* ============ [ألوان الموقع من قاعدة البيانات] ============ */
+        :root {
+            --main-color: {{ settings.main_color }};
+            --secondary-color: {{ settings.secondary_color }};
+            --bg-color: {{ settings.background_color }};
+            --text-color: {{ settings.text_color }};
+            --card-bg: #1c2128;
+            --border-color: #30363d;
+            --top-bar-bg: #0d1117;
+            --muted-color: #8b949e;
+        }
+        /* ============ [وضع الليل] ============ */
+        body.theme-dark {
+            --bg-color: #0a0e1a;
+            --text-color: #ffffff;
+            --card-bg: #1c2128;
+            --border-color: #30363d;
+            --top-bar-bg: #0d1117;
+            --muted-color: #8b949e;
+        }
+        /* ============ [وضع النهار] ============ */
+        body.theme-light {
+            --bg-color: #f5f7fa;
+            --text-color: #1a202c;
+            --card-bg: #ffffff;
+            --border-color: #d1d5db;
+            --top-bar-bg: #ffffff;
+            --muted-color: #4a5568;
+        }
+        body.theme-light .brand-text { color: #1a202c !important; }
+        body.theme-light .menu-btn { color: #4a5568; border-color: #d1d5db; }
+        body.theme-light .dropdown-menu { background: #ffffff; border-color: #d1d5db; }
+        body.theme-light .dropdown-menu a { color: #1a202c; }
+        body.theme-light .dropdown-menu a:hover { background: rgba(31,111,235,0.08); }
+        body.theme-light .platform-btn { background: #ffffff; color: #1a202c; border-color: #d1d5db; }
+        body.theme-light .platform-btn:hover { background: #f9fafb; }
+        body.theme-light .number-card { background: linear-gradient(135deg, #f0f9ff, #e0e7ff); }
+        body.theme-light .otp-item { background: #f9fafb; color: #1a202c; }
+        body.theme-light .form-control { background: #ffffff; color: #1a202c; border-color: #d1d5db; }
+        body.theme-light .section-title { color: #1a202c; }
+        body.theme-light .hero h1 { color: #1a202c; }
+        body.theme-light .footer-info { color: #4a5568; }
+        body.theme-light .empty-state { color: #4a5568; }
         
         #matrix-bg {
             position: fixed;
@@ -822,6 +938,16 @@ main_html = """
                     <div class="menu-divider"></div>
                     <a href="/announcements"><span class="ico">📢</span> إعلانات الموقع</a>
                     <a href="#" onclick="openHelpModal(); return false;"><span class="ico">🆘</span> طلب مساعدة</a>
+                    <div class="menu-divider"></div>
+                    <div class="menu-header">⚙️ الإعدادات</div>
+                    <a href="#" onclick="toggleTheme(); return false;"><span class="ico" id="themeIcon">🌙</span> <span id="themeLabel">الوضع الليلي</span></a>
+                    <a href="#" onclick="toggleSound(); return false;"><span class="ico" id="soundIcon">🔔</span> <span id="soundLabel">الصوت: تشغيل</span></a>
+                    {% if is_admin %}
+                    <div class="menu-divider"></div>
+                    <div class="menu-header">🛠️ أدوات الأدمن</div>
+                    <a href="/admin"><span class="ico">⚙️</span> لوحة التحكم</a>
+                    <a href="#" onclick="clearAllOtps(); return false;"><span class="ico">🗑️</span> مسح جميع الأكواد</a>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -1030,18 +1156,18 @@ main_html = """
                 google: '#4285F4',
                 twitter: '#1DA1F2'
             };
-            // ترتيب محفوظ من localStorage
+            // [ترتيب المنصات] - للأدمن تُحفظ في DB، للزوار من الموقع
             let order = ['whatsapp', 'telegram', 'tiktok', 'facebook', 'instagram', 'snapchat', 'google', 'twitter'];
-            try {
-                const saved = localStorage.getItem('platformOrder');
-                if (saved) order = JSON.parse(saved);
-            } catch(e) {}
-            // محاذاة محفوظة
+            const serverOrder = '{{ settings.platform_order_csv }}';
+            if (serverOrder) order = serverOrder.split(',').map(s => s.trim()).filter(Boolean);
+            // محاذاة محفوظة في localStorage (تأثير شخصي للزوار فقط)
             const align = localStorage.getItem('platformAlign') || 'start';
             if (align === 'center') selector.style.justifyItems = 'center';
             else if (align === 'end') selector.style.justifyItems = 'end';
 
-            const isAdmin = localStorage.getItem('isAdmin') === '1';
+            // [isAdmin] من الخادم (موثوق)، مع تحديث localStorage
+            const isAdmin = {{ 'true' if is_admin else 'false' }};
+            localStorage.setItem('isAdmin', isAdmin ? '1' : '0');
             if (isAdmin) document.body.classList.add('admin-mode');
 
             order.filter(p => platformNames[p]).forEach((platform, idx) => {
@@ -1055,7 +1181,7 @@ main_html = """
                 btn.onclick = () => selectPlatform(platform, btn);
                 btn.style.setProperty('--platform-color', platformColors[platform] || '#1f6feb');
                 btn.innerHTML = `<img src="${platformLogos[platform]}" alt="${platformNames[platform]}"><span class="platform-label">${platformNames[platform]}</span>`;
-                // [drag & drop] للأدمن فقط
+                // [drag & drop] للأدمن فقط + حفظ في DB
                 if (isAdmin) {
                     btn.addEventListener('dragstart', e => {
                         e.dataTransfer.setData('text/plain', platform);
@@ -1064,7 +1190,7 @@ main_html = """
                     btn.addEventListener('dragend', () => btn.classList.remove('dragging'));
                     btn.addEventListener('dragover', e => { e.preventDefault(); btn.classList.add('drag-over'); });
                     btn.addEventListener('dragleave', () => btn.classList.remove('drag-over'));
-                    btn.addEventListener('drop', e => {
+                    btn.addEventListener('drop', async e => {
                         e.preventDefault();
                         btn.classList.remove('drag-over');
                         const srcPlatform = e.dataTransfer.getData('text/plain');
@@ -1074,8 +1200,25 @@ main_html = """
                             const dstIdx = cur.indexOf(platform);
                             cur.splice(srcIdx, 1);
                             cur.splice(dstIdx, 0, srcPlatform);
-                            localStorage.setItem('platformOrder', JSON.stringify(cur));
-                            initPlatformSelector();
+                            // [حفظ في DB] بدلاً من localStorage فقط
+                            try {
+                                const res = await fetch('/api/save_platform_order', {
+                                    method: 'POST',
+                                    headers: {'Content-Type': 'application/json'},
+                                    body: JSON.stringify({order: cur})
+                                });
+                                const data = await res.json();
+                                if (data.ok) {
+                                    localStorage.setItem('platformOrder', JSON.stringify(cur));
+                                    initPlatformSelector();
+                                } else {
+                                    alert('❌ فشل حفظ الترتيب: ' + (data.error || ''));
+                                }
+                            } catch(err) {
+                                // fallback لـ localStorage
+                                localStorage.setItem('platformOrder', JSON.stringify(cur));
+                                initPlatformSelector();
+                            }
                         }
                     });
                 }
@@ -1206,6 +1349,7 @@ main_html = """
 
         function renderOtpSections() {
             const container = document.getElementById('otpHistory');
+            const isAdmin = {{ 'true' if is_admin else 'false' }};
             if (!allOtpsCache.length) {
                 container.innerHTML = '<div class="empty-state"><div class="icon">⏳</div><div>في انتظار الأكواد...</div></div>';
                 return;
@@ -1221,14 +1365,20 @@ main_html = """
                 const items = grouped[platform];
                 const logoUrl = platformLogos[platform] || '';
                 const name = platformNames[platform] || platform;
+                // [زر مسح كل الأكواد] للأدمن فقط
+                const clearAllBtn = isAdmin ? `<button onclick="clearAllOtps()" class="clear-all-btn" style="margin-right:auto; background:rgba(239,68,68,0.15); border:1px solid #ef4444; color:#ef4444; padding:2px 6px; border-radius:4px; font-size:10px; cursor:pointer;">🗑️ مسح الكل</button>` : '';
                 html += `
                 <div style="margin-bottom:8px;">
                     <div style="display:flex; align-items:center; gap:4px; padding:4px 8px; background:#1c2128; border:1px solid #30363d; border-radius:6px; margin-bottom:4px;">
                         <img src="${logoUrl}" style="width:18px; height:18px; border-radius:4px; padding:2px; background:#fff;" onerror="this.style.display='none'">
                         <span style="font-size:12px; font-weight:700; color:#fff;">${name}</span>
                         <span style="font-size:10px; color:#8b949e; margin-right:auto;">${items.length}</span>
+                        ${clearAllBtn}
                     </div>
-                    ${items.map(o => `
+                    ${items.map(o => {
+                        // [زر حذف] للأدمن فقط
+                        const deleteBtn = isAdmin ? `<button onclick="deleteOtpFromCache('${o.id || ''}','${o.otp}', this)" class="delete-otp-btn" style="background:rgba(239,68,68,0.15); border:1px solid #ef4444; color:#ef4444; padding:3px 6px; border-radius:4px; font-size:10px; cursor:pointer;" title="حذف">🗑️</button>` : '';
+                        return `
                     <div class="otp-item">
                         <div>
                             <div class="otp-code" dir="ltr" style="direction:ltr; unicode-bidi:bidi-override; text-align:left; font-size:14px;">🔑 ${o.otp}</div>
@@ -1236,9 +1386,10 @@ main_html = """
                         </div>
                         <div style="display:flex; gap:4px;">
                             <button class="copy-btn" onclick="copyText('${o.otp}', this)">نسخ</button>
+                            ${deleteBtn}
                         </div>
                     </div>
-                    `).join('')}
+                    `;}).join('')}
                 </div>`;
             });
             container.innerHTML = html;
@@ -1257,6 +1408,93 @@ main_html = """
                 }
             } catch(e) {}
         }
+
+        // ============ [حذف كود من الواجهة + السيرفر] للأدمن فقط ============
+        async function deleteOtpFromCache(otpId, otpValue, btn) {
+            if (!confirm('🗑️ حذف هذا الكود؟')) return;
+            const original = btn.innerHTML;
+            btn.disabled = true; btn.innerHTML = '⏳';
+            try {
+                const payload = otpId && otpId !== 'undefined' ? {id: parseInt(otpId)} : {otp: otpValue};
+                const res = await fetch('/api/delete_otp', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    allOtpsCache = allOtpsCache.filter(o => o.otp !== otpValue);
+                    try { localStorage.setItem('allOtps', JSON.stringify(allOtpsCache.slice(0, 30))); } catch(e) {}
+                    renderOtpSections();
+                } else {
+                    alert('❌ فشل الحذف: ' + (data.error || 'غير معروف'));
+                    btn.disabled = false; btn.innerHTML = original;
+                }
+            } catch(e) {
+                alert('❌ خطأ في الاتصال');
+                btn.disabled = false; btn.innerHTML = original;
+            }
+        }
+
+        // ============ [مسح جميع الأكواد] للأدمن فقط ============
+        async function clearAllOtps() {
+            if (!confirm('⚠️ سيتم حذف جميع الأكواد نهائياً. متابعة؟')) return;
+            try {
+                const res = await fetch('/api/clear_all_otps', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'}
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    allOtpsCache = [];
+                    try { localStorage.removeItem('allOtps'); } catch(e) {}
+                    renderOtpSections();
+                    alert('✅ تم مسح جميع الأكواد');
+                } else {
+                    alert('❌ فشل: ' + (data.error || 'غير معروف'));
+                }
+            } catch(e) {
+                alert('❌ خطأ في الاتصال');
+            }
+        }
+
+        // ============ [تبديل الثيم: داكن/فاتح] ============
+        const SERVER_THEME = '{{ settings.theme_mode }}';
+        let currentTheme = localStorage.getItem('themeMode') || SERVER_THEME || 'dark';
+        function applyTheme(t) {
+            currentTheme = t;
+            document.body.classList.remove('theme-dark', 'theme-light');
+            document.body.classList.add('theme-' + t);
+            localStorage.setItem('themeMode', t);
+            const icon = document.getElementById('themeIcon');
+            const label = document.getElementById('themeLabel');
+            if (icon) icon.textContent = t === 'dark' ? '☀️' : '🌙';
+            if (label) label.textContent = t === 'dark' ? 'الوضع النهاري' : 'الوضع الليلي';
+        }
+        function toggleTheme() {
+            applyTheme(currentTheme === 'dark' ? 'light' : 'dark');
+        }
+        // تطبيق الثيم عند التحميل
+        applyTheme(currentTheme);
+
+        // ============ [تبديل الصوت] ============
+        let soundEnabled = localStorage.getItem('soundEnabled') !== '0' && ('{{ settings.sound_enabled }}' !== '0');
+        function updateSoundUi() {
+            const icon = document.getElementById('soundIcon');
+            const label = document.getElementById('soundLabel');
+            if (icon) icon.textContent = soundEnabled ? '🔔' : '🔕';
+            if (label) label.textContent = 'الصوت: ' + (soundEnabled ? 'تشغيل' : 'إيقاف');
+        }
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            localStorage.setItem('soundEnabled', soundEnabled ? '1' : '0');
+            updateSoundUi();
+            if (soundEnabled && typeof playNotificationSound === 'function') {
+                // تشغيل نغمة تأكيد
+                try { playNotificationSound(); } catch(e) {}
+            }
+        }
+        updateSoundUi();
 
         document.addEventListener('DOMContentLoaded', () => {
             initPlatformSelector();
@@ -1430,6 +1668,20 @@ def home():
     links = get_all_links()
     platforms = get_platforms() or list(platform_names.keys())
     
+    # تمرير الإعدادات والألوان والأدمن للقالب
+    settings = {
+        'main_color': get_setting('main_color') or '#00ffc8',
+        'secondary_color': get_setting('secondary_color') or '#8b5cf6',
+        'background_color': get_setting('background_color') or '#0a0e1a',
+        'text_color': get_setting('text_color') or '#ffffff',
+        'sound_enabled': get_setting('sound_enabled') or '1',
+        'theme_mode': get_setting('theme_mode') or 'dark',
+        'matrix_enabled': get_setting('matrix_enabled') or '1',
+        'ticker_enabled': get_setting('ticker_enabled') or '1',
+        'platform_order_csv': get_setting('platform_order') or 'whatsapp,telegram,tiktok,facebook,instagram,snapchat,google,twitter'
+    }
+    is_admin = is_admin_logged_in()
+    
     return render_template_string(
         main_html,
         site_title=site_title,
@@ -1445,7 +1697,9 @@ def home():
         platform_logos=PLATFORM_LOGOS,
         platform_names=platform_names,
         platform_gradients=PLATFORM_GRADIENTS,
-        platform_colors=platform_colors
+        platform_colors=platform_colors,
+        settings=settings,
+        is_admin=is_admin
     )
 
 # ========== صفحة الإعلانات ==========
@@ -1479,6 +1733,8 @@ body { font-family:'Cairo',sans-serif; background:#07090d; color:#c9d1d9; min-he
 .empty { text-align:center; padding:30px 16px; color:#6e7681; }
 .back-btn { display:inline-block; padding:8px 16px; background:#30363d; color:#fff; text-decoration:none; border-radius:8px; font-weight:700; font-size:12px; margin-bottom:12px; }
 .back-btn:hover { background:#484f58; }
+.ann-delete-btn { position:absolute; top:8px; left:8px; background:rgba(239,68,68,0.15); border:1px solid #ef4444; color:#ef4444; padding:4px 8px; border-radius:6px; font-size:12px; cursor:pointer; font-weight:700; transition:all 0.2s; }
+.ann-delete-btn:hover { background:#ef4444; color:#fff; }
 </style>
 </head>
 <body>
@@ -1488,6 +1744,7 @@ body { font-family:'Cairo',sans-serif; background:#07090d; color:#c9d1d9; min-he
     <div id="annList"><div class="empty">⏳ جاري التحميل...</div></div>
 </div>
 <script>
+const isAdmin = {{ 'true' if is_admin else 'false' }};
 async function loadAnnouncements() {
     try {
         const res = await fetch('/api/announcements');
@@ -1502,9 +1759,24 @@ async function loadAnnouncements() {
                 media = `<div class="ann-video-wrap"><video src="${a.media_url}" controls preload="metadata"></video></div>`;
             }
             const btn = a.button_url ? `<a href="${a.button_url}" target="_blank" class="ann-btn">${a.button_text || 'افتح'}</a>` : '';
-            return `<div class="ann-card"><span class="ann-type ${a.type}">${a.type}</span>${media}<div class="ann-content">${a.content || ''}</div>${btn}<div class="ann-time">🕒 ${a.created_at}</div></div>`;
+            // زر الحذف للأدمن فقط
+            const deleteBtn = isAdmin ? `<button onclick="deleteAnn(${a.id})" class="ann-delete-btn" title="حذف">🗑️</button>` : '';
+            return `<div class="ann-card" style="position:relative;"><span class="ann-type ${a.type}">${a.type}</span>${media}<div class="ann-content">${a.content || ''}</div>${btn}<div class="ann-time">🕒 ${a.created_at}</div>${deleteBtn}</div>`;
         }).join('');
     } catch(e) { document.getElementById('annList').innerHTML = '<div class="empty">❌ فشل التحميل</div>'; }
+}
+async function deleteAnn(id) {
+    if (!confirm('🗑️ حذف هذا الإعلان نهائياً؟')) return;
+    try {
+        const res = await fetch('/api/delete_announcement', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id: id})
+        });
+        const data = await res.json();
+        if (data.ok) { loadAnnouncements(); }
+        else { alert('❌ فشل الحذف: ' + (data.error || 'غير معروف')); }
+    } catch(e) { alert('❌ خطأ في الاتصال'); }
 }
 loadAnnouncements();
 </script>
@@ -1514,7 +1786,7 @@ loadAnnouncements();
 
 @app.route('/announcements')
 def announcements_page():
-    return render_template_string(announcements_html)
+    return render_template_string(announcements_html, is_admin=is_admin_logged_in())
 
 # ========== مسارات API ==========
 @app.route('/api/countries', methods=['POST'])
@@ -1547,18 +1819,105 @@ CACHE_DURATION = 30
 
 @app.route('/api/all_otps', methods=['GET'])
 def api_all_otps():
-    now = time.time()
-    if _otp_cache['data'] is not None and (now - _otp_cache['time']) < CACHE_DURATION:
-        return jsonify(_otp_cache['data'])
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT id, number, otp, timestamp, platform FROM otp_logs ORDER BY id DESC LIMIT 100")
     rows = c.fetchall()
     conn.close()
-    result = [{'id': r[0], 'number': r[1], 'otp': r[2], 'timestamp': r[3], 'platform': r[4] or 'Unknown'} for r in rows]
-    _otp_cache['data'] = result
-    _otp_cache['time'] = now
-    return jsonify(result)
+    return jsonify([{'id': r[0], 'number': r[1], 'otp': r[2], 'timestamp': r[3], 'platform': r[4]} for r in rows])
+
+# ========== [حذف كود واحد] ==========
+@app.route('/api/delete_otp', methods=['POST'])
+def api_delete_otp():
+    if not is_admin_logged_in():
+        return jsonify({'ok': False, 'error': 'غير مصرح'}), 403
+    data = request.json or {}
+    otp_id = data.get('id')
+    otp_value = data.get('otp')
+    if otp_id is not None:
+        if delete_otp(otp_id=otp_id):
+            return jsonify({'ok': True})
+    elif otp_value is not None:
+        if delete_otp(otp_value=otp_value):
+            return jsonify({'ok': True})
+    return jsonify({'ok': False, 'error': 'بيانات غير مكتملة'}), 400
+
+# ========== [مسح جميع الأكواد] ==========
+@app.route('/api/clear_all_otps', methods=['POST'])
+def api_clear_all_otps():
+    if not is_admin_logged_in():
+        return jsonify({'ok': False, 'error': 'غير مصرح'}), 403
+    if delete_otp(all_otps=True):
+        return jsonify({'ok': True})
+    return jsonify({'ok': False, 'error': 'فشل الحذف'}), 500
+
+# ========== [حذف إعلان] (للأدمن فقط) ==========
+@app.route('/api/delete_announcement', methods=['POST'])
+def api_delete_announcement():
+    if not is_admin_logged_in():
+        return jsonify({'ok': False, 'error': 'غير مصرح'}), 403
+    data = request.json or {}
+    ann_id = data.get('id')
+    if not ann_id:
+        return jsonify({'ok': False, 'error': 'معرّف الإعلان مفقود'}), 400
+    if delete_announcement(ann_id):
+        return jsonify({'ok': True})
+    return jsonify({'ok': False, 'error': 'فشل الحذف'}), 500
+
+# ========== [حفظ ترتيب المنصات] (للأدمن فقط) ==========
+@app.route('/api/save_platform_order', methods=['POST'])
+def api_save_platform_order():
+    if not is_admin_logged_in():
+        return jsonify({'ok': False, 'error': 'غير مصرح'}), 403
+    data = request.json or {}
+    order = data.get('order', [])
+    if not isinstance(order, list) or not order:
+        return jsonify({'ok': False, 'error': 'ترتيب غير صالح'}), 400
+    # فلترة القيم المسموحة فقط
+    valid = [p for p in order if p in platform_names]
+    if valid:
+        save_platform_order(valid)
+        return jsonify({'ok': True, 'order': valid})
+    return jsonify({'ok': False, 'error': 'لا توجد منصات صالحة'}), 400
+
+# ========== [تبديل إعدادات الموقع] (صوت، ثيم، ألوان) ==========
+@app.route('/api/update_setting', methods=['POST'])
+def api_update_setting():
+    if not is_admin_logged_in():
+        return jsonify({'ok': False, 'error': 'غير مصرح'}), 403
+    data = request.json or {}
+    key = data.get('key')
+    value = data.get('value')
+    if not key:
+        return jsonify({'ok': False, 'error': 'مفتاح الإعداد مفقود'}), 400
+    # قائمة الإعدادات المسموح بتغييرها
+    allowed = {'sound_enabled', 'theme_mode', 'main_color', 'secondary_color', 'background_color', 'text_color', 'matrix_enabled', 'ticker_enabled'}
+    if key not in allowed:
+        return jsonify({'ok': False, 'error': 'إعداد غير مسموح'}), 400
+    set_setting(key, str(value))
+    return jsonify({'ok': True, 'key': key, 'value': value})
+
+# ========== [إرجاع الإعدادات] للصفحة العامة ==========
+@app.route('/api/public_settings', methods=['GET'])
+def api_public_settings():
+    """إرجاع الإعدادات العامة (آمن للزوار) - لا يشمل الإعدادات الحساسة"""
+    return jsonify({
+        'sound_enabled': get_setting('sound_enabled') or '1',
+        'theme_mode': get_setting('theme_mode') or 'dark',
+        'main_color': get_setting('main_color') or '#00ffc8',
+        'secondary_color': get_setting('secondary_color') or '#8b5cf6',
+        'background_color': get_setting('background_color') or '#0a0e1a',
+        'text_color': get_setting('text_color') or '#ffffff',
+        'matrix_enabled': get_setting('matrix_enabled') or '1',
+        'ticker_enabled': get_setting('ticker_enabled') or '1',
+        'platform_order': get_setting('platform_order') or 'whatsapp,telegram,tiktok,facebook,instagram,snapchat,google,twitter'
+    })
+
+# ========== [مسار الأدمن السري] ==========
+@app.route('/' + ADMIN_SECRET_PATH)
+@login_required
+def admin_secret():
+    return redirect(url_for('admin_dashboard'))
 
 @app.route('/api/announcements', methods=['GET'])
 def api_get_announcements():
@@ -1746,8 +2105,16 @@ def admin_dashboard():
     <hr>
     
     <!-- الأكواد المسحوبة -->
-    <h3>🔑 الأكواد المسحوبة</h3>
+    <h3>🔑 الأكواد المسحوبة <button class="btn btn-danger" onclick="clearAllOtpsAdmin()" style="padding:4px 10px; font-size:11px; margin-right:8px;">🗑️ مسح الكل</button></h3>
     <div class="section" id="otpLogsList">
+        <div style="text-align:center;color:#64748b;padding:10px;">⏳ جاري التحميل...</div>
+    </div>
+    
+    <hr>
+    
+    <!-- الإعلانات -->
+    <h3>📢 إدارة الإعلانات</h3>
+    <div class="section" id="announcementsAdminList">
         <div style="text-align:center;color:#64748b;padding:10px;">⏳ جاري التحميل...</div>
     </div>
     
@@ -1757,6 +2124,43 @@ def admin_dashboard():
     <h3>👥 المستخدمين</h3>
     <div class="section" id="usersList">
         <div style="text-align:center;color:#64748b;padding:10px;">⏳ جاري التحميل...</div>
+    </div>
+    
+    <hr>
+    
+    <!-- إعدادات الموقع والصوت والثيم -->
+    <h3>🎨 إعدادات الموقع والصوت</h3>
+    <div class="section">
+        <div class="form-group">
+            <label>🔔 صوت الإشعار</label>
+            <div style="display:flex;gap:6px;align-items:center;">
+                <button class="btn" id="soundToggleBtn" onclick="toggleSoundAdmin()" style="flex:1;">—</button>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>🌙/☀️ وضع الموقع</label>
+            <div style="display:flex;gap:6px;">
+                <button class="btn" id="themeDarkBtn" onclick="setThemeAdmin('dark')" style="flex:1;">🌙 ليلي</button>
+                <button class="btn" id="themeLightBtn" onclick="setThemeAdmin('light')" style="flex:1;">☀️ نهاري</button>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>🎨 اللون الأساسي</label>
+            <input type="color" id="adminMainColor" class="form-control" value="{{ main_color }}" style="height:40px;padding:4px;">
+        </div>
+        <div class="form-group">
+            <label>🎨 لون الخلفية</label>
+            <input type="color" id="adminBgColor" class="form-control" value="{{ background_color }}" style="height:40px;padding:4px;">
+        </div>
+        <div class="form-group">
+            <label>📝 لون النص</label>
+            <input type="color" id="adminTextColor" class="form-control" value="{{ text_color }}" style="height:40px;padding:4px;">
+        </div>
+        <div class="form-group">
+            <label>🎨 لون ثانوي</label>
+            <input type="color" id="adminSecondaryColor" class="form-control" value="{{ secondary_color }}" style="height:40px;padding:4px;">
+        </div>
+        <button class="btn btn-primary" onclick="saveColors()" style="margin-top:6px;">💾 حفظ الألوان</button>
     </div>
     
     <hr>
@@ -1777,9 +2181,6 @@ def admin_dashboard():
     <hr>
     
     <div style="display:flex;gap:8px;">
-        <form method="POST" action="/admin/clear_otps" onsubmit="return confirm('⚠️ حذف جميع الأكواد نهائياً؟')" style="flex:1;">
-            <button type="submit" class="btn btn-danger" style="width:100%;">🗑️ مسح الأكواد</button>
-        </form>
         <a href="/" class="btn btn-secondary" style="flex:1;text-align:center;text-decoration:none;">🔙 الرئيسية</a>
     </div>
 </div>
@@ -1805,24 +2206,134 @@ async function loadOtps() {
         box.innerHTML = data.slice(0, 30).map(o => `
             <div class="otp-log-item">
                 <div><span style="color:#00ffc8;font-weight:900;">${o.otp}</span> <span style="color:#8b949e;font-size:10px;">(${o.platform})</span><br><span style="color:#64748b;font-size:10px;">📞 ${o.number} • ${o.timestamp}</span></div>
-                <button class="btn btn-danger" onclick="deleteOtp('${o.otp}')" style="padding:2px 8px;font-size:10px;">🗑️</button>
+                <button class="btn btn-danger" onclick="deleteOtp('${o.id}','${o.otp}')" style="padding:2px 8px;font-size:10px;">🗑️</button>
             </div>
         `).join('');
     } catch(e) {}
 }
 
-async function deleteOtp(otp) {
+async function deleteOtp(otpId, otpValue) {
     if(!confirm('🗑️ حذف هذا الكود؟')) return;
     try {
+        const payload = otpId && otpId !== 'undefined' ? {id: parseInt(otpId)} : {otp: otpValue};
         const res = await fetch('/api/delete_otp', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({otp: otp})
+            body: JSON.stringify(payload)
         });
         const data = await res.json();
-        if(data.ok) { loadOtps(); loadStats(); alert('✅ تم الحذف'); }
-        else { alert('❌ فشل الحذف'); }
+        if(data.ok) { loadOtps(); loadStats(); }
+        else { alert('❌ فشل الحذف: ' + (data.error || '')); }
     } catch(e) { alert('❌ خطأ'); }
+}
+
+async function clearAllOtpsAdmin() {
+    if(!confirm('⚠️ سيتم حذف جميع الأكواد نهائياً. متابعة؟')) return;
+    try {
+        const res = await fetch('/api/clear_all_otps', {method: 'POST', headers: {'Content-Type': 'application/json'}});
+        const data = await res.json();
+        if(data.ok) { loadOtps(); loadStats(); alert('✅ تم مسح جميع الأكواد'); }
+        else { alert('❌ فشل: ' + (data.error || '')); }
+    } catch(e) { alert('❌ خطأ'); }
+}
+
+async function loadAnnouncementsAdmin() {
+    try {
+        const res = await fetch('/api/announcements');
+        const data = await res.json();
+        const box = document.getElementById('announcementsAdminList');
+        if (!data.length) { box.innerHTML = '<div style="text-align:center;color:#64748b;padding:10px;">📭 لا توجد إعلانات</div>'; return; }
+        box.innerHTML = data.slice(0, 20).map(a => {
+            const typeLabel = a.type === 'text' ? '📝 نص' : a.type === 'image' ? '🖼️ صورة' : '🎬 فيديو';
+            const contentPreview = (a.content || '').substring(0, 80);
+            return `
+            <div class="combo-item" style="flex-wrap:wrap;">
+                <div style="flex:1;min-width:200px;">
+                    <div><span class="status active">${typeLabel}</span> <span style="color:#8b949e;font-size:10px;">${a.id}</span></div>
+                    <div style="font-size:12px;color:#cbd5e1;margin-top:4px;">${contentPreview}${contentPreview.length >= 80 ? '...' : ''}</div>
+                    <div style="color:#64748b;font-size:10px;margin-top:2px;">🕒 ${a.created_at}</div>
+                </div>
+                <button class="btn btn-danger" onclick="deleteAnnouncementAdmin(${a.id})" style="padding:4px 8px; font-size:11px;">🗑️</button>
+            </div>`;
+        }).join('');
+    } catch(e) {}
+}
+
+async function deleteAnnouncementAdmin(id) {
+    if (!confirm('🗑️ حذف هذا الإعلان نهائياً؟')) return;
+    try {
+        const res = await fetch('/api/delete_announcement', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id: id})
+        });
+        const data = await res.json();
+        if (data.ok) { loadAnnouncementsAdmin(); alert('✅ تم الحذف'); }
+        else { alert('❌ فشل: ' + (data.error || '')); }
+    } catch(e) { alert('❌ خطأ'); }
+}
+
+let adminSoundEnabled = '{{ sound_enabled }}' !== '0';
+let adminThemeMode = '{{ theme_mode }}' || 'dark';
+function updateAdminSoundUi() {
+    const btn = document.getElementById('soundToggleBtn');
+    if (btn) {
+        btn.textContent = adminSoundEnabled ? '🔔 الصوت: تشغيل' : '🔕 الصوت: إيقاف';
+        btn.className = 'btn ' + (adminSoundEnabled ? 'btn-primary' : 'btn-danger');
+    }
+}
+function updateAdminThemeUi() {
+    const darkBtn = document.getElementById('themeDarkBtn');
+    const lightBtn = document.getElementById('themeLightBtn');
+    if (darkBtn) {
+        darkBtn.className = 'btn ' + (adminThemeMode === 'dark' ? 'btn-primary' : 'btn-secondary');
+    }
+    if (lightBtn) {
+        lightBtn.className = 'btn ' + (adminThemeMode === 'light' ? 'btn-primary' : 'btn-secondary');
+    }
+}
+async function toggleSoundAdmin() {
+    adminSoundEnabled = !adminSoundEnabled;
+    updateAdminSoundUi();
+    await fetch('/api/update_setting', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({key: 'sound_enabled', value: adminSoundEnabled ? '1' : '0'})
+    });
+}
+async function setThemeAdmin(mode) {
+    adminThemeMode = mode;
+    updateAdminThemeUi();
+    await fetch('/api/update_setting', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({key: 'theme_mode', value: mode})
+    });
+}
+async function saveColors() {
+    const main = document.getElementById('adminMainColor').value;
+    const bg = document.getElementById('adminBgColor').value;
+    const text = document.getElementById('adminTextColor').value;
+    const secondary = document.getElementById('adminSecondaryColor').value;
+    const updates = [
+        {key: 'main_color', value: main},
+        {key: 'background_color', value: bg},
+        {key: 'text_color', value: text},
+        {key: 'secondary_color', value: secondary}
+    ];
+    try {
+        for (const u of updates) {
+            await fetch('/api/update_setting', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(u)
+            });
+        }
+        alert('✅ تم حفظ الألوان');
+        location.reload();
+    } catch(e) {
+        alert('❌ فشل الحفظ');
+    }
 }
 
 async function loadUsers() {
@@ -1957,13 +2468,20 @@ async function changePassword() {
 loadStats();
 loadOtps();
 loadUsers();
+loadAnnouncementsAdmin();
+updateAdminSoundUi();
+updateAdminThemeUi();
 setInterval(loadStats, 30000);
 setInterval(loadOtps, 30000);
+setInterval(loadAnnouncementsAdmin, 60000);
 </script>
 </body>
 </html>
 ''', site_title=get_text('site_title'), site_subtitle=get_text('site_subtitle'), ticker_text=get_text('ticker_text'),
-       links=get_all_links(), combos=get_all_combos(), admin_chat_id=get_admin_setting('admin_telegram_id', ''))
+       links=get_all_links(), combos=get_all_combos(), admin_chat_id=get_admin_setting('admin_telegram_id', ''),
+       main_color=get_setting('main_color') or '#00ffc8', background_color=get_setting('background_color') or '#0a0e1a',
+       text_color=get_setting('text_color') or '#ffffff', secondary_color=get_setting('secondary_color') or '#8b5cf6',
+       sound_enabled=get_setting('sound_enabled') or '1', theme_mode=get_setting('theme_mode') or 'dark')
 
 # ========== مسارات API الخاصة بالأدمن ==========
 @app.route('/admin/api/stats')
