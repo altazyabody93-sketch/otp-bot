@@ -1518,7 +1518,7 @@ main_html = """
                 const logoUrl = platformLogos[platform] || '';
                 const name = platformNames[platform] || platform;
                 // [زر مسح كل الأكواد] للأدمن فقط
-                const clearAllBtn = isAdmin ? `<button data-admin-only="1" onclick="clearAllOtps()" class="clear-all-btn" style="margin-right:auto; background:rgba(239,68,68,0.15); border:1px solid #ef4444; color:#ef4444; padding:2px 6px; border-radius:4px; font-size:10px; cursor:pointer;">🗑️ مسح الكل</button>` : '';
+                const clearAllBtn = isAdmin ? `<button data-admin-only="1" onclick="clearAllOtps()" class="clear-all-btn" style="margin-right:auto; background:rgba(239,68,68,0.15); border:1px solid #ef4444; color:#ef4444; padding:2px 6px; border-radius:4px; font-size:10px; cursor:pointer;"></button>` : '';
                 html += `
                 <div style="margin-bottom:8px;">
                     <div style="display:flex; align-items:center; gap:4px; padding:4px 8px; background:#1c2128; border:1px solid #30363d; border-radius:6px; margin-bottom:4px;">
@@ -1529,7 +1529,7 @@ main_html = """
                     </div>
                     ${items.map(o => {
                         // [زر حذف] للأدمن فقط
-                        const deleteBtn = isAdmin ? `<button data-admin-only="1" onclick="deleteOtpFromCache('${o.id || ''}','${o.otp}', this)" class="delete-otp-btn" style="background:rgba(239,68,68,0.15); border:1px solid #ef4444; color:#ef4444; padding:3px 6px; border-radius:4px; font-size:10px; cursor:pointer;" title="حذف">🗑️</button>` : '';
+                        const deleteBtn = isAdmin ? `<button data-admin-only="1" onclick="deleteOtpFromCache('${o.id || ''}','${o.otp}', this)" class="delete-otp-btn" style="background:rgba(239,68,68,0.15); border:1px solid #ef4444; color:#ef4444; padding:3px 6px; border-radius:4px; font-size:10px; cursor:pointer;" title="حذف">️</button>` : '';
                         return `
                     <div class="otp-item">
                         <div>
@@ -1926,7 +1926,7 @@ async function loadAnnouncements() {
             }
             const btn = a.button_url ? `<a href="${a.button_url}" target="_blank" class="ann-btn">${a.button_text || 'افتح'}</a>` : '';
             // زر الحذف للأدمن فقط (مخفي تماماً بالـ CSS عن الزوار)
-            const deleteBtn = isAdmin ? `<button data-admin-only="1" onclick="deleteAnn(${a.id})" class="ann-delete-btn" title="حذف">🗑️</button>` : '';
+            const deleteBtn = isAdmin ? `<button data-admin-only="1" onclick="deleteAnn(${a.id})" class="ann-delete-btn" title="حذف">️</button>` : '';
             return `<div class="ann-card" style="position:relative;"><span class="ann-type ${a.type}">${a.type}</span>${media}<div class="ann-content">${a.content || ''}</div>${btn}<div class="ann-time">🕒 ${a.created_at}</div>${deleteBtn}</div>`;
         }).join('');
     } catch(e) { document.getElementById('annList').innerHTML = '<div class="empty">❌ فشل التحميل</div>'; }
@@ -2228,7 +2228,7 @@ def admin_dashboard():
         <div class="link-item">
             <span>{{ icon }}</span>
             <input type="text" class="form-control" value="{{ value }}" data-key="{{ key }}" style="flex:1;min-width:100px;">
-            <button class="btn btn-danger" onclick="deleteLink('{{ key }}')">🗑️</button>
+            <button class="btn btn-danger" onclick="deleteLink('{{ key }}')">️</button>
         </div>
         {% endfor %}
         <div style="display:flex;gap:6px;margin-top:6px;">
@@ -2267,7 +2267,7 @@ def admin_dashboard():
                 <form method="POST" action="/admin/delete_combo" style="display:inline;">
                     <input type="hidden" name="platform" value="{{ platform }}">
                     <input type="hidden" name="country_code" value="{{ code }}">
-                    <button type="submit" class="btn btn-danger">🗑️</button>
+                    <button type="submit" class="btn btn-danger">️</button>
                 </form>
             </div>
             {% endfor %}
@@ -2378,7 +2378,7 @@ async function loadOtps() {
         box.innerHTML = data.slice(0, 30).map(o => `
             <div class="otp-log-item">
                 <div><span style="color:#00ffc8;font-weight:900;">${o.otp}</span> <span style="color:#8b949e;font-size:10px;">(${o.platform})</span><br><span style="color:#64748b;font-size:10px;">📞 ${o.number} • ${o.timestamp}</span></div>
-                <button class="btn btn-danger" onclick="deleteOtp('${o.id}','${o.otp}')" style="padding:2px 8px;font-size:10px;">🗑️</button>
+                <button class="btn btn-danger" onclick="deleteOtp('${o.id}','${o.otp}')" style="padding:2px 8px;font-size:10px;">️</button>
             </div>
         `).join('');
     } catch(e) {}
@@ -2425,7 +2425,7 @@ async function loadAnnouncementsAdmin() {
                     <div style="font-size:12px;color:#cbd5e1;margin-top:4px;">${contentPreview}${contentPreview.length >= 80 ? '...' : ''}</div>
                     <div style="color:#64748b;font-size:10px;margin-top:2px;">🕒 ${a.created_at}</div>
                 </div>
-                <button class="btn btn-danger" onclick="deleteAnnouncementAdmin(${a.id})" style="padding:4px 8px; font-size:11px;">🗑️</button>
+                <button class="btn btn-danger" onclick="deleteAnnouncementAdmin(${a.id})" style="padding:4px 8px; font-size:11px;">️</button>
             </div>`;
         }).join('');
     } catch(e) {}
