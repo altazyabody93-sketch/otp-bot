@@ -2380,8 +2380,9 @@ async function loadAnnouncementsAdmin() {
     } catch(e) {}
 }
 
+/*
 async function deleteAnnouncementAdmin(id) {
-    if (!confirm('🗑️ حذف هذا الإعلان نهائياً؟')) return;
+   // if (!confirm('🗑️ حذف هذا الإعلان نهائياً؟')) return;
     try {
         const res = await fetch('/api/delete_announcement', {
             method: 'POST',
@@ -2393,6 +2394,7 @@ async function deleteAnnouncementAdmin(id) {
         else { alert('❌ فشل: ' + (data.error || '')); }
     } catch(e) { alert('❌ خطأ'); }
 }
+*/
 
 let adminSoundEnabled = '{{ sound_enabled }}' !== '0';
 let adminThemeMode = '{{ theme_mode }}' || 'dark';
