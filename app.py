@@ -44,6 +44,17 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS site_texts (key TEXT PRIMARY KEY, value TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS site_links (key TEXT PRIMARY KEY, value TEXT, icon TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS site_settings (key TEXT PRIMARY KEY, value TEXT)''')
+
+    # ========== [جدول التفاعلات] ==========
+    c.execute('''CREATE TABLE IF NOT EXISTS announcement_reactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        announcement_id INTEGER NOT NULL,
+        user_token TEXT NOT NULL,
+        user_name TEXT,
+        reaction TEXT NOT NULL,
+        created_at TEXT,
+        UNIQUE(announcement_id, user_token, reaction)
+)''')
     
     # إدخال النصوص الافتراضية
     default_texts = {
@@ -188,11 +199,62 @@ def delete_announcement(ann_id):
     c = conn.cursor()
     try:
         c.execute("DELETE FROM announcements WHERE id=?", (ann_id,))
+        # حذف التفاعلات المرتبطة بالإعلان
+        c.execute("DELETE FROM announcement_reactions WHERE announcement_id=?", (ann_id,))
         conn.commit()
         return True
     except Exception as e:
         print(f"❌ خطأ حذف إعلان: {e}")
         return False
+    finally:
+        conn.close()
+
+# ========== [دوال التفاعلات] ==========
+def get_reactions_for_announcement(ann_id):
+    """استرجاع كل التفاعلات لإعلان معين + عدد كل نوع"""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT reaction, user_token, user_name, created_at FROM announcement_reactions WHERE announcement_id=? ORDER BY id ASC", (ann_id,))
+    rows = c.fetchall()
+    conn.close()
+    return [{'reaction': r[0], 'user_token': r[1], 'user_name': r[2] or 'زائر', 'created_at': r[3]} for r in rows]
+
+def get_reactions_summary(ann_ids):
+    """إرجاع ملخص التفاعلات لعدة إعلانات: {ann_id: {reaction: count}}"""
+    if not ann_ids:
+        return {}
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    placeholder = ','.join('?' for _ in ann_ids)
+    c.execute(f"SELECT announcement_id, reaction, COUNT(*) FROM announcement_reactions WHERE announcement_id IN ({placeholder}) GROUP BY announcement_id, reaction", ann_ids)
+    rows = c.fetchall()
+    conn.close()
+    summary = {}
+    for ann_id, reaction, count in rows:
+        summary.setdefault(ann_id, {})[reaction] = count
+    return summary
+
+def toggle_reaction(ann_id, user_token, user_name, reaction):
+    """إضافة/إزالة تفاعل. يُرجع True إذا أُضيف، False إذا أُزيل"""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    try:
+        c.execute("SELECT id FROM announcement_reactions WHERE announcement_id=? AND user_token=? AND reaction=?",
+                  (ann_id, user_token, reaction))
+        existing = c.fetchone()
+        if existing:
+            c.execute("DELETE FROM announcement_reactions WHERE id=?", (existing[0],))
+            conn.commit()
+            return False
+        else:
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            c.execute("INSERT INTO announcement_reactions (announcement_id, user_token, user_name, reaction, created_at) VALUES (?, ?, ?, ?, ?)",
+                      (ann_id, user_token, user_name or 'زائر', reaction, now))
+            conn.commit()
+            return True
+    except Exception as e:
+        print(f"❌ خطأ تبديل تفاعل: {e}")
+        return None
     finally:
         conn.close()
 
@@ -1846,16 +1908,176 @@ body { font-family:'Cairo',sans-serif; background:#07090d; color:#c9d1d9; min-he
 .ann-type.image { background:#238636; color:#fff; }
 .ann-type.video { background:#d29922; color:#fff; }
 .ann-content { color:#e6e6e6; font-size:13px; line-height:1.6; margin-bottom:8px; }
-.ann-media { max-width:100%; max-height:150px; border-radius:8px; margin-bottom:8px; object-fit:contain; display:block; margin-left:auto; margin-right:auto; }
-.ann-video-wrap video { width:100%; max-height:150px; border-radius:8px; display:block; }
+.ann-media { max-width:100%; max-height:200px; border-radius:8px; margin-bottom:8px; object-fit:contain; display:block; margin-left:auto; margin-right:auto; }
+.ann-video-wrap video { width:100%; max-height:200px; border-radius:8px; display:block; }
 .ann-btn { display:inline-block; padding:8px 16px; background:linear-gradient(135deg, #238636, #2ea043); color:#fff; text-decoration:none; border-radius:8px; font-weight:700; font-size:12px; }
 .ann-btn:hover { transform:translateY(-1px); }
 .ann-time { color:#6e7681; font-size:10px; margin-top:6px; }
 .empty { text-align:center; padding:30px 16px; color:#6e7681; }
 .back-btn { display:inline-block; padding:8px 16px; background:#30363d; color:#fff; text-decoration:none; border-radius:8px; font-weight:700; font-size:12px; margin-bottom:12px; }
 .back-btn:hover { background:#484f58; }
-.ann-delete-btn { position:absolute; top:8px; left:8px; background:rgba(239,68,68,0.15); border:1px solid #ef4444; color:#ef4444; padding:4px 8px; border-radius:6px; font-size:12px; cursor:pointer; font-weight:700; transition:all 0.2s; }
+.ann-delete-btn { position:absolute; top:8px; left:8px; background:rgba(239,68,68,0.15); border:1px solid #ef4444; color:#ef4444; padding:4px 8px; border-radius:6px; font-size:12px; cursor:pointer; font-weight:700; transition:all 0.2s; z-index:5; }
 .ann-delete-btn:hover { background:#ef4444; color:#fff; }
+
+/* ============ [أزرار التفاعل] ============ */
+.reactions-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #30363d;
+}
+.reaction-btn {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-size: 14px;
+    cursor: pointer;
+    color: #c9d1d9;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.2s ease;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+.reaction-btn:hover { background:#161b22; border-color:#58a6ff; transform:translateY(-1px); }
+.reaction-btn:active { transform:scale(0.92); }
+.reaction-btn .emo { font-size:16px; line-height:1; }
+.reaction-btn .cnt { font-size:11px; font-weight:700; color:#8b949e; }
+.reaction-btn.active {
+    background: linear-gradient(135deg, rgba(88,166,255,0.25), rgba(139,92,246,0.18));
+    border-color: #58a6ff;
+    box-shadow: 0 0 0 1px rgba(88,166,255,0.4), 0 0 10px rgba(88,166,255,0.25);
+}
+.reaction-btn.active .cnt { color: #58a6ff; }
+.reaction-btn.bump { animation: bump 0.4s ease; }
+@keyframes bump {
+    0% { transform:scale(1); }
+    40% { transform:scale(1.25); }
+    100% { transform:scale(1); }
+}
+
+/* ============ [نافذة كشف المتفاعلين] ============ */
+.reactors-modal {
+    display: none;
+    position: fixed; inset:0;
+    background: rgba(0,0,0,0.75);
+    backdrop-filter: blur(8px);
+    z-index: 10000;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+.reactors-modal.show { display: flex; }
+.reactors-box {
+    background: linear-gradient(180deg, #1c2128, #161b22);
+    border: 1px solid #30363d;
+    border-radius: 14px;
+    max-width: 380px; width: 100%;
+    max-height: 70vh;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+}
+.reactors-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 16px;
+    border-bottom: 1px solid #30363d;
+    background: linear-gradient(135deg, rgba(31,111,235,0.15), transparent);
+}
+.reactors-header h3 { color:#fff; font-size:15px; font-weight:900; }
+.reactors-close {
+    background:none; border:none; color:#8b949e;
+    font-size:20px; cursor:pointer; padding:0; width:28px; height:28px;
+}
+.reactors-tabs {
+    display: flex; gap: 4px; padding: 8px 12px;
+    border-bottom: 1px solid #30363d;
+    overflow-x: auto;
+    background: #0d1117;
+}
+.reactors-tab {
+    background: transparent;
+    border: 1px solid transparent;
+    color: #8b949e;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px; font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    display: inline-flex; align-items: center; gap: 4px;
+}
+.reactors-tab.active {
+    background: rgba(88,166,255,0.15);
+    color: #58a6ff;
+    border-color: rgba(88,166,255,0.4);
+}
+.reactors-list {
+    padding: 8px;
+    overflow-y: auto;
+    max-height: 50vh;
+}
+.reactor-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    transition: background 0.2s;
+}
+.reactor-row:hover { background: rgba(88,166,255,0.08); }
+.reactor-avatar {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #1f6feb, #8b5cf6);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 900; font-size: 14px;
+    flex-shrink: 0;
+}
+.reactor-info { flex: 1; min-width: 0; }
+.reactor-name { color: #fff; font-size: 13px; font-weight: 700; }
+.reactor-time { color: #6e7681; font-size: 10px; }
+.reactor-emo { font-size: 20px; }
+.reactors-empty { text-align:center; padding: 30px; color: #6e7681; font-size: 13px; }
+
+/* ============ [حقل اسم الزائر - أول مرة فقط] ============ */
+.name-modal {
+    display: none;
+    position: fixed; inset:0;
+    background: rgba(0,0,0,0.75);
+    backdrop-filter: blur(8px);
+    z-index: 10001;
+    align-items: center; justify-content: center;
+    padding: 20px;
+}
+.name-modal.show { display: flex; }
+.name-box {
+    background: linear-gradient(180deg, #1c2128, #161b22);
+    border: 1px solid #30363d;
+    border-radius: 14px;
+    padding: 20px;
+    max-width: 340px; width: 100%;
+    text-align: center;
+}
+.name-box h3 { color: #fff; font-size: 16px; margin-bottom: 6px; }
+.name-box p { color: #8b949e; font-size: 12px; margin-bottom: 12px; }
+.name-box input {
+    width: 100%; padding: 10px;
+    background: #0d1117; color: #fff;
+    border: 1px solid #30363d; border-radius: 8px;
+    font-family: 'Cairo', sans-serif; font-size: 13px;
+    outline: none; text-align: center;
+}
+.name-box input:focus { border-color: #58a6ff; }
+.name-box .name-actions { display: flex; gap: 8px; margin-top: 12px; }
+.name-box button {
+    flex: 1; padding: 10px; border: none; border-radius: 8px;
+    font-family: 'Cairo', sans-serif; font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.name-box .btn-save { background: linear-gradient(135deg, #238636, #2ea043); color: #fff; }
+.name-box .btn-skip { background: #30363d; color: #c9d1d9; }
 </style>
 </head>
 <body>
@@ -1864,30 +2086,292 @@ body { font-family:'Cairo',sans-serif; background:#07090d; color:#c9d1d9; min-he
     <div class="header"><h1>📢 إعلانات الموقع</h1><p>آخر الإعلانات والتحديثات</p></div>
     <div id="annList"><div class="empty">⏳ جاري التحميل...</div></div>
 </div>
+
+<!-- نافذة كشف المتفاعلين -->
+<div class="reactors-modal" id="reactorsModal" onclick="if(event.target===this) closeReactors()">
+    <div class="reactors-box">
+        <div class="reactors-header">
+            <h3 id="reactorsTitle">❤️ المتفاعلون</h3>
+            <button class="reactors-close" onclick="closeReactors()">✕</button>
+        </div>
+        <div class="reactors-tabs" id="reactorsTabs"></div>
+        <div class="reactors-list" id="reactorsList"></div>
+    </div>
+</div>
+
+<!-- نافذة طلب الاسم (أول تفاعل فقط) -->
+<div class="name-modal" id="nameModal" onclick="if(event.target===this) cancelNamePrompt()">
+    <div class="name-box">
+        <h3>👋 مرحباً!</h3>
+        <p>أدخل اسمك ليظهر مع تفاعلك (اختياري)</p>
+        <input type="text" id="nameInput" placeholder="مثلاً: أحمد" maxlength="30">
+        <div class="name-actions">
+            <button class="btn-skip" onclick="cancelNamePrompt()">تخطي</button>
+            <button class="btn-save" onclick="saveNameAndReact()">حفظ وتفاعل</button>
+        </div>
+    </div>
+</div>
+
 <script>
 const isAdmin = {{ 'true' if is_admin else 'false' }};
+
+// ============ [معرّف الزائر] (يُحفظ في localStorage) ============
+function getUserToken() {
+    let token = localStorage.getItem('userToken');
+    if (!token) {
+        token = 'u_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+        localStorage.setItem('userToken', token);
+    }
+    return token;
+}
+function getUserName() {
+    return localStorage.getItem('userName') || '';
+}
+
+// ============ [تعريفات التفاعلات] ============
+const REACTION_DEFS = {
+    heart: { emoji: '❤️', label: 'حب' },
+    fire:  { emoji: '🔥', label: 'رائع' },
+    star:  { emoji: '⭐', label: 'مميز' },
+    like:  { emoji: '👍', label: 'إعجاب' },
+    clap:  { emoji: '👏', label: 'تصفيق' },
+    wow:   { emoji: '😮', label: 'واو' }
+};
+
+// ============ [كاش التفاعلات] ============
+const reactionsCache = {}; // {ann_id: {reaction: count, my: ['heart', ...], users: [...]}}
+
+function getMyReactions(annId) {
+    const c = reactionsCache[annId];
+    return c ? (c.my || []) : [];
+}
+
+function getReactionCount(annId, type) {
+    const c = reactionsCache[annId];
+    return c && c.counts ? (c.counts[type] || 0) : 0;
+}
+
+// ============ [تحميل الإعلانات] ============
 async function loadAnnouncements() {
     try {
         const res = await fetch('/api/announcements');
         const data = await res.json();
         const container = document.getElementById('annList');
         if (!data.length) { container.innerHTML = '<div class="empty">📭 لا توجد إعلانات</div>'; return; }
-        container.innerHTML = data.map(a => {
-            let media = '';
-            if (a.type === 'image' && a.media_url) {
-                media = `<img src="${a.media_url}" class="ann-media" loading="lazy">`;
-            } else if (a.type === 'video' && a.media_url) {
-                media = `<div class="ann-video-wrap"><video src="${a.media_url}" controls preload="metadata"></video></div>`;
-            }
-            const btn = a.button_url ? `<a href="${a.button_url}" target="_blank" class="ann-btn">${a.button_text || 'افتح'}</a>` : '';
-            // زر الحذف للأدمن فقط
-            const deleteBtn = isAdmin ? `<button onclick="deleteAnn(${a.id})" class="ann-delete-btn" title="حذف">🗑️</button>` : '';
-            return `<div class="ann-card" style="position:relative;"><span class="ann-type ${a.type}">${a.type}</span>${media}<div class="ann-content">${a.content || ''}</div>${btn}<div class="ann-time">🕒 ${a.created_at}</div>${deleteBtn}</div>`;
-        }).join('');
+        // جلب التفاعلات لكل إعلان بالتوازي
+        await Promise.all(data.map(a => loadReactions(a.id)));
+        container.innerHTML = data.map(renderAnnouncement).join('');
     } catch(e) { document.getElementById('annList').innerHTML = '<div class="empty">❌ فشل التحميل</div>'; }
 }
-async function deleteAnn(id) {
-    if (!confirm('🗑️ حذف هذا الإعلان نهائياً؟')) return;
+
+async function loadReactions(annId) {
+    try {
+        const res = await fetch('/api/reactions?announcement_id=' + annId);
+        const data = await res.json();
+        if (data.ok) {
+            const myToken = getUserToken();
+            const reactions = data.reactions || [];
+            const counts = {};
+            const my = [];
+            reactions.forEach(r => {
+                counts[r.reaction] = (counts[r.reaction] || 0) + 1;
+                if (r.user_token === myToken) my.push(r.reaction);
+            });
+            reactionsCache[annId] = { counts, my, users: reactions };
+        }
+    } catch(e) {}
+}
+
+function renderAnnouncement(a) {
+    let media = '';
+    if (a.type === 'image' && a.media_url) {
+        media = `<img src="${a.media_url}" class="ann-media" loading="lazy">`;
+    } else if (a.type === 'video' && a.media_url) {
+        media = `<div class="ann-video-wrap"><video src="${a.media_url}" controls preload="metadata"></video></div>`;
+    }
+    const btn = a.button_url ? `<a href="${a.button_url}" target="_blank" class="ann-btn">${a.button_text || 'افتح'}</a>` : '';
+    const deleteBtn = isAdmin ? `<button onclick="deleteAnn(${a.id})" class="ann-delete-btn" title="حذف">🗑️</button>` : '';
+
+    // أزرار التفاعل
+    const reactionBtns = Object.keys(REACTION_DEFS).map(key => {
+        const def = REACTION_DEFS[key];
+        const count = getReactionCount(a.id, key);
+        const isActive = getMyReactions(a.id).includes(key);
+        return `<button class="reaction-btn ${isActive ? 'active' : ''}" data-ann="${a.id}" data-reaction="${key}" onclick="onReactionClick(${a.id}, '${key}', this)"><span class="emo">${def.emoji}</span>${count > 0 ? `<span class="cnt">${count}</span>` : ''}</button>`;
+    }).join('');
+
+    const totalReactions = Object.values(reactionsCache[a.id]?.counts || {}).reduce((s, v) => s + v, 0);
+    const seeAll = totalReactions > 0 ? `<button class="reaction-btn" onclick="openReactors(${a.id})" style="background:transparent; border-color:transparent; color:#58a6ff; padding:5px 8px;" title="عرض المتفاعلين">عرض الكل (${totalReactions}) 👀</button>` : '';
+
+    return `<div class="ann-card" id="ann-${a.id}" style="position:relative;"><span class="ann-type ${a.type}">${a.type}</span>${media}<div class="ann-content">${a.content || ''}</div>${btn}<div class="ann-time">🕒 ${a.created_at}</div>${deleteBtn}<div class="reactions-bar">${reactionBtns}${seeAll}</div></div>`;
+}
+
+// ============ [التعامل مع ضغط التفاعل] ============
+let pendingReaction = null; // {annId, type, btn}
+
+function onReactionClick(annId, type, btn) {
+    const myName = getUserName();
+    if (!myName) {
+        // أول مرة - نطلب الاسم
+        pendingReaction = { annId, type, btn };
+        document.getElementById('nameModal').classList.add('show');
+        setTimeout(() => document.getElementById('nameInput').focus(), 200);
+        return;
+    }
+    submitReaction(annId, type, btn, myName);
+}
+
+async function submitReaction(annId, type, btn, userName) {
+    if (btn) btn.disabled = true;
+    try {
+        const res = await fetch('/api/reaction', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                announcement_id: annId,
+                reaction: type,
+                user_token: getUserToken(),
+                user_name: userName || 'زائر'
+            })
+        });
+        const data = await res.json();
+        if (data.ok && data.reactions) {
+            // تحديث الكاش
+            const myToken = getUserToken();
+            const counts = {};
+            const my = [];
+            data.reactions.forEach(r => {
+                counts[r.reaction] = (counts[r.reaction] || 0) + 1;
+                if (r.user_token === myToken) my.push(r.reaction);
+            });
+            reactionsCache[annId] = { counts, my, users: data.reactions };
+            // إعادة رسم البطاقة بشكل كامل (أبسط وأضمن)
+            const card = document.getElementById('ann-' + annId);
+            if (card) {
+                // نبض على الزر الحالي قبل الاستبدال
+                if (btn && btn.parentNode) {
+                    btn.classList.add('bump');
+                    setTimeout(() => { try { btn.classList.remove('bump'); } catch(e){} }, 400);
+                }
+                // إعادة بناء البطاقة
+                const annType = card.querySelector('.ann-type')?.textContent.trim() || 'text';
+                const annContent = card.querySelector('.ann-content')?.innerHTML || '';
+                const annMedia = card.querySelector('img, video')?.src || '';
+                const annTime = card.querySelector('.ann-time')?.textContent.replace('🕒 ','') || '';
+                const annBtn = card.querySelector('.ann-btn');
+                const newHtml = renderAnnouncement({
+                    id: annId,
+                    type: annType,
+                    content: annContent,
+                    media_url: annMedia,
+                    created_at: annTime,
+                    button_url: annBtn?.getAttribute('href') || '',
+                    button_text: annBtn?.textContent || ''
+                });
+                // إدراج البديل
+                const tmp = document.createElement('div');
+                tmp.innerHTML = newHtml;
+                const newCard = tmp.firstElementChild;
+                if (newCard) card.replaceWith(newCard);
+            }
+        } else {
+            alert('❌ فشل: ' + (data.error || 'غير معروف'));
+        }
+    } catch(e) { alert('❌ خطأ في الاتصال'); }
+    if (btn) btn.disabled = false;
+}
+
+function saveNameAndReact() {
+    const name = document.getElementById('nameInput').value.trim();
+    if (name) localStorage.setItem('userName', name);
+    document.getElementById('nameModal').classList.remove('show');
+    document.getElementById('nameInput').value = '';
+    if (pendingReaction) {
+        submitReaction(pendingReaction.annId, pendingReaction.type, pendingReaction.btn, name || 'زائر');
+        pendingReaction = null;
+    }
+}
+function cancelNamePrompt() {
+    document.getElementById('nameModal').classList.remove('show');
+    document.getElementById('nameInput').value = '';
+    if (pendingReaction) {
+        submitReaction(pendingReaction.annId, pendingReaction.type, pendingReaction.btn, 'زائر');
+        pendingReaction = null;
+    }
+}
+
+// ============ [نافذة كشف المتفاعلين] ============
+let currentReactorsAnn = null;
+let currentFilter = 'all';
+
+async function openReactors(annId) {
+    currentReactorsAnn = annId;
+    currentFilter = 'all';
+    await loadReactions(annId);
+    const cache = reactionsCache[annId];
+    if (!cache) return;
+    // بناء التبويبات
+    const tabsEl = document.getElementById('reactorsTabs');
+    let tabsHtml = `<button class="reactors-tab active" data-filter="all" onclick="filterReactors('all')">الكل (${cache.users.length})</button>`;
+    Object.keys(cache.counts).forEach(key => {
+        const def = REACTION_DEFS[key];
+        if (def) {
+            tabsHtml += `<button class="reactors-tab" data-filter="${key}" onclick="filterReactors('${key}')">${def.emoji} ${cache.counts[key]}</button>`;
+        }
+    });
+    tabsEl.innerHTML = tabsHtml;
+    document.getElementById('reactorsTitle').textContent = '👀 المتفاعلون';
+    renderReactors();
+    document.getElementById('reactorsModal').classList.add('show');
+}
+function closeReactors() {
+    document.getElementById('reactorsModal').classList.remove('show');
+    currentReactorsAnn = null;
+}
+function filterReactors(filter) {
+    currentFilter = filter;
+    document.querySelectorAll('.reactors-tab').forEach(t => {
+        t.classList.toggle('active', t.dataset.filter === filter);
+    });
+    renderReactors();
+}
+function renderReactors() {
+    const list = document.getElementById('reactorsList');
+    if (!currentReactorsAnn) return;
+    const cache = reactionsCache[currentReactorsAnn];
+    if (!cache || !cache.users.length) {
+        list.innerHTML = '<div class="reactors-empty">لا يوجد متفاعلون بعد 😔</div>';
+        return;
+    }
+    let users = cache.users;
+    if (currentFilter !== 'all') {
+        users = users.filter(u => u.reaction === currentFilter);
+    }
+    if (!users.length) {
+        list.innerHTML = '<div class="reactors-empty">لا يوجد متفاعلون بهذا التفاعل</div>';
+        return;
+    }
+    list.innerHTML = users.map(u => {
+        const def = REACTION_DEFS[u.reaction] || { emoji: '✨' };
+        const initials = (u.user_name || 'زائر').slice(0, 2);
+        return `<div class="reactor-row">
+            <div class="reactor-avatar">${escapeHtml(initials)}</div>
+            <div class="reactor-info">
+                <div class="reactor-name">${escapeHtml(u.user_name || 'زائر')}</div>
+                <div class="reactor-time">${u.created_at || ''}</div>
+            </div>
+            <div class="reactor-emo">${def.emoji}</div>
+        </div>`;
+    }).join('');
+}
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ============ [حذف إعلان] ============
+//
+async function deleteAnnouncementAdmin(id) {
+   // if (!confirm('🗑️ حذف هذا الإعلان نهائياً؟')) return;
     try {
         const res = await fetch('/api/delete_announcement', {
             method: 'POST',
@@ -1895,10 +2379,17 @@ async function deleteAnn(id) {
             body: JSON.stringify({id: id})
         });
         const data = await res.json();
-        if (data.ok) { loadAnnouncements(); }
-        else { alert('❌ فشل الحذف: ' + (data.error || 'غير معروف')); }
-    } catch(e) { alert('❌ خطأ في الاتصال'); }
+        if (data.ok) { loadAnnouncementsAdmin(); alert('✅ تم الحذف'); }
+        else { alert('❌ فشل: ' + (data.error || '')); }
+    } catch(e) { alert('❌ خطأ'); }
 }
+//
+
+// Enter في حقل الاسم = حفظ
+document.getElementById('nameInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') saveNameAndReact();
+});
+
 loadAnnouncements();
 </script>
 </body>
@@ -1984,6 +2475,36 @@ def api_delete_announcement():
     if delete_announcement(ann_id):
         return jsonify({'ok': True})
     return jsonify({'ok': False, 'error': 'فشل الحذف'}), 500
+
+# ========== [API التفاعلات على الإعلانات] ==========
+ALLOWED_REACTIONS = {'heart', 'fire', 'star', 'like', 'clap', 'wow'}
+
+@app.route('/api/reaction', methods=['POST'])
+def api_reaction():
+    """إضافة أو إزالة تفاعل على إعلان"""
+    data = request.json or {}
+    ann_id = data.get('announcement_id')
+    reaction = data.get('reaction')
+    user_name = (data.get('user_name') or '').strip()[:30]
+    # معرّف فريد للزائر (مجهول الهوية)
+    user_token = (data.get('user_token') or request.headers.get('X-User-Token') or '').strip()
+    if not user_token:
+        # توليد token من IP + UA كتعريف مؤقت
+        user_token = (request.remote_addr or 'anon') + '_' + (request.headers.get('User-Agent', '')[:30])
+    if not ann_id or reaction not in ALLOWED_REACTIONS:
+        return jsonify({'ok': False, 'error': 'بيانات غير صالحة'}), 400
+    added = toggle_reaction(ann_id, user_token, user_name or 'زائر', reaction)
+    if added is None:
+        return jsonify({'ok': False, 'error': 'فشل الحفظ'}), 500
+    return jsonify({'ok': True, 'added': added, 'reactions': get_reactions_for_announcement(ann_id)})
+
+@app.route('/api/reactions', methods=['GET'])
+def api_reactions():
+    """استرجاع كل التفاعلات لإعلان"""
+    ann_id = request.args.get('announcement_id')
+    if not ann_id:
+        return jsonify({'ok': False, 'error': 'معرّف الإعلان مفقود'}), 400
+    return jsonify({'ok': True, 'reactions': get_reactions_for_announcement(ann_id)})
 
 # ========== [حفظ ترتيب المنصات] (للأدمن فقط) ==========
 @app.route('/api/save_platform_order', methods=['POST'])
@@ -2380,9 +2901,8 @@ async function loadAnnouncementsAdmin() {
     } catch(e) {}
 }
 
-/*
 async function deleteAnnouncementAdmin(id) {
-   // if (!confirm('🗑️ حذف هذا الإعلان نهائياً؟')) return;
+    if (!confirm('🗑️ حذف هذا الإعلان نهائياً؟')) return;
     try {
         const res = await fetch('/api/delete_announcement', {
             method: 'POST',
@@ -2394,7 +2914,6 @@ async function deleteAnnouncementAdmin(id) {
         else { alert('❌ فشل: ' + (data.error || '')); }
     } catch(e) { alert('❌ خطأ'); }
 }
-*/
 
 let adminSoundEnabled = '{{ sound_enabled }}' !== '0';
 let adminThemeMode = '{{ theme_mode }}' || 'dark';
