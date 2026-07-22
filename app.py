@@ -55,6 +55,19 @@ def init_db():
         created_at TEXT,
         UNIQUE(announcement_id, user_token, reaction)
 )''')
+
+    # ========== [جدول التعليقات] ==========
+    c.execute('''CREATE TABLE IF NOT EXISTS announcement_comments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        announcement_id INTEGER NOT NULL,
+        user_token TEXT NOT NULL,
+        user_name TEXT,
+        content TEXT NOT NULL,
+        parent_id INTEGER DEFAULT 0,
+        is_deleted INTEGER DEFAULT 0,
+        created_at TEXT
+)''')
+    c.execute('''CREATE INDEX IF NOT EXISTS idx_comments_ann ON announcement_comments(announcement_id, created_at)''')
     
     # إدخال النصوص الافتراضية
     default_texts = {
@@ -201,6 +214,8 @@ def delete_announcement(ann_id):
         c.execute("DELETE FROM announcements WHERE id=?", (ann_id,))
         # حذف التفاعلات المرتبطة بالإعلان
         c.execute("DELETE FROM announcement_reactions WHERE announcement_id=?", (ann_id,))
+        # حذف التعليقات المرتبطة بالإعلان
+        c.execute("DELETE FROM announcement_comments WHERE announcement_id=?", (ann_id,))
         conn.commit()
         return True
     except Exception as e:
@@ -255,6 +270,81 @@ def toggle_reaction(ann_id, user_token, user_name, reaction):
     except Exception as e:
         print(f"❌ خطأ تبديل تفاعل: {e}")
         return None
+    finally:
+        conn.close()
+
+# ========== [دوال التعليقات] ==========
+def get_comments_for_announcement(ann_id, include_deleted=False):
+    """استرجاع كل تعليقات إعلان (تشمل الردود مرتبة أب+ابن)"""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    if include_deleted:
+        c.execute("SELECT id, user_token, user_name, content, parent_id, is_deleted, created_at FROM announcement_comments WHERE announcement_id=? ORDER BY id ASC", (ann_id,))
+    else:
+        c.execute("SELECT id, user_token, user_name, content, parent_id, is_deleted, created_at FROM announcement_comments WHERE announcement_id=? AND is_deleted=0 ORDER BY id ASC", (ann_id,))
+    rows = c.fetchall()
+    conn.close()
+    return [{'id': r[0], 'user_token': r[1], 'user_name': r[2] or 'زائر', 'content': r[3], 'parent_id': r[4] or 0, 'is_deleted': r[5], 'created_at': r[6]} for r in rows]
+
+def get_comments_summary(ann_ids):
+    """عدد التعليقات لكل إعلان: {ann_id: count}"""
+    if not ann_ids:
+        return {}
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    placeholder = ','.join('?' for _ in ann_ids)
+    c.execute(f"SELECT announcement_id, COUNT(*) FROM announcement_comments WHERE announcement_id IN ({placeholder}) AND is_deleted=0 GROUP BY announcement_id", ann_ids)
+    rows = c.fetchall()
+    conn.close()
+    return {ann_id: count for ann_id, count in rows}
+
+def add_comment(ann_id, user_token, user_name, content, parent_id=0):
+    """إضافة تعليق جديد. يُرجع ID التعليق أو None عند الفشل"""
+    content = (content or '').strip()
+    if not content:
+        return None
+    if len(content) > 500:
+        content = content[:500]
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    try:
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        c.execute("INSERT INTO announcement_comments (announcement_id, user_token, user_name, content, parent_id, is_deleted, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)",
+                  (ann_id, user_token, user_name or 'زائر', content, int(parent_id or 0), now))
+        conn.commit()
+        return c.lastrowid
+    except Exception as e:
+        print(f"❌ خطأ إضافة تعليق: {e}")
+        return None
+    finally:
+        conn.close()
+
+def delete_comment(comment_id, user_token, is_admin=False):
+    """حذف تعليق (ناعم). المالك أو الأدمن فقط."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    try:
+        if is_admin:
+            c.execute("SELECT id FROM announcement_comments WHERE id=?", (comment_id,))
+            existing = c.fetchone()
+            if not existing:
+                return False
+            c.execute("UPDATE announcement_comments SET is_deleted=1, content='[تم حذف التعليق]' WHERE id=?", (comment_id,))
+            conn.commit()
+            return True
+        else:
+            c.execute("SELECT user_token FROM announcement_comments WHERE id=? AND is_deleted=0", (comment_id,))
+            row = c.fetchone()
+            if not row:
+                return False
+            if row[0] != user_token:
+                return False
+            c.execute("UPDATE announcement_comments SET is_deleted=1, content='[تم حذف التعليق]' WHERE id=?", (comment_id,))
+            conn.commit()
+            return True
+    except Exception as e:
+        print(f"❌ خطأ حذف تعليق: {e}")
+        return False
     finally:
         conn.close()
 
@@ -2078,6 +2168,110 @@ body { font-family:'Cairo',sans-serif; background:#07090d; color:#c9d1d9; min-he
 }
 .name-box .btn-save { background: linear-gradient(135deg, #238636, #2ea043); color: #fff; }
 .name-box .btn-skip { background: #30363d; color: #c9d1d9; }
+
+/* ============ [بطاقة التعليقات] ============ */
+.comments-section { margin-top: 10px; padding-top: 10px; border-top: 1px solid #30363d; }
+.comments-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 8px;
+}
+.comments-header h4 {
+    color: #fff; font-size: 13px; font-weight: 800;
+    display: flex; align-items: center; gap: 6px;
+}
+.comments-toggle-btn {
+    background: transparent; border: 1px solid #30363d;
+    color: #58a6ff; padding: 3px 8px; border-radius: 6px;
+    font-size: 11px; font-weight: 700; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 4px;
+}
+.comments-toggle-btn:hover { background: rgba(88,166,255,0.1); }
+.comments-count-badge {
+    background: rgba(88,166,255,0.15);
+    color: #58a6ff;
+    border-radius: 999px;
+    padding: 1px 8px;
+    font-size: 11px;
+    font-weight: 800;
+    margin-right: 4px;
+}
+.comment-compose {
+    display: flex; gap: 6px; align-items: stretch;
+    margin-bottom: 10px;
+}
+.comment-compose textarea {
+    flex: 1; resize: none; min-height: 38px; max-height: 120px;
+    background: #0d1117; color: #e6e6e6;
+    border: 1px solid #30363d; border-radius: 8px;
+    padding: 8px 10px; font-family: 'Cairo', sans-serif; font-size: 12px;
+    outline: none;
+}
+.comment-compose textarea:focus { border-color: #58a6ff; }
+.comment-send-btn {
+    background: linear-gradient(135deg, #238636, #2ea043);
+    color: #fff; border: none; border-radius: 8px;
+    padding: 0 14px; font-size: 12px; font-weight: 800;
+    cursor: pointer; font-family: 'Cairo', sans-serif;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+}
+.comment-send-btn:hover:not(:disabled) { filter: brightness(1.1); }
+.comment-send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.comments-list { display: flex; flex-direction: column; gap: 6px; }
+.comment-item {
+    background: #0d1117; border: 1px solid #30363d; border-radius: 8px;
+    padding: 8px 10px; display: flex; gap: 8px; align-items: flex-start;
+}
+.comment-item.is-reply {
+    margin-right: 28px;
+    background: #11161d;
+    border-color: #21262d;
+}
+.comment-avatar {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: linear-gradient(135deg, #1f6feb, #8b5cf6);
+    color: #fff; font-weight: 900; font-size: 12px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+}
+.comment-body { flex: 1; min-width: 0; }
+.comment-meta { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
+.comment-author { color: #fff; font-size: 12px; font-weight: 800; }
+.comment-time { color: #6e7681; font-size: 10px; }
+.comment-text { color: #c9d1d9; font-size: 12px; line-height: 1.5; word-wrap: break-word; }
+.comment-text.deleted { color: #6e7681; font-style: italic; }
+.comment-actions {
+    display: flex; gap: 8px; margin-top: 4px;
+}
+.comment-action-btn {
+    background: none; border: none; color: #58a6ff;
+    font-size: 10px; font-weight: 700; cursor: pointer;
+    padding: 0; font-family: 'Cairo', sans-serif;
+}
+.comment-action-btn:hover { text-decoration: underline; }
+.comment-action-btn.danger { color: #ef4444; }
+.comment-reply-form { margin-top: 6px; display: none; }
+.comment-reply-form.show { display: flex; gap: 6px; }
+.comment-reply-form input {
+    flex: 1; background: #0d1117; color: #e6e6e6;
+    border: 1px solid #30363d; border-radius: 6px;
+    padding: 6px 8px; font-family: 'Cairo', sans-serif; font-size: 11px;
+    outline: none;
+}
+.comment-reply-form input:focus { border-color: #58a6ff; }
+.comment-reply-form button {
+    background: linear-gradient(135deg, #1f6feb, #388bfd);
+    color: #fff; border: none; border-radius: 6px;
+    padding: 0 10px; font-size: 11px; font-weight: 700;
+    cursor: pointer; font-family: 'Cairo', sans-serif;
+}
+.comment-reply-form button.cancel { background: #30363d; }
+.comments-empty {
+    text-align: center; color: #6e7681; font-size: 11px;
+    padding: 12px; background: rgba(13,17,23,0.4);
+    border: 1px dashed #30363d; border-radius: 8px;
+}
+.comments-loading { text-align: center; color: #6e7681; font-size: 11px; padding: 8px; }
 </style>
 </head>
 <body>
@@ -2141,6 +2335,12 @@ const REACTION_DEFS = {
 // ============ [كاش التفاعلات] ============
 const reactionsCache = {}; // {ann_id: {reaction: count, my: ['heart', ...], users: [...]}}
 
+// ============ [كاش التعليقات] ============
+const commentsCache = {};        // {ann_id: [comments]}
+const commentsCountCache = {};   // {ann_id: number}
+const openComments = {};         // {ann_id: true/false}
+const replyOpen = {};            // {comment_id: true/false}
+
 function getMyReactions(annId) {
     const c = reactionsCache[annId];
     return c ? (c.my || []) : [];
@@ -2158,8 +2358,8 @@ async function loadAnnouncements() {
         const data = await res.json();
         const container = document.getElementById('annList');
         if (!data.length) { container.innerHTML = '<div class="empty">📭 لا توجد إعلانات</div>'; return; }
-        // جلب التفاعلات لكل إعلان بالتوازي
-        await Promise.all(data.map(a => loadReactions(a.id)));
+        // جلب التفاعلات وعدّاد التعليقات لكل إعلان بالتوازي
+        await Promise.all(data.map(a => Promise.all([loadReactions(a.id), loadCommentsCount(a.id)])));
         container.innerHTML = data.map(renderAnnouncement).join('');
     } catch(e) { document.getElementById('annList').innerHTML = '<div class="empty">❌ فشل التحميل</div>'; }
 }
@@ -2203,7 +2403,11 @@ function renderAnnouncement(a) {
     const totalReactions = Object.values(reactionsCache[a.id]?.counts || {}).reduce((s, v) => s + v, 0);
     const seeAll = totalReactions > 0 ? `<button class="reaction-btn" onclick="openReactors(${a.id})" style="background:transparent; border-color:transparent; color:#58a6ff; padding:5px 8px;" title="عرض المتفاعلين">عرض الكل (${totalReactions}) 👀</button>` : '';
 
-    return `<div class="ann-card" id="ann-${a.id}" style="position:relative;"><span class="ann-type ${a.type}">${a.type}</span>${media}<div class="ann-content">${a.content || ''}</div>${btn}<div class="ann-time">🕒 ${a.created_at}</div>${deleteBtn}<div class="reactions-bar">${reactionBtns}${seeAll}</div></div>`;
+    // [التعليقات] - عدّاد + زر الفتح
+    const commentsCount = commentsCountCache[a.id] || 0;
+    const isOpen = openComments[a.id] === true;
+
+    return `<div class="ann-card" id="ann-${a.id}" style="position:relative;"><span class="ann-type ${a.type}">${a.type}</span>${media}<div class="ann-content">${a.content || ''}</div>${btn}<div class="ann-time">🕒 ${a.created_at}</div>${deleteBtn}<div class="reactions-bar">${reactionBtns}${seeAll}<button class="reaction-btn comments-toggle-btn" onclick="toggleCommentsSection(${a.id})" style="margin-right:auto;"><span>💬</span><span>تعليقات</span>${commentsCount > 0 ? `<span class="comments-count-badge">${commentsCount}</span>` : ''}</button></div><div class="comments-section" id="comments-section-${a.id}" style="display:${isOpen ? 'block' : 'none'};"><div class="comment-compose"><textarea id="comment-input-${a.id}" placeholder="اكتب تعليقاً..." maxlength="500" rows="1"></textarea><button class="comment-send-btn" onclick="submitComment(${a.id}, this)">إرسال</button></div><div class="comments-list" id="comments-list-${a.id}">${isOpen ? '<div class="comments-loading">⏳ جاري التحميل...</div>' : ''}</div></div></div>`;
 }
 
 // ============ [التعامل مع ضغط التفاعل] ============
@@ -2368,22 +2572,255 @@ function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-// ============ [حذف إعلان] ============
-//
-async function deleteAnnouncementAdmin(id) {
-   // if (!confirm('🗑️ حذف هذا الإعلان نهائياً؟')) return;
+// ============ [التعليقات] - كاش + دوال ============
+async function loadCommentsCount(annId) {
     try {
-        const res = await fetch('/api/delete_announcement', {
+        const res = await fetch('/api/comments?announcement_id=' + annId);
+        const data = await res.json();
+        if (data.ok) {
+            commentsCache[annId] = data.comments || [];
+            commentsCountCache[annId] = (data.comments || []).filter(c => !c.is_deleted).length;
+        }
+    } catch(e) {}
+}
+
+async function loadComments(annId) {
+    const list = document.getElementById('comments-list-' + annId);
+    if (!list) return;
+    list.innerHTML = '<div class="comments-loading">⏳ جاري التحميل...</div>';
+    try {
+        const res = await fetch('/api/comments?announcement_id=' + annId);
+        const data = await res.json();
+        if (data.ok) {
+            commentsCache[annId] = data.comments || [];
+            commentsCountCache[annId] = (data.comments || []).filter(c => !c.is_deleted).length;
+            renderComments(annId);
+            updateCommentsBadge(annId);
+        } else {
+            list.innerHTML = '<div class="comments-empty">❌ فشل التحميل</div>';
+        }
+    } catch(e) {
+        list.innerHTML = '<div class="comments-empty">❌ خطأ في الاتصال</div>';
+    }
+}
+
+function renderComments(annId) {
+    const list = document.getElementById('comments-list-' + annId);
+    if (!list) return;
+    const all = commentsCache[annId] || [];
+    if (!all.length) {
+        list.innerHTML = '<div class="comments-empty">💬 لا توجد تعليقات بعد. كن أول من يعلق!</div>';
+        return;
+    }
+    // افصل الآباء عن الردود
+    const parents = all.filter(c => !c.parent_id);
+    const replies = all.filter(c => c.parent_id);
+    const myToken = getUserToken();
+    let html = '';
+    parents.forEach(p => {
+        html += renderCommentItem(p, myToken, false);
+        // الردود على هذا التعليق
+        const childReplies = replies.filter(r => r.parent_id === p.id);
+        childReplies.forEach(r => {
+            html += renderCommentItem(r, myToken, true);
+        });
+    });
+    list.innerHTML = html;
+}
+
+function renderCommentItem(c, myToken, isReply) {
+    const def = REACTION_DEFS.like;
+    const initials = (c.user_name || 'زائر').slice(0, 2);
+    const isMine = c.user_token === myToken;
+    const canDelete = isMine || isAdmin;
+    const deletedClass = c.is_deleted ? 'deleted' : '';
+    const replyFormId = 'reply-form-' + c.id;
+    const isReplyOpen = replyOpen[c.id] === true;
+    return `<div class="comment-item ${isReply ? 'is-reply' : ''}" id="comment-${c.id}">
+        <div class="comment-avatar">${escapeHtml(initials)}</div>
+        <div class="comment-body">
+            <div class="comment-meta">
+                <span class="comment-author">${escapeHtml(c.user_name || 'زائر')}</span>
+                <span class="comment-time">${escapeHtml(c.created_at || '')}</span>
+            </div>
+            <div class="comment-text ${deletedClass}">${escapeHtml(c.content)}</div>
+            ${c.is_deleted ? '' : `
+            <div class="comment-actions">
+                ${!isReply ? `<button class="comment-action-btn" onclick="toggleReplyForm(${c.announcement_id || 0}, ${c.id})">↩️ رد</button>` : ''}
+                ${canDelete ? `<button class="comment-action-btn danger" onclick="deleteComment(${c.announcement_id || 0}, ${c.id})">🗑️ حذف</button>` : ''}
+            </div>
+            <div class="comment-reply-form ${isReplyOpen ? 'show' : ''}" id="${replyFormId}">
+                <input type="text" id="reply-input-${c.id}" placeholder="اكتب رداً..." maxlength="500" onkeydown="if(event.key==='Enter')submitReply(${c.announcement_id || 0}, ${c.id})">
+                <button onclick="submitReply(${c.announcement_id || 0}, ${c.id})">إرسال</button>
+                <button class="cancel" onclick="toggleReplyForm(0, ${c.id})">✕</button>
+            </div>`}
+        </div>
+    </div>`;
+}
+
+function updateCommentsBadge(annId) {
+    // إيجاد زر التعليقات في بطاقة الإعلان وتحديث العدّاد
+    const card = document.getElementById('ann-' + annId);
+    if (!card) return;
+    const btn = card.querySelector('.comments-toggle-btn');
+    if (!btn) return;
+    // تنظيف badges قديمة
+    const oldBadge = btn.querySelector('.comments-count-badge');
+    if (oldBadge) oldBadge.remove();
+    const count = commentsCountCache[annId] || 0;
+    if (count > 0) {
+        const badge = document.createElement('span');
+        badge.className = 'comments-count-badge';
+        badge.textContent = count;
+        btn.appendChild(badge);
+    }
+}
+
+function toggleCommentsSection(annId) {
+    const sec = document.getElementById('comments-section-' + annId);
+    if (!sec) return;
+    const isOpen = sec.style.display !== 'none';
+    if (isOpen) {
+        sec.style.display = 'none';
+        openComments[annId] = false;
+    } else {
+        sec.style.display = 'block';
+        openComments[annId] = true;
+        loadComments(annId);
+        // تركيز على حقل الإدخال
+        setTimeout(() => {
+            const ta = document.getElementById('comment-input-' + annId);
+            if (ta) ta.focus();
+        }, 100);
+    }
+}
+
+async function submitComment(annId, btn) {
+    const ta = document.getElementById('comment-input-' + annId);
+    if (!ta) return;
+    const content = (ta.value || '').trim();
+    if (!content) { alert('⚠️ اكتب تعليقاً أولاً'); return; }
+    const origText = btn.textContent;
+    btn.disabled = true; btn.textContent = '⏳';
+    const myName = getUserName() || 'زائر';
+    try {
+        const res = await fetch('/api/comment', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({id: id})
+            body: JSON.stringify({
+                announcement_id: annId,
+                content: content,
+                user_name: myName,
+                user_token: getUserToken(),
+                parent_id: 0
+            })
         });
         const data = await res.json();
-        if (data.ok) { loadAnnouncementsAdmin(); alert('✅ تم الحذف'); }
-        else { alert('❌ فشل: ' + (data.error || '')); }
-    } catch(e) { alert('❌ خطأ'); }
+        if (data.ok) {
+            commentsCache[annId] = data.comments || [];
+            commentsCountCache[annId] = commentsCache[annId].filter(c => !c.is_deleted).length;
+            ta.value = '';
+            renderComments(annId);
+            updateCommentsBadge(annId);
+        } else {
+            alert('❌ فشل: ' + (data.error || 'غير معروف'));
+        }
+    } catch(e) { alert('❌ خطأ في الاتصال'); }
+    btn.disabled = false; btn.textContent = origText;
 }
-//
+
+function toggleReplyForm(annId, commentId) {
+    const form = document.getElementById('reply-form-' + commentId);
+    if (!form) return;
+    const isOpen = form.classList.contains('show');
+    document.querySelectorAll('.comment-reply-form.show').forEach(f => f.classList.remove('show'));
+    replyOpen[commentId] = !isOpen;
+    if (!isOpen) {
+        form.classList.add('show');
+        setTimeout(() => {
+            const inp = document.getElementById('reply-input-' + commentId);
+            if (inp) inp.focus();
+        }, 100);
+    } else {
+        form.classList.remove('show');
+    }
+}
+
+async function submitReply(annId, commentId) {
+    const inp = document.getElementById('reply-input-' + commentId);
+    if (!inp) return;
+    const content = (inp.value || '').trim();
+    if (!content) { alert('⚠️ اكتب رداً أولاً'); return; }
+    const myName = getUserName() || 'زائر';
+    try {
+        const res = await fetch('/api/comment', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                announcement_id: annId,
+                content: content,
+                user_name: myName,
+                user_token: getUserToken(),
+                parent_id: commentId
+            })
+        });
+        const data = await res.json();
+        if (data.ok) {
+            commentsCache[annId] = data.comments || [];
+            commentsCountCache[annId] = commentsCache[annId].filter(c => !c.is_deleted).length;
+            inp.value = '';
+            replyOpen[commentId] = false;
+            renderComments(annId);
+            updateCommentsBadge(annId);
+        } else {
+            alert('❌ فشل: ' + (data.error || 'غير معروف'));
+        }
+    } catch(e) { alert('❌ خطأ في الاتصال'); }
+}
+
+async function deleteComment(annId, commentId) {
+    if (!confirm('🗑️ حذف هذا التعليق؟')) return;
+    try {
+        const res = await fetch('/api/delete_comment', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                id: commentId,
+                announcement_id: annId,
+                user_token: getUserToken()
+            })
+        });
+        const data = await res.json();
+        if (data.ok) {
+            if (data.comments) {
+                commentsCache[annId] = data.comments;
+                commentsCountCache[annId] = commentsCache[annId].filter(c => !c.is_deleted).length;
+                renderComments(annId);
+            } else {
+                // إعادة تحميل من السيرفر
+                await loadCommentsCount(annId);
+                renderComments(annId);
+            }
+            updateCommentsBadge(annId);
+        } else {
+            alert('❌ فشل: ' + (data.error || 'ليس لديك صلاحية'));
+        }
+    } catch(e) { alert('❌ خطأ في الاتصال'); }
+}
+
+// Ctrl+Enter لإرسال التعليق
+document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        const ta = e.target;
+        if (ta && ta.id && ta.id.startsWith('comment-input-')) {
+            const annId = ta.id.replace('comment-input-', '');
+            const btn = ta.parentElement.querySelector('.comment-send-btn');
+            if (btn) submitComment(parseInt(annId), btn);
+        }
+    }
+});
+
+
 
 // Enter في حقل الاسم = حفظ
 document.getElementById('nameInput').addEventListener('keydown', e => {
@@ -2505,6 +2942,61 @@ def api_reactions():
     if not ann_id:
         return jsonify({'ok': False, 'error': 'معرّف الإعلان مفقود'}), 400
     return jsonify({'ok': True, 'reactions': get_reactions_for_announcement(ann_id)})
+
+# ========== [API التعليقات على الإعلانات] ==========
+@app.route('/api/comments', methods=['GET'])
+def api_comments():
+    """استرجاع كل تعليقات إعلان"""
+    ann_id = request.args.get('announcement_id')
+    if not ann_id:
+        return jsonify({'ok': False, 'error': 'معرّف الإعلان مفقود'}), 400
+    return jsonify({'ok': True, 'comments': get_comments_for_announcement(ann_id, include_deleted=is_admin_logged_in())})
+
+@app.route('/api/comment', methods=['POST'])
+def api_add_comment():
+    """إضافة تعليق جديد على إعلان"""
+    data = request.json or {}
+    ann_id = data.get('announcement_id')
+    content = (data.get('content') or '').strip()
+    user_name = (data.get('user_name') or '').strip()[:30]
+    parent_id = int(data.get('parent_id') or 0)
+    user_token = (data.get('user_token') or request.headers.get('X-User-Token') or '').strip()
+    if not user_token:
+        user_token = (request.remote_addr or 'anon') + '_' + (request.headers.get('User-Agent', '')[:30])
+    if not ann_id or not content:
+        return jsonify({'ok': False, 'error': 'التعليق أو معرّف الإعلان فارغ'}), 400
+    # التحقق من وجود الإعلان
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT id FROM announcements WHERE id=?", (ann_id,))
+    if not c.fetchone():
+        conn.close()
+        return jsonify({'ok': False, 'error': 'الإعلان غير موجود'}), 404
+    conn.close()
+    new_id = add_comment(ann_id, user_token, user_name or 'زائر', content, parent_id)
+    if not new_id:
+        return jsonify({'ok': False, 'error': 'فشل حفظ التعليق'}), 500
+    # إرجاع التعليق الجديد ضمن القائمة المحدّثة
+    return jsonify({'ok': True, 'comment_id': new_id, 'comments': get_comments_for_announcement(ann_id, include_deleted=is_admin_logged_in())})
+
+@app.route('/api/delete_comment', methods=['POST'])
+def api_delete_comment():
+    """حذف تعليق (مالك التعليق أو الأدمن)"""
+    data = request.json or {}
+    comment_id = data.get('id')
+    user_token = (data.get('user_token') or request.headers.get('X-User-Token') or '').strip()
+    if not user_token:
+        user_token = (request.remote_addr or 'anon') + '_' + (request.headers.get('User-Agent', '')[:30])
+    if not comment_id:
+        return jsonify({'ok': False, 'error': 'معرّف التعليق مفقود'}), 400
+    admin_flag = is_admin_logged_in()
+    ok = delete_comment(comment_id, user_token, is_admin=admin_flag)
+    if ok:
+        ann_id = data.get('announcement_id')
+        if ann_id:
+            return jsonify({'ok': True, 'comments': get_comments_for_announcement(ann_id, include_deleted=admin_flag)})
+        return jsonify({'ok': True})
+    return jsonify({'ok': False, 'error': 'فشل الحذف أو ليس لديك صلاحية'}), 403
 
 # ========== [حفظ ترتيب المنصات] (للأدمن فقط) ==========
 @app.route('/api/save_platform_order', methods=['POST'])
