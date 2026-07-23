@@ -1195,7 +1195,7 @@ main_html = """
                 </div>
             </div>
 
-            <div class="section-title" style="margin-top:14px;"><span class="icon">📜</span> الأكواد المسحوبة</div>
+            <div class="section-title" style="margin-top:14px;"><span class="icon">📜</span>أكوادك المسحوبة</div>
             <div class="otp-list" id="otpHistory">
                 <div class="empty-state"><div class="icon">⏳</div><div>في انتظار الأكواد...</div></div>
             </div>
@@ -1701,7 +1701,7 @@ main_html = """
 
         // ============ [حذف كود من الواجهة + السيرفر] للأدمن فقط ============
         async function deleteOtpFromCache(otpId, otpValue, btn) {
-            if (!confirm('🗑️ حذف هذا الكود؟')) return;
+            if (!confirm('🗑️ حذف كودك الخاص ')) return;
             const original = btn.innerHTML;
             btn.disabled = true; btn.innerHTML = '⏳';
             try {
@@ -2820,7 +2820,20 @@ document.addEventListener('keydown', e => {
     }
 });
 
-
+// ============ [حذف إعلان] ============
+async function deleteAnn(id) {
+    if (!confirm('🗑️ حذف هذا الإعلان نهائياً؟')) return;
+    try {
+        const res = await fetch('/api/delete_announcement', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id: id})
+        });
+        const data = await res.json();
+        if (data.ok) { loadAnnouncements(); }
+        else { alert('❌ فشل الحذف: ' + (data.error || 'غير معروف')); }
+    } catch(e) { alert('❌ خطأ في الاتصال'); }
+}
 
 // Enter في حقل الاسم = حفظ
 document.getElementById('nameInput').addEventListener('keydown', e => {
