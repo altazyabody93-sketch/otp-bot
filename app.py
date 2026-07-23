@@ -181,28 +181,55 @@ def save_platform_order(ordered_list):
     conn.commit()
     conn.close()
 
-def delete_otp(otp_id=None, otp_value=None, all_otps=False):
-    """حذف كود واحد أو جميع الأكواد"""
+def delete_otp(otp_id=None, otp_value=None, all_otps=False, number=None, platform=None, older_than_hours=None):
+    """حذف كود واحد أو جميع الأكواد، أو حسب الرقم/المنصة/الفترة"""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     try:
+        deleted_count = 0
         if all_otps:
+            c.execute("SELECT COUNT(*) FROM otp_logs")
+            deleted_count = c.fetchone()[0]
             c.execute("DELETE FROM otp_logs")
         elif otp_id is not None:
             c.execute("DELETE FROM otp_logs WHERE id=?", (otp_id,))
+            deleted_count = c.rowcount
         elif otp_value is not None:
             # قد يكون هناك عدة سجلات بنفس الكود - نحذف الأحدث فقط
             c.execute("DELETE FROM otp_logs WHERE id IN (SELECT id FROM otp_logs WHERE otp=? ORDER BY id DESC LIMIT 1)", (otp_value,))
+            deleted_count = c.rowcount
+        elif number is not None or platform is not None or older_than_hours is not None:
+            conditions = []
+            params = []
+            if number is not None:
+                # حذف الأكواد الخاصة برقم معين أو تطابق آخر 4 أرقام
+                last4 = str(number)[-4:] if len(str(number)) >= 4 else str(number)
+                conditions.append("(number = ? OR number LIKE ?)")
+                params.extend([str(number), f"%{last4}"])
+            if platform is not None:
+                conditions.append("platform = ?")
+                params.append(platform)
+            if older_than_hours is not None:
+                from datetime import timedelta
+                cutoff = (datetime.now() - timedelta(hours=int(older_than_hours))).strftime("%Y-%m-%d %H:%M:%S")
+                conditions.append("timestamp < ?")
+                params.append(cutoff)
+            where = " AND ".join(conditions) if conditions else "1=1"
+            c.execute(f"SELECT COUNT(*) FROM otp_logs WHERE {where}", params)
+            deleted_count = c.fetchone()[0]
+            c.execute(f"DELETE FROM otp_logs WHERE {where}", params)
         conn.commit()
         # تنظيف الكاش
         global _otp_cache
         if '_otp_cache' in globals():
             _otp_cache['data'] = None
             _otp_cache['time'] = 0
-        return True
+        if deleted_count > 0:
+            print(f"🗑️ [حذف أوامر] تم حذف {deleted_count} كود")
+        return deleted_count
     except Exception as e:
         print(f"❌ خطأ حذف OTP: {e}")
-        return False
+        return 0
     finally:
         conn.close()
 
@@ -1195,7 +1222,7 @@ main_html = """
                 </div>
             </div>
 
-            <div class="section-title" style="margin-top:14px;"><span class="icon">📜</span>أكوادك المسحوبة</div>
+            <div class="section-title" style="margin-top:14px;"><span class="icon">📜</span> الأكواد المسحوبة</div>
             <div class="otp-list" id="otpHistory">
                 <div class="empty-state"><div class="icon">⏳</div><div>في انتظار الأكواد...</div></div>
             </div>
@@ -1701,7 +1728,7 @@ main_html = """
 
         // ============ [حذف كود من الواجهة + السيرفر] للأدمن فقط ============
         async function deleteOtpFromCache(otpId, otpValue, btn) {
-            if (!confirm('🗑️ حذف كودك الخاص ')) return;
+            if (!confirm('🗑️ حذف هذا الكود؟')) return;
             const original = btn.innerHTML;
             btn.disabled = true; btn.innerHTML = '⏳';
             try {
@@ -2820,20 +2847,7 @@ document.addEventListener('keydown', e => {
     }
 });
 
-// ============ [حذف إعلان] ============
-async function deleteAnn(id) {
-    if (!confirm('🗑️ حذف هذا الإعلان نهائياً؟')) return;
-    try {
-        const res = await fetch('/api/delete_announcement', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({id: id})
-        });
-        const data = await res.json();
-        if (data.ok) { loadAnnouncements(); }
-        else { alert('❌ فشل الحذف: ' + (data.error || 'غير معروف')); }
-    } catch(e) { alert('❌ خطأ في الاتصال'); }
-}
+
 
 // Enter في حقل الاسم = حفظ
 document.getElementById('nameInput').addEventListener('keydown', e => {
@@ -2897,11 +2911,13 @@ def api_delete_otp():
     otp_id = data.get('id')
     otp_value = data.get('otp')
     if otp_id is not None:
-        if delete_otp(otp_id=otp_id):
-            return jsonify({'ok': True})
+        deleted = delete_otp(otp_id=otp_id)
+        if deleted:
+            return jsonify({'ok': True, 'deleted': deleted})
     elif otp_value is not None:
-        if delete_otp(otp_value=otp_value):
-            return jsonify({'ok': True})
+        deleted = delete_otp(otp_value=otp_value)
+        if deleted:
+            return jsonify({'ok': True, 'deleted': deleted})
     return jsonify({'ok': False, 'error': 'بيانات غير مكتملة'}), 400
 
 # ========== [مسح جميع الأكواد] ==========
@@ -2909,9 +2925,44 @@ def api_delete_otp():
 def api_clear_all_otps():
     if not is_admin_logged_in():
         return jsonify({'ok': False, 'error': 'غير مصرح'}), 403
-    if delete_otp(all_otps=True):
-        return jsonify({'ok': True})
+    deleted = delete_otp(all_otps=True)
+    if deleted is not None and deleted >= 0:
+        return jsonify({'ok': True, 'deleted': deleted})
     return jsonify({'ok': False, 'error': 'فشل الحذف'}), 500
+
+# ========== [حذف الأكواد حسب الرقم/المنصة/الفترة] للأدمن ==========
+@app.route('/api/admin/delete_otps', methods=['POST'])
+def api_admin_delete_otps():
+    """حذف الأكواد بشروط: رقم معيّن، منصة معيّنة، أو أقدم من عدد ساعات"""
+    if not is_admin_logged_in():
+        return jsonify({'ok': False, 'error': 'غير مصرح'}), 403
+    data = request.json or {}
+    number = data.get('number')
+    platform = data.get('platform')
+    older_than_hours = data.get('older_than_hours')
+    if not any([number, platform, older_than_hours is not None]):
+        return jsonify({'ok': False, 'error': 'يجب تحديد شرط واحد على الأقل'}), 400
+    deleted = delete_otp(number=number, platform=platform, older_than_hours=older_than_hours)
+    return jsonify({'ok': True, 'deleted': deleted, 'filter': {
+        'number': number, 'platform': platform, 'older_than_hours': older_than_hours
+    }})
+
+# ========== [إحصائيات الأكواد حسب الرقم] للأدمن ==========
+@app.route('/api/admin/otps_by_number', methods=['GET'])
+def api_admin_otps_by_number():
+    """تجميع الأكواد حسب الرقم - لمعرفة الأرقام النشطة وعدد الأكواد لكل رقم"""
+    if not is_admin_logged_in():
+        return jsonify({'ok': False, 'error': 'غير مصرح'}), 403
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("""SELECT number, platform, COUNT(*) as cnt, MAX(timestamp) as last_seen
+                 FROM otp_logs GROUP BY number, platform ORDER BY cnt DESC LIMIT 200""")
+    rows = c.fetchall()
+    conn.close()
+    return jsonify({
+        'ok': True,
+        'groups': [{'number': r[0], 'platform': r[1], 'count': r[2], 'last_seen': r[3]} for r in rows]
+    })
 
 # ========== [حذف إعلان] (للأدمن فقط) ==========
 @app.route('/api/delete_announcement', methods=['POST'])
@@ -3253,7 +3304,37 @@ def admin_dashboard():
     
     <!-- الأكواد المسحوبة -->
     <h3>🔑 الأكواد المسحوبة <button class="btn btn-danger" onclick="clearAllOtpsAdmin()" style="padding:4px 10px; font-size:11px; margin-right:8px;">🗑️ مسح الكل</button></h3>
+    <div class="section">
+        <!-- [فلاتر] -->
+        <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
+            <input type="text" id="otpFilterNumber" class="form-control" placeholder="📞 البحث برقم..." style="flex:1; min-width:140px; padding:6px 10px;">
+            <select id="otpFilterPlatform" class="form-control" style="flex:1; min-width:120px; padding:6px 10px;">
+                <option value="">-- كل المنصات --</option>
+                <option value="whatsapp">واتساب</option>
+                <option value="telegram">تيليجرام</option>
+                <option value="tiktok">تيك توك</option>
+                <option value="facebook">فيسبوك</option>
+                <option value="instagram">انستقرام</option>
+                <option value="snapchat">سناب شات</option>
+                <option value="google">جوجل</option>
+                <option value="twitter">تويتر/X</option>
+            </select>
+            <button class="btn btn-primary" onclick="applyOtpFilter()" style="padding:6px 12px; font-size:12px;">🔍 فلتر</button>
+            <button class="btn btn-secondary" onclick="clearOtpFilter()" style="padding:6px 12px; font-size:12px;">إعادة</button>
+        </div>
+        <!-- [حذف حسب الفلتر] -->
+        <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; padding:8px; background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.3); border-radius:8px;">
+            <span style="font-size:12px; color:#fca5a5; font-weight:700; align-self:center; flex-shrink:0;">🗑️ حذف الأكواد المفلترة:</span>
+            <button class="btn btn-danger" onclick="deleteFilteredOtps()" style="padding:4px 10px; font-size:11px; flex:1;">⚠️ حذف حسب الفلاتر النشطة</button>
+        </div>
+    </div>
     <div class="section" id="otpLogsList">
+        <div style="text-align:center;color:#64748b;padding:10px;">⏳ جاري التحميل...</div>
+    </div>
+
+    <!-- [الأرقام النشطة] - تجميع الأكواد حسب الرقم والمنصة -->
+    <h3>📱 الأرقام النشطة (حسب الجهاز/المستخدم)</h3>
+    <div class="section" id="otpsByNumberList">
         <div style="text-align:center;color:#64748b;padding:10px;">⏳ جاري التحميل...</div>
     </div>
     
@@ -3333,6 +3414,12 @@ def admin_dashboard():
 </div>
 
 <script>
+// ============ [هروب HTML آمن] ============
+function escapeHtml(s) {
+    if (s === null || s === undefined) return '';
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
 async function loadStats() {
     try {
         const res = await fetch('/admin/api/stats');
@@ -3344,20 +3431,7 @@ async function loadStats() {
     } catch(e) {}
 }
 
-async function loadOtps() {
-    try {
-        const res = await fetch('/api/all_otps');
-        const data = await res.json();
-        const box = document.getElementById('otpLogsList');
-        if (!data.length) { box.innerHTML = '<div style="text-align:center;color:#64748b;padding:10px;">📭 لا توجد أكواد</div>'; return; }
-        box.innerHTML = data.slice(0, 30).map(o => `
-            <div class="otp-log-item">
-                <div><span style="color:#00ffc8;font-weight:900;">${o.otp}</span> <span style="color:#8b949e;font-size:10px;">(${o.platform})</span><br><span style="color:#64748b;font-size:10px;">📞 ${o.number} • ${o.timestamp}</span></div>
-                <button class="btn btn-danger" onclick="deleteOtp('${o.id}','${o.otp}')" style="padding:2px 8px;font-size:10px;">🗑️</button>
-            </div>
-        `).join('');
-    } catch(e) {}
-}
+// [loadOtps و deleteOtp معرّفتان لاحقاً - النسخة المحسّنة]
 
 async function deleteOtp(otpId, otpValue) {
     if(!confirm('🗑️ حذف هذا الكود؟')) return;
@@ -3379,9 +3453,144 @@ async function clearAllOtpsAdmin() {
     try {
         const res = await fetch('/api/clear_all_otps', {method: 'POST', headers: {'Content-Type': 'application/json'}});
         const data = await res.json();
-        if(data.ok) { loadOtps(); loadStats(); alert('✅ تم مسح جميع الأكواد'); }
+        if(data.ok) { loadOtps(); loadStats(); loadOtpsByNumber(); alert('✅ تم مسح جميع الأكواد (' + (data.deleted || 0) + ' كود)'); }
         else { alert('❌ فشل: ' + (data.error || '')); }
     } catch(e) { alert('❌ خطأ'); }
+}
+
+// ============ [إدارة الأكواد المحسّنة] - فلاتر + حذف جماعي + تجميع حسب الرقم ============
+let currentOtpFilter = { number: '', platform: '' };
+
+function applyOtpFilter() {
+    currentOtpFilter.number = (document.getElementById('otpFilterNumber').value || '').trim();
+    currentOtpFilter.platform = document.getElementById('otpFilterPlatform').value || '';
+    loadOtps();
+}
+
+function clearOtpFilter() {
+    document.getElementById('otpFilterNumber').value = '';
+    document.getElementById('otpFilterPlatform').value = '';
+    currentOtpFilter = { number: '', platform: '' };
+    loadOtps();
+}
+
+async function loadOtps() {
+    try {
+        const res = await fetch('/api/all_otps');
+        let data = await res.json();
+        // تطبيق الفلاتر على العميل
+        if (currentOtpFilter.number) {
+            const q = currentOtpFilter.number.toLowerCase();
+            data = data.filter(o => (o.number || '').toLowerCase().includes(q));
+        }
+        if (currentOtpFilter.platform) {
+            data = data.filter(o => o.platform === currentOtpFilter.platform);
+        }
+        const box = document.getElementById('otpLogsList');
+        if (!data.length) {
+            const msg = (currentOtpFilter.number || currentOtpFilter.platform) ? '🔍 لا توجد أكواد تطابق الفلاتر' : '📭 لا توجد أكواد';
+            box.innerHTML = `<div style="text-align:center;color:#64748b;padding:10px;">${msg}</div>`;
+            return;
+        }
+        const filterLabel = (currentOtpFilter.number || currentOtpFilter.platform) ? `<div style="font-size:11px;color:#fca5a5;margin-bottom:6px;">🔍 مفلتر: ${currentOtpFilter.number ? '📞 ' + escapeHtml(currentOtpFilter.number) : ''} ${currentOtpFilter.platform ? '🏷️ ' + escapeHtml(currentOtpFilter.platform) : ''} (${data.length})</div>` : '';
+        box.innerHTML = filterLabel + data.slice(0, 50).map(o => `
+            <div class="otp-log-item">
+                <div><span style="color:#00ffc8;font-weight:900;">${escapeHtml(o.otp)}</span> <span style="color:#8b949e;font-size:10px;">(${escapeHtml(o.platform || 'غير معروف')})</span><br><span style="color:#64748b;font-size:10px;">📞 ${escapeHtml(o.number || '—')} • ${escapeHtml(o.timestamp || '')}</span></div>
+                <button class="btn btn-danger" onclick="deleteOtp('${o.id}','${escapeHtml(o.otp)}')" style="padding:2px 8px;font-size:10px;">🗑️</button>
+            </div>
+        `).join('');
+    } catch(e) {}
+}
+
+async function deleteFilteredOtps() {
+    const number = (document.getElementById('otpFilterNumber').value || '').trim();
+    const platform = document.getElementById('otpFilterPlatform').value || '';
+    if (!number && !platform) {
+        alert('⚠️ اكتب رقم أو اختر منصة أولاً');
+        return;
+    }
+    let desc = '';
+    if (number) desc += '📞 الرقم: ' + number + ' ';
+    if (platform) desc += '🏷️ المنصة: ' + platform;
+    if (!confirm('⚠️ حذف جميع الأكواد لـ: ' + desc + ' ؟\n(سيتم حذف الأكواد من السيرفر، وستختفي عند المستخدمين عند التحديث)')) return;
+    try {
+        const payload = {};
+        if (number) payload.number = number;
+        if (platform) payload.platform = platform;
+        const res = await fetch('/api/admin/delete_otps', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.ok) {
+            alert('✅ تم حذف ' + (data.deleted || 0) + ' كود');
+            loadOtps();
+            loadStats();
+            loadOtpsByNumber();
+        } else {
+            alert('❌ فشل: ' + (data.error || ''));
+        }
+    } catch(e) { alert('❌ خطأ: ' + e.message); }
+}
+
+async function loadOtpsByNumber() {
+    const box = document.getElementById('otpsByNumberList');
+    if (!box) return;
+    try {
+        const res = await fetch('/api/admin/otps_by_number');
+        const data = await res.json();
+        if (!data.ok || !data.groups || !data.groups.length) {
+            box.innerHTML = '<div style="text-align:center;color:#64748b;padding:10px;">📭 لا توجد أرقام نشطة</div>';
+            return;
+        }
+        box.innerHTML = `
+            <div style="display:flex; gap:6px; margin-bottom:8px; align-items:center;">
+                <span style="font-size:11px; color:#8b949e;">عدد الأرقام النشطة: <strong style="color:#00ffc8;">${data.groups.length}</strong></span>
+            </div>
+        ` + data.groups.map(g => `
+            <div class="combo-item" style="flex-wrap:wrap;">
+                <div style="flex:1; min-width:180px;">
+                    <div style="font-size:13px; font-weight:800; color:#fff;">📞 ${escapeHtml(g.number || '—')}</div>
+                    <div style="font-size:11px; color:#8b949e; margin-top:2px;">🏷️ ${escapeHtml(g.platform || '—')} • 🔑 ${g.count} كود • 🕒 ${escapeHtml(g.last_seen || '—')}</div>
+                </div>
+                <div style="display:flex; gap:4px;">
+                    <button class="btn btn-primary" onclick="fillFilterAndLoad('${escapeHtml(g.number || '')}', '${escapeHtml(g.platform || '')}')" style="padding:4px 8px; font-size:10px;">🔍 فلتر</button>
+                    <button class="btn btn-danger" onclick="deleteAllForNumber('${escapeHtml(g.number || '')}', '${escapeHtml(g.platform || '')}', ${g.count})" style="padding:4px 8px; font-size:10px;">🗑️ حذف ${g.count}</button>
+                </div>
+            </div>
+        `).join('');
+    } catch(e) {
+        box.innerHTML = '<div style="text-align:center;color:#ef4444;padding:10px;">❌ خطأ في التحميل</div>';
+    }
+}
+
+function fillFilterAndLoad(number, platform) {
+    document.getElementById('otpFilterNumber').value = number;
+    document.getElementById('otpFilterPlatform').value = platform;
+    applyOtpFilter();
+    // تمرير إلى قسم الأكواد
+    document.getElementById('otpLogsList')?.scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+
+async function deleteAllForNumber(number, platform, expectedCount) {
+    if (!confirm('⚠️ حذف جميع الأكواد (' + expectedCount + ') لـ 📞 ' + number + ' / ' + platform + '؟')) return;
+    try {
+        const res = await fetch('/api/admin/delete_otps', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({number: number, platform: platform})
+        });
+        const data = await res.json();
+        if (data.ok) {
+            alert('✅ تم حذف ' + (data.deleted || 0) + ' كود لـ ' + number);
+            loadOtps();
+            loadStats();
+            loadOtpsByNumber();
+        } else {
+            alert('❌ فشل: ' + (data.error || ''));
+        }
+    } catch(e) { alert('❌ خطأ: ' + e.message); }
 }
 
 async function loadAnnouncementsAdmin() {
@@ -3614,13 +3823,20 @@ async function changePassword() {
 
 loadStats();
 loadOtps();
+loadOtpsByNumber();
 loadUsers();
 loadAnnouncementsAdmin();
 updateAdminSoundUi();
 updateAdminThemeUi();
 setInterval(loadStats, 30000);
 setInterval(loadOtps, 30000);
+setInterval(loadOtpsByNumber, 45000);
 setInterval(loadAnnouncementsAdmin, 60000);
+
+// Enter في حقل فلتر الأكواد
+document.getElementById('otpFilterNumber').addEventListener('keydown', e => {
+    if (e.key === 'Enter') applyOtpFilter();
+});
 </script>
 </body>
 </html>
