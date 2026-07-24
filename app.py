@@ -4352,17 +4352,14 @@ def monitor_telegram_group():
         time.sleep(3)
 
 threading.Thread(target=monitor_telegram_group, daemon=True).start()
-
-if __name__ == '__main__':
 # ========== 📡 API للأكواد (التطبيق يقرأ من هنا) ==========
 
 @app.route('/api/latest-code', methods=['GET'])
 def api_latest_code():
-    """API يجيب آخر كود (التطبيق يقرأ من هنا)"""
+    """API يجيب آخر كود"""
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
-        # يجيب آخر كود
         c.execute("SELECT number, otp, timestamp, platform FROM otp_logs ORDER BY id DESC LIMIT 1")
         row = c.fetchone()
         conn.close()
@@ -4393,5 +4390,30 @@ def api_all_codes():
         return jsonify({'success': True, 'codes': codes})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
+
+@app.route('/api/test-otp', methods=['GET'])
+def test_otp():
+    """اختبار - يحط كود عشوائي"""
+    import random
+    test_code = str(random.randint(100000, 999999))
+    test_number = "967" + str(random.randint(10000000, 99999999))
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("INSERT INTO otp_logs (number, otp, timestamp, platform) VALUES (?, ?, ?, ?)",
+              (test_number, test_code, now, "whatsapp"))
+    conn.commit()
+    conn.close()
+    
+    return jsonify({
+        'success': True,
+        'code': test_code,
+        'number': test_number,
+        'message': 'كود تجريبي تم إنشاؤه!'
+    })
+
+# ========== تشغيل التطبيق ==========
+if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
