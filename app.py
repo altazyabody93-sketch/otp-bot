@@ -4354,5 +4354,44 @@ def monitor_telegram_group():
 threading.Thread(target=monitor_telegram_group, daemon=True).start()
 
 if __name__ == '__main__':
+# ========== 📡 API للأكواد (التطبيق يقرأ من هنا) ==========
+
+@app.route('/api/latest-code', methods=['GET'])
+def api_latest_code():
+    """API يجيب آخر كود (التطبيق يقرأ من هنا)"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        # يجيب آخر كود
+        c.execute("SELECT number, otp, timestamp, platform FROM otp_logs ORDER BY id DESC LIMIT 1")
+        row = c.fetchone()
+        conn.close()
+        
+        if row:
+            return jsonify({
+                'success': True,
+                'number': row[0],
+                'code': row[1],
+                'timestamp': row[2],
+                'platform': row[3]
+            })
+        return jsonify({'success': False, 'message': 'لا توجد أكواد'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+@app.route('/api/all-codes', methods=['GET'])
+def api_all_codes():
+    """API يجيب كل الأكواد"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("SELECT number, otp, timestamp, platform FROM otp_logs ORDER BY id DESC LIMIT 20")
+        rows = c.fetchall()
+        conn.close()
+        
+        codes = [{'number': r[0], 'code': r[1], 'timestamp': r[2], 'platform': r[3]} for r in rows]
+        return jsonify({'success': True, 'codes': codes})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
