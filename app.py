@@ -4354,46 +4354,32 @@ def monitor_telegram_group():
 threading.Thread(target=monitor_telegram_group, daemon=True).start()
 # ========== 📡 API للأكواد (التطبيق يقرأ من هنا) ==========
 
-@app.route('/api/latest-code', methods=['GET'])
-def api_latest_code():
-    """API يجيب آخر كود"""
+# ✅ Endpoint الجديد (التطبيق يقرأ منه)
+@app.route('/api/pending-otps', methods=['GET'])
+def pending_otps():
+    last_id = request.args.get('last_id', '0')
     try:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute("SELECT number, otp, timestamp, platform FROM otp_logs ORDER BY id DESC LIMIT 1")
-        row = c.fetchone()
-        conn.close()
-        
-        if row:
-            return jsonify({
-                'success': True,
-                'number': row[0],
-                'code': row[1],
-                'timestamp': row[2],
-                'platform': row[3]
-            })
-        return jsonify({'success': False, 'message': 'لا توجد أكواد'})
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)})
+        last_id = int(last_id)
+    except:
+        last_id = 0
+    
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT id, number, otp, timestamp, platform FROM otp_logs WHERE id > ? ORDER BY id ASC LIMIT 50", (last_id,))
+    rows = c.fetchall()
+    conn.close()
+    
+    codes = [{'id': r[0], 'number': r[1], 'code': r[2], 'timestamp': r[3], 'platform': r[4]} for r in rows]
+    return jsonify({
+        'success': True,
+        'count': len(codes),
+        'codes': codes,
+        'last_id': rows[-1][0] if rows else last_id
+    })
 
-@app.route('/api/all-codes', methods=['GET'])
-def api_all_codes():
-    """API يجيب كل الأكواد"""
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute("SELECT number, otp, timestamp, platform FROM otp_logs ORDER BY id DESC LIMIT 20")
-        rows = c.fetchall()
-        conn.close()
-        
-        codes = [{'number': r[0], 'code': r[1], 'timestamp': r[2], 'platform': r[3]} for r in rows]
-        return jsonify({'success': True, 'codes': codes})
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)})
-
+# ✅ Endpoint تجريبي (اختياري - للتجربة)
 @app.route('/api/test-otp', methods=['GET'])
 def test_otp():
-    """اختبار - يحط كود عشوائي"""
     import random
     test_code = str(random.randint(100000, 999999))
     test_number = "967" + str(random.randint(10000000, 99999999))
@@ -4412,7 +4398,6 @@ def test_otp():
         'number': test_number,
         'message': 'كود تجريبي تم إنشاؤه!'
     })
-
 # ========== تشغيل التطبيق ==========
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
