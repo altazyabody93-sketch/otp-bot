@@ -4352,11 +4352,12 @@ def monitor_telegram_group():
         time.sleep(3)
 
 threading.Thread(target=monitor_telegram_group, daemon=True).start()
+
 # ========== 📡 API للأكواد (التطبيق يقرأ من هنا) ==========
 
-# ✅ Endpoint الجديد (التطبيق يقرأ منه)
 @app.route('/api/pending-otps', methods=['GET'])
 def pending_otps():
+    """إرجاع الأكواد الجديدة للتطبيق"""
     last_id = request.args.get('last_id', '0')
     try:
         last_id = int(last_id)
@@ -4369,7 +4370,16 @@ def pending_otps():
     rows = c.fetchall()
     conn.close()
     
-    codes = [{'id': r[0], 'number': r[1], 'code': r[2], 'timestamp': r[3], 'platform': r[4]} for r in rows]
+    codes = []
+    for r in rows:
+        codes.append({
+            'id': r[0],
+            'number': r[1],
+            'code': r[2],
+            'timestamp': r[3],
+            'platform': r[4] or 'غير معروف'
+        })
+    
     return jsonify({
         'success': True,
         'count': len(codes),
@@ -4377,9 +4387,10 @@ def pending_otps():
         'last_id': rows[-1][0] if rows else last_id
     })
 
-# ✅ Endpoint تجريبي (اختياري - للتجربة)
+# ========== 🧪 Endpoint تجريبي (للتأكد من عمل API) ==========
 @app.route('/api/test-otp', methods=['GET'])
 def test_otp():
+    """إنشاء كود تجريبي لاختبار التطبيق"""
     import random
     test_code = str(random.randint(100000, 999999))
     test_number = "967" + str(random.randint(10000000, 99999999))
@@ -4396,9 +4407,8 @@ def test_otp():
         'success': True,
         'code': test_code,
         'number': test_number,
-        'message': 'كود تجريبي تم إنشاؤه!'
+        'message': '✅ كود تجريبي تم إنشاؤه!'
     })
-# ========== تشغيل التطبيق ==========
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
