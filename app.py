@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from functools import wraps
 
 app = Flask(__name__)
+from api_routes import api_bp
 app.secret_key = "supersecretkey_change_this"
 DB_PATH = "bot.db"
 
