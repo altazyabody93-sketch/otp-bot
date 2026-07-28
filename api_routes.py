@@ -4,7 +4,7 @@ from flask import Blueprint, jsonify, request
 # إنشاء Blueprint لربط المسارات بتطبيق Flask الرئيسي
 api_bp = Blueprint('api_bp', __name__)
 
-DB_PATH = "otp_database.db"
+DB_PATH = "bot.db"
 
 # --------------------------------------------------
 # 1. دالة جلب الأكواد المعلقة للتطبيق (Pending OTPs)
