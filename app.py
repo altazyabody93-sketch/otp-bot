@@ -4356,11 +4356,17 @@ threading.Thread(target=monitor_telegram_group, daemon=True).start()
 
 @app.route('/api/latest-code', methods=['GET'])
 def api_latest_code():
-    """API يجيب آخر كود"""
+    """API يجيب آخر كود - مع إمكانية التصفية برقم الهاتف لمنع التداخل"""
     try:
+        user_number = request.args.get('number')
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
-        c.execute("SELECT number, otp, timestamp, platform FROM otp_logs ORDER BY id DESC LIMIT 1")
+
+        if user_number:
+            c.execute("SELECT number, otp, timestamp, platform FROM otp_logs WHERE number = ? ORDER BY id DESC LIMIT 1", (user_number,))
+        else:
+            c.execute("SELECT number, otp, timestamp, platform FROM otp_logs ORDER BY id DESC LIMIT 1")
+
         row = c.fetchone()
         conn.close()
         
@@ -4376,13 +4382,20 @@ def api_latest_code():
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
 
+
 @app.route('/api/all-codes', methods=['GET'])
 def api_all_codes():
-    """API يجيب كل الأكواد"""
+    """API يجيب كل الأكواد - مع إمكانية التصفية برقم الهاتف"""
     try:
+        user_number = request.args.get('number')
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
-        c.execute("SELECT number, otp, timestamp, platform FROM otp_logs ORDER BY id DESC LIMIT 20")
+
+        if user_number:
+            c.execute("SELECT number, otp, timestamp, platform FROM otp_logs WHERE number = ? ORDER BY id DESC LIMIT 20", (user_number,))
+        else:
+            c.execute("SELECT number, otp, timestamp, platform FROM otp_logs ORDER BY id DESC LIMIT 20")
+
         rows = c.fetchall()
         conn.close()
         
@@ -4391,12 +4404,12 @@ def api_all_codes():
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
 
+
 @app.route('/api/test-otp', methods=['GET'])
 def test_otp():
-    """اختبار - يحط كود عشوائي"""
-    import random
+    """اختبار - يحط كود عشوائي بدون أي import داخلي"""
+    test_number = request.args.get('number', default="967" + str(random.randint(10000000, 99999999)))
     test_code = str(random.randint(100000, 999999))
-    test_number = "967" + str(random.randint(10000000, 99999999))
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     conn = sqlite3.connect(DB_PATH)
