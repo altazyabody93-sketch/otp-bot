@@ -4360,13 +4360,10 @@ DB_PATH = "otp_database.db"
 @app.route('/api/pending-otps', methods=['GET'])
 def get_pending_otps():
     try:
-        # استلام last_id من الطلب (الافتراضي 0)
         last_id = request.args.get('last_id', default=0, type=int)
 
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
-        
-        # استعلام السجلات التي معرّفها أكبر من last_id
         c.execute(
             "SELECT id, number, otp, platform, timestamp FROM otp_logs WHERE id > ? ORDER BY id ASC",
             (last_id,)
@@ -4374,7 +4371,6 @@ def get_pending_otps():
         rows = c.fetchall()
         conn.close()
 
-        # تحويل النتائج إلى قائمة تنسيق JSON يفهمها التطبيق
         otps = []
         for row in rows:
             otps.append({
@@ -4385,11 +4381,7 @@ def get_pending_otps():
                 'timestamp': row[4]
             })
 
-        return jsonify({
-            'success': True,
-            'count': len(otps),
-            'data': otps
-        })
+        return jsonify({'success': True, 'count': len(otps), 'data': otps})
 
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
@@ -4430,36 +4422,31 @@ def get_my_code():
 
 
 # --------------------------------------------------
-# 3. صفحة العرض الرئيسية (تتضمن ألوان ورموز SVG)
+# 3. صفحة العرض الرئيسية
 # --------------------------------------------------
-PAGE_TEMPLATE = """
-<!DOCTYPE html>
+PAGE_HTML = """<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <title>مركز الأكواد</title>
     <style>
-        body { font-family: sans-serif; background-color: #0a0e1a; color: #fff; text-align: center; padding: 20px; }
-        .card { background: #1a1a3e; border-radius: 10px; padding: 15px; margin: 10px auto; max-width: 400px; display: flex; align-items: center; gap: 10px; }
-        .icon { width: 32px; height: 32px; fill: #f5c842; }
+        body { font-family: system-ui, sans-serif; background-color: #0a0e1a; color: #fff; text-align: center; padding: 40px 20px; }
+        .card { background: #1a1a3e; border-radius: 12px; padding: 25px; margin: 0 auto; max-width: 420px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        h1 { color: #f5c842; font-size: 24px; margin-bottom: 10px; }
+        p { color: #d0d0e0; font-size: 15px; }
     </style>
 </head>
 <body>
-    <h1>
-        <!-- أيقونة SVG رمزية -->
-        <svg class="icon" viewBox="0 0 24 24">
-            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-        </svg>
-        سجل الأكواد
-    </h1>
-    <p>السيرفر يعمل بنجاح ومستعد لاستقبال الطلبات.</p>
+    <div class="card">
+        <h1>🚀 مركز الأكواد (Al-Matari OTP)</h1>
+        <p>السيرفر يعمل بنجاح ومستعد لاستقبال طلبات التطبيق.</p>
+    </div>
 </body>
-</html>
-"""
+</html>"""
 
 @app.route('/')
 def index():
-    return render_template_string(PAGE_TEMPLATE)
+    return PAGE_HTML
 
 
 # ========== تشغيل التطبيق ==========
