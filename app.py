@@ -4353,12 +4353,26 @@ def monitor_telegram_group():
 
 threading.Thread(target=monitor_telegram_group, daemon=True).start()
 
-# ========== 📡 API للأكواد (التطبيق يقرأ من هنا) ==========
+# ========== 📡 API محمي + تحويل الأسماء ==========
+
+PLATFORM_NAMES_AR = {
+    "whatsapp": "واتساب data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="%2325D366"/><path fill="%23fff" d="M50 18c-17.6 0-32 14.4-32 32 0 6 1.7 11.8 4.8 16.8L18 82l15.6-4.7C38.6 80.1 44.2 82 50 82c17.6 0 32-14.4 32-32S67.6 18 50 18zm18.6 45.6c-.8 2.2-4.6 4.2-6.4 4.5-1.6.3-3.7.4-5.9-.4-1.4-.5-3.1-1.1-5.4-2.2-9.5-4.1-15.7-13.7-16.2-14.3-.5-.7-3.9-5.1-3.9-9.7s2.4-6.9 3.3-7.9c.9-.9 1.9-1.2 2.6-1.2.6 0 1.2 0 1.7 0 .6 0 1.3-.2 2 .1 1.6.7 2.6 3 2.9 3.9.3.9.5 1.5 0 2.4-.4.9-1.5 2.4-2.2 3.4 0 0 .7.7 1.4 1.5 2.4 2.7 5.3 5.5 9.6 7.1 1.5.5 2.3.6 3-.4.6-1 2.5-3 3.2-4 .7-1 1.4-.8 2.3-.5.9.3 5.8 2.7 6.8 3.2 1 .5 1.6.7 1.8 1.1.2.5.2 2.5-.6 4.7z"/></svg>
+", "wa": "واتساب data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="%2325D366"/><path fill="%23fff" d="M50 18c-17.6 0-32 14.4-32 32 0 6 1.7 11.8 4.8 16.8L18 82l15.6-4.7C38.6 80.1 44.2 82 50 82c17.6 0 32-14.4 32-32S67.6 18 50 18zm18.6 45.6c-.8 2.2-4.6 4.2-6.4 4.5-1.6.3-3.7.4-5.9-.4-1.4-.5-3.1-1.1-5.4-2.2-9.5-4.1-15.7-13.7-16.2-14.3-.5-.7-3.9-5.1-3.9-9.7s2.4-6.9 3.3-7.9c.9-.9 1.9-1.2 2.6-1.2.6 0 1.2 0 1.7 0 .6 0 1.3-.2 2 .1 1.6.7 2.6 3 2.9 3.9.3.9.5 1.5 0 2.4-.4.9-1.5 2.4-2.2 3.4 0 0 .7.7 1.4 1.5 2.4 2.7 5.3 5.5 9.6 7.1 1.5.5 2.3.6 3-.4.6-1 2.5-3 3.2-4 .7-1 1.4-.8 2.3-.5.9.3 5.8 2.7 6.8 3.2 1 .5 1.6.7 1.8 1.1.2.5.2 2.5-.6 4.7z"/></svg>
+",
+    "facebook": "فيسبوك 💙", "fb": "فيسبوك 💙",
+    "telegram": "تيليجرام ✈️", "tg": "تيليجرام ✈️",
+    "tiktok": "تيك توك 🎵", "tt": "تيك توك 🎵",
+    "instagram": "انستقرام 📷", "ig": "انستقرام 📷",
+    "snapchat": "سناب شات 👻", "sc": "سناب شات 👻",
+    "google": "جوجل 🔍", "gg": "جوجل 🔍",
+    "twitter": "تويتر/X 🐦", "tw": "تويتر/X 🐦", "x": "تويتر/X 🐦",
+}
 
 @app.route('/api/pending-otps', methods=['GET'])
 def pending_otps():
-    """إرجاع الأكواد الجديدة للتطبيق"""
     last_id = request.args.get('last_id', '0')
+    user_token = request.args.get('token', '').strip()
+    
     try:
         last_id = int(last_id)
     except:
@@ -4366,18 +4380,31 @@ def pending_otps():
     
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT id, number, otp, timestamp, platform FROM otp_logs WHERE id > ? ORDER BY id ASC LIMIT 50", (last_id,))
+    
+    # ✅ لو في token - يرجع أكواد هالشخص بس
+    # ✅ لو ما في token - يرجع كل الأكواد
+    if user_token:
+        c.execute("""SELECT id, number, otp, timestamp, platform 
+                     FROM otp_logs 
+                     WHERE id > ? AND (user_token=? OR user_token IS NULL OR user_token='') 
+                     ORDER BY id ASC LIMIT 50""", (last_id, user_token))
+    else:
+        c.execute("SELECT id, number, otp, timestamp, platform FROM otp_logs WHERE id > ? ORDER BY id ASC LIMIT 50", (last_id,))
+    
     rows = c.fetchall()
     conn.close()
     
     codes = []
     for r in rows:
+        platform_raw = (r[4] or '').strip().lower()
+        platform_ar = PLATFORM_NAMES_AR.get(platform_raw, platform_raw if platform_raw else 'غير معروف')
+        
         codes.append({
             'id': r[0],
             'number': r[1],
             'code': r[2],
             'timestamp': r[3],
-            'platform': r[4] or 'غير معروف'
+            'platform': platform_ar
         })
     
     return jsonify({
@@ -4385,29 +4412,6 @@ def pending_otps():
         'count': len(codes),
         'codes': codes,
         'last_id': rows[-1][0] if rows else last_id
-    })
-
-# ========== 🧪 Endpoint تجريبي (للتأكد من عمل API) ==========
-@app.route('/api/test-otp', methods=['GET'])
-def test_otp():
-    """إنشاء كود تجريبي لاختبار التطبيق"""
-    import random
-    test_code = str(random.randint(100000, 999999))
-    test_number = "967" + str(random.randint(10000000, 99999999))
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("INSERT INTO otp_logs (number, otp, timestamp, platform) VALUES (?, ?, ?, ?)",
-              (test_number, test_code, now, "whatsapp"))
-    conn.commit()
-    conn.close()
-    
-    return jsonify({
-        'success': True,
-        'code': test_code,
-        'number': test_number,
-        'message': '✅ كود تجريبي تم إنشاؤه!'
     })
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
