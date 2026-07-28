@@ -4352,67 +4352,117 @@ def monitor_telegram_group():
         time.sleep(3)
 
 threading.Thread(target=monitor_telegram_group, daemon=True).start()
+DB_PATH = "otp_database.db"
 
-# ========== 📡 API محمي + تحويل الأسماء ==========
-
-PLATFORM_NAMES_AR = {
-    "whatsapp": "واتساب data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="%2325D366"/><path fill="%23fff" d="M50 18c-17.6 0-32 14.4-32 32 0 6 1.7 11.8 4.8 16.8L18 82l15.6-4.7C38.6 80.1 44.2 82 50 82c17.6 0 32-14.4 32-32S67.6 18 50 18zm18.6 45.6c-.8 2.2-4.6 4.2-6.4 4.5-1.6.3-3.7.4-5.9-.4-1.4-.5-3.1-1.1-5.4-2.2-9.5-4.1-15.7-13.7-16.2-14.3-.5-.7-3.9-5.1-3.9-9.7s2.4-6.9 3.3-7.9c.9-.9 1.9-1.2 2.6-1.2.6 0 1.2 0 1.7 0 .6 0 1.3-.2 2 .1 1.6.7 2.6 3 2.9 3.9.3.9.5 1.5 0 2.4-.4.9-1.5 2.4-2.2 3.4 0 0 .7.7 1.4 1.5 2.4 2.7 5.3 5.5 9.6 7.1 1.5.5 2.3.6 3-.4.6-1 2.5-3 3.2-4 .7-1 1.4-.8 2.3-.5.9.3 5.8 2.7 6.8 3.2 1 .5 1.6.7 1.8 1.1.2.5.2 2.5-.6 4.7z"/></svg>
-", "wa": "واتساب data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="%2325D366"/><path fill="%23fff" d="M50 18c-17.6 0-32 14.4-32 32 0 6 1.7 11.8 4.8 16.8L18 82l15.6-4.7C38.6 80.1 44.2 82 50 82c17.6 0 32-14.4 32-32S67.6 18 50 18zm18.6 45.6c-.8 2.2-4.6 4.2-6.4 4.5-1.6.3-3.7.4-5.9-.4-1.4-.5-3.1-1.1-5.4-2.2-9.5-4.1-15.7-13.7-16.2-14.3-.5-.7-3.9-5.1-3.9-9.7s2.4-6.9 3.3-7.9c.9-.9 1.9-1.2 2.6-1.2.6 0 1.2 0 1.7 0 .6 0 1.3-.2 2 .1 1.6.7 2.6 3 2.9 3.9.3.9.5 1.5 0 2.4-.4.9-1.5 2.4-2.2 3.4 0 0 .7.7 1.4 1.5 2.4 2.7 5.3 5.5 9.6 7.1 1.5.5 2.3.6 3-.4.6-1 2.5-3 3.2-4 .7-1 1.4-.8 2.3-.5.9.3 5.8 2.7 6.8 3.2 1 .5 1.6.7 1.8 1.1.2.5.2 2.5-.6 4.7z"/></svg>
-",
-    "facebook": "فيسبوك 💙", "fb": "فيسبوك 💙",
-    "telegram": "تيليجرام ✈️", "tg": "تيليجرام ✈️",
-    "tiktok": "تيك توك 🎵", "tt": "تيك توك 🎵",
-    "instagram": "انستقرام 📷", "ig": "انستقرام 📷",
-    "snapchat": "سناب شات 👻", "sc": "سناب شات 👻",
-    "google": "جوجل 🔍", "gg": "جوجل 🔍",
-    "twitter": "تويتر/X 🐦", "tw": "تويتر/X 🐦", "x": "تويتر/X 🐦",
-}
-
+# --------------------------------------------------
+# 1. دالة جلب الأكواد المعلقة للتطبيق (Pending OTPs)
+# --------------------------------------------------
 @app.route('/api/pending-otps', methods=['GET'])
-def pending_otps():
-    last_id = request.args.get('last_id', '0')
-    user_token = request.args.get('token', '').strip()
-    
+def get_pending_otps():
     try:
-        last_id = int(last_id)
-    except:
-        last_id = 0
-    
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    
-    # ✅ لو في token - يرجع أكواد هالشخص بس
-    # ✅ لو ما في token - يرجع كل الأكواد
-    if user_token:
-        c.execute("""SELECT id, number, otp, timestamp, platform 
-                     FROM otp_logs 
-                     WHERE id > ? AND (user_token=? OR user_token IS NULL OR user_token='') 
-                     ORDER BY id ASC LIMIT 50""", (last_id, user_token))
-    else:
-        c.execute("SELECT id, number, otp, timestamp, platform FROM otp_logs WHERE id > ? ORDER BY id ASC LIMIT 50", (last_id,))
-    
-    rows = c.fetchall()
-    conn.close()
-    
-    codes = []
-    for r in rows:
-        platform_raw = (r[4] or '').strip().lower()
-        platform_ar = PLATFORM_NAMES_AR.get(platform_raw, platform_raw if platform_raw else 'غير معروف')
+        # استلام last_id من الطلب (الافتراضي 0)
+        last_id = request.args.get('last_id', default=0, type=int)
+
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
         
-        codes.append({
-            'id': r[0],
-            'number': r[1],
-            'code': r[2],
-            'timestamp': r[3],
-            'platform': platform_ar
+        # استعلام السجلات التي معرّفها أكبر من last_id
+        c.execute(
+            "SELECT id, number, otp, platform, timestamp FROM otp_logs WHERE id > ? ORDER BY id ASC",
+            (last_id,)
+        )
+        rows = c.fetchall()
+        conn.close()
+
+        # تحويل النتائج إلى قائمة تنسيق JSON يفهمها التطبيق
+        otps = []
+        for row in rows:
+            otps.append({
+                'id': row[0],
+                'number': row[1],
+                'code': row[2],
+                'platform': row[3],
+                'timestamp': row[4]
+            })
+
+        return jsonify({
+            'success': True,
+            'count': len(otps),
+            'data': otps
         })
-    
-    return jsonify({
-        'success': True,
-        'count': len(codes),
-        'codes': codes,
-        'last_id': rows[-1][0] if rows else last_id
-    })
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+# --------------------------------------------------
+# 2. دالة جلب آخر كود لرقم محدد (Get My Code)
+# --------------------------------------------------
+@app.route('/api/get-my-code', methods=['GET'])
+def get_my_code():
+    try:
+        user_number = request.args.get('number')
+        if not user_number:
+            return jsonify({'success': False, 'message': 'يرجى تحديد الرقم'})
+
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute(
+            "SELECT number, otp, timestamp, platform FROM otp_logs WHERE number = ? ORDER BY id DESC LIMIT 1",
+            (user_number,)
+        )
+        row = c.fetchone()
+        conn.close()
+
+        if row:
+            return jsonify({
+                'success': True,
+                'number': row[0],
+                'code': row[1],
+                'timestamp': row[2],
+                'platform': row[3]
+            })
+
+        return jsonify({'success': False, 'message': 'في انتظار وصول الكود...'})
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+# --------------------------------------------------
+# 3. صفحة العرض الرئيسية (تتضمن ألوان ورموز SVG)
+# --------------------------------------------------
+PAGE_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>مركز الأكواد</title>
+    <style>
+        body { font-family: sans-serif; background-color: #0a0e1a; color: #fff; text-align: center; padding: 20px; }
+        .card { background: #1a1a3e; border-radius: 10px; padding: 15px; margin: 10px auto; max-width: 400px; display: flex; align-items: center; gap: 10px; }
+        .icon { width: 32px; height: 32px; fill: #f5c842; }
+    </style>
+</head>
+<body>
+    <h1>
+        <!-- أيقونة SVG رمزية -->
+        <svg class="icon" viewBox="0 0 24 24">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+        </svg>
+        سجل الأكواد
+    </h1>
+    <p>السيرفر يعمل بنجاح ومستعد لاستقبال الطلبات.</p>
+</body>
+</html>
+"""
+
+@app.route('/')
+def index():
+    return render_template_string(PAGE_TEMPLATE)
+
+
+# ========== تشغيل التطبيق ==========
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
