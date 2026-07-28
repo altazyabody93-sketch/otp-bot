@@ -11,9 +11,6 @@ from datetime import datetime, timedelta
 from functools import wraps
 
 app = Flask(__name__)
-from api_routes import api_bp
-app.register_blueprint(api_bp)
-
 app.secret_key = "supersecretkey_change_this"
 DB_PATH = "bot.db"
 
@@ -4355,7 +4352,81 @@ def monitor_telegram_group():
         time.sleep(3)
 
 threading.Thread(target=monitor_telegram_group, daemon=True).start()
+# ========== 📡 API للأكواد (التطبيق يقرأ من هنا) ==========
 
+@app.route('/api/latest-code', methods=['GET'])
+def api_latest_code():
+    """API يجيب آخر كود - مع إمكانية التصفية برقم الهاتف لمنع التداخل"""
+    try:
+        user_number = request.args.get('number')
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+
+        if user_number:
+            c.execute("SELECT number, otp, timestamp, platform FROM otp_logs WHERE number = ? ORDER BY id DESC LIMIT 1", (user_number,))
+        else:
+            c.execute("SELECT number, otp, timestamp, platform FROM otp_logs ORDER BY id DESC LIMIT 1")
+
+        row = c.fetchone()
+        conn.close()
+        
+        if row:
+            return jsonify({
+                'success': True,
+                'number': row[0],
+                'code': row[1],
+                'timestamp': row[2],
+                'platform': row[3]
+            })
+        return jsonify({'success': False, 'message': 'لا توجد أكواد'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+
+@app.route('/api/all-codes', methods=['GET'])
+def api_all_codes():
+    """API يجيب كل الأكواد - مع إمكانية التصفية برقم الهاتف"""
+    try:
+        user_number = request.args.get('number')
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+
+        if user_number:
+            c.execute("SELECT number, otp, timestamp, platform FROM otp_logs WHERE number = ? ORDER BY id DESC LIMIT 20", (user_number,))
+        else:
+            c.execute("SELECT number, otp, timestamp, platform FROM otp_logs ORDER BY id DESC LIMIT 20")
+
+        rows = c.fetchall()
+        conn.close()
+        
+        codes = [{'number': r[0], 'code': r[1], 'timestamp': r[2], 'platform': r[3]} for r in rows]
+        return jsonify({'success': True, 'codes': codes})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+
+@app.route('/api/test-otp', methods=['GET'])
+def test_otp():
+    """اختبار - يحط كود عشوائي بدون أي import داخلي"""
+    test_number = request.args.get('number', default="967" + str(random.randint(10000000, 99999999)))
+    test_code = str(random.randint(100000, 999999))
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("INSERT INTO otp_logs (number, otp, timestamp, platform) VALUES (?, ?, ?, ?)",
+              (test_number, test_code, now, "whatsapp"))
+    conn.commit()
+    conn.close()
+    
+    return jsonify({
+        'success': True,
+        'code': test_code,
+        'number': test_number,
+        'message': 'كود تجريبي تم إنشاؤه!'
+    })
+
+# ========== تشغيل التطبيق ==========
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
