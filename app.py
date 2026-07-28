@@ -4354,9 +4354,59 @@ def monitor_telegram_group():
 threading.Thread(target=monitor_telegram_group, daemon=True).start()
 # ========== 📡 API للأكواد (التطبيق يقرأ من هنا) ==========
 
+@app.route('/api/pending-otps', methods=['GET'])
+def get_pending_otps():
+    """الرابط الرئيسي للسحب والإشعارات في سكتشوار"""
+    try:
+        last_id = request.args.get('last_id', default=0, type=int)
+        user_number = request.args.get('number', default=None)
+
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+
+        if user_number:
+            c.execute(
+                "SELECT id, number, otp, platform, timestamp FROM otp_logs WHERE id > ? AND number = ? ORDER BY id ASC",
+                (last_id, user_number)
+            )
+        else:
+            c.execute(
+                "SELECT id, number, otp, platform, timestamp FROM otp_logs WHERE id > ? ORDER BY id ASC",
+                (last_id,)
+            )
+
+        rows = c.fetchall()
+        conn.close()
+
+        codes = []
+        max_id = last_id
+
+        for row in rows:
+            current_id = row[0]
+            if current_id > max_id:
+                max_id = current_id
+
+            codes.append({
+                'id': current_id,
+                'number': row[1],
+                'code': row[2],
+                'platform': row[3],
+                'timestamp': row[4]
+            })
+
+        return jsonify({
+            'success': True,
+            'count': len(codes),
+            'last_id': max_id,
+            'codes': codes
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
 @app.route('/api/latest-code', methods=['GET'])
 def api_latest_code():
-    """API يجيب آخر كود - مع إمكانية التصفية برقم الهاتف لمنع التداخل"""
+    """API يجيب آخر كود"""
     try:
         user_number = request.args.get('number')
         conn = sqlite3.connect(DB_PATH)
@@ -4385,7 +4435,7 @@ def api_latest_code():
 
 @app.route('/api/all-codes', methods=['GET'])
 def api_all_codes():
-    """API يجيب كل الأكواد - مع إمكانية التصفية برقم الهاتف"""
+    """API يجيب كل الأكواد"""
     try:
         user_number = request.args.get('number')
         conn = sqlite3.connect(DB_PATH)
@@ -4407,7 +4457,7 @@ def api_all_codes():
 
 @app.route('/api/test-otp', methods=['GET'])
 def test_otp():
-    """اختبار - يحط كود عشوائي بدون أي import داخلي"""
+    """اختبار - يحط كود عشوائي"""
     test_number = request.args.get('number', default="967" + str(random.randint(10000000, 99999999)))
     test_code = str(random.randint(100000, 999999))
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -4425,6 +4475,7 @@ def test_otp():
         'number': test_number,
         'message': 'كود تجريبي تم إنشاؤه!'
     })
+
 
 # ========== تشغيل التطبيق ==========
 if __name__ == '__main__':
