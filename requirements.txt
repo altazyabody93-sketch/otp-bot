@@ -1,1 +1,6 @@
-pyTelegramBotAPI
+aiogram>=3.4
+sqlalchemy
+aiosqlite
+pydantic-settings
+libcst
+aiohttp
