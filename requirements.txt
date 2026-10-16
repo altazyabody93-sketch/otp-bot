@@ -1,0 +1,7 @@
+flask
+flask-compress
+pywebpush
+cryptography
+pillow
+cairosvg
+requests
